@@ -1,0 +1,338 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export type Database = {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          full_name: string | null;
+          avatar_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      organizations: {
+        Row: {
+          id: string;
+          name: string;
+          owner_user_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          owner_user_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          owner_user_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      intake_submissions: {
+        Row: {
+          id: string;
+          org_id: string;
+          created_at: string;
+          status: "new" | "reviewed" | "converted";
+          contact_name: string | null;
+          contact_email: string | null;
+          contact_role: string | null;
+          company_name: string | null;
+          form_data: Json;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          created_at?: string;
+          status?: "new" | "reviewed" | "converted";
+          contact_name?: string | null;
+          contact_email?: string | null;
+          contact_role?: string | null;
+          company_name?: string | null;
+          form_data?: Json;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          created_at?: string;
+          status?: "new" | "reviewed" | "converted";
+          contact_name?: string | null;
+          contact_email?: string | null;
+          contact_role?: string | null;
+          company_name?: string | null;
+          form_data?: Json;
+        };
+        Relationships: [];
+      };
+      team_members: {
+        Row: {
+          org_id: string;
+          user_id: string;
+          role: "owner" | "admin" | "member";
+          invited_email: string | null;
+          joined_at: string;
+        };
+        Insert: {
+          org_id: string;
+          user_id: string;
+          role?: "owner" | "admin" | "member";
+          invited_email?: string | null;
+          joined_at?: string;
+        };
+        Update: {
+          org_id?: string;
+          user_id?: string;
+          role?: "owner" | "admin" | "member";
+          invited_email?: string | null;
+          joined_at?: string;
+        };
+        Relationships: [];
+      };
+      projects: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          description: string | null;
+          client_name: string | null;
+          status: string;
+          marketing_context: Json;
+          context_complete: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          description?: string | null;
+          client_name?: string | null;
+          status?: string;
+          marketing_context?: Json;
+          context_complete?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          description?: string | null;
+          client_name?: string | null;
+          status?: string;
+          marketing_context?: Json;
+          context_complete?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      skill_outputs: {
+        Row: {
+          id: string;
+          org_id: string;
+          project_id: string | null;
+          user_id: string;
+          skill_id: string;
+          skill_name: string;
+          input_data: Json;
+          output_text: string;
+          title: string | null;
+          is_starred: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          project_id?: string | null;
+          user_id: string;
+          skill_id: string;
+          skill_name: string;
+          input_data?: Json;
+          output_text: string;
+          title?: string | null;
+          is_starred?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          project_id?: string | null;
+          user_id?: string;
+          skill_id?: string;
+          skill_name?: string;
+          input_data?: Json;
+          output_text?: string;
+          title?: string | null;
+          is_starred?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      contacts: {
+        Row: {
+          id: string;
+          org_id: string;
+          first_name: string | null;
+          last_name: string | null;
+          title: string | null;
+          company: string | null;
+          email: string | null;
+          phone: string | null;
+          linkedin_url: string | null;
+          website: string | null;
+          city: string | null;
+          state: string | null;
+          country: string | null;
+          industry: string | null;
+          employees_range: string | null;
+          fit_score: number | null;
+          signals: Json;
+          source: "manual" | "vibe" | "apollo";
+          source_id: string | null;
+          apollo_id: string | null;
+          raw_data: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          first_name?: string | null;
+          last_name?: string | null;
+          title?: string | null;
+          company?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          linkedin_url?: string | null;
+          website?: string | null;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          industry?: string | null;
+          employees_range?: string | null;
+          fit_score?: number | null;
+          signals?: Json;
+          source?: "manual" | "vibe" | "apollo";
+          source_id?: string | null;
+          apollo_id?: string | null;
+          raw_data?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          first_name?: string | null;
+          last_name?: string | null;
+          title?: string | null;
+          company?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          linkedin_url?: string | null;
+          website?: string | null;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          industry?: string | null;
+          employees_range?: string | null;
+          fit_score?: number | null;
+          signals?: Json;
+          source?: "manual" | "vibe" | "apollo";
+          source_id?: string | null;
+          apollo_id?: string | null;
+          raw_data?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      invitations: {
+        Row: {
+          id: string;
+          org_id: string;
+          invited_email: string;
+          role: "owner" | "admin" | "member";
+          invited_by: string | null;
+          token: string;
+          accepted_at: string | null;
+          created_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          invited_email: string;
+          role?: "owner" | "admin" | "member";
+          invited_by?: string | null;
+          token?: string;
+          accepted_at?: string | null;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          invited_email?: string;
+          role?: "owner" | "admin" | "member";
+          invited_by?: string | null;
+          token?: string;
+          accepted_at?: string | null;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: {
+      member_role: "owner" | "admin" | "member";
+    };
+  };
+};
+
+export type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
+
+export type Organization = Tables<"organizations">;
+export type Project = Tables<"projects">;
+export type SkillOutputRow = Tables<"skill_outputs">;
+export type TeamMember = Tables<"team_members">;
+export type Profile = Tables<"profiles">;
+export type Invitation = Tables<"invitations">;
