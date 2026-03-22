@@ -27,6 +27,13 @@ export interface ImportedContact {
   raw_data: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  pipeline_stage?: "lead" | "contacted" | "qualified" | "proposal" | "won" | "lost";
+  deal_value?: number | null;
+  deal_probability?: number | null;
+  last_contacted_at?: string | null;
+  next_followup_at?: string | null;
+  tags?: string[];
+  crm_notes?: string | null;
 }
 
 export type NewContact = Omit<ImportedContact, "id" | "org_id" | "created_at" | "updated_at">;

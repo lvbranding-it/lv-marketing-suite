@@ -31,8 +31,9 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
     <Dialog open={!!contact} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader className="pb-0">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          {/* pr-10 keeps content clear of the Radix auto-close button (absolute right-4 top-4) */}
+          <div className="flex items-start gap-4 pr-10">
+            <div className="flex-1 min-w-0">
               <DialogTitle className="text-xl font-bold text-foreground">
                 {contact.first} {contact.last}
               </DialogTitle>
@@ -48,9 +49,10 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
                 >
                   {ind.label}
                 </span>
-                <span className="text-xs text-muted-foreground">{contact.company}</span>
+                <span className="text-xs text-muted-foreground truncate">{contact.company}</span>
               </div>
             </div>
+            {/* Fit score pushed left of the X button */}
             <div className="text-right shrink-0">
               <p className={cn("text-2xl font-bold font-mono", scoreColor)}>{contact.score}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">fit score</p>

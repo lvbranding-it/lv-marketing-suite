@@ -227,6 +227,13 @@ export type Database = {
           created_by: string | null;
           created_at: string;
           updated_at: string;
+          pipeline_stage: "lead" | "contacted" | "qualified" | "proposal" | "won" | "lost";
+          deal_value: number | null;
+          deal_probability: number | null;
+          last_contacted_at: string | null;
+          next_followup_at: string | null;
+          tags: string[];
+          crm_notes: string | null;
         };
         Insert: {
           id?: string;
@@ -253,6 +260,13 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          pipeline_stage?: "lead" | "contacted" | "qualified" | "proposal" | "won" | "lost";
+          deal_value?: number | null;
+          deal_probability?: number | null;
+          last_contacted_at?: string | null;
+          next_followup_at?: string | null;
+          tags?: string[];
+          crm_notes?: string | null;
         };
         Update: {
           id?: string;
@@ -279,6 +293,46 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          pipeline_stage?: "lead" | "contacted" | "qualified" | "proposal" | "won" | "lost";
+          deal_value?: number | null;
+          deal_probability?: number | null;
+          last_contacted_at?: string | null;
+          next_followup_at?: string | null;
+          tags?: string[];
+          crm_notes?: string | null;
+        };
+        Relationships: [];
+      };
+      contact_activities: {
+        Row: {
+          id: string;
+          org_id: string;
+          contact_id: string;
+          created_by: string | null;
+          created_at: string;
+          type: "note" | "call" | "email" | "meeting";
+          body: string;
+          meta: Json;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          contact_id: string;
+          created_by?: string | null;
+          created_at?: string;
+          type: "note" | "call" | "email" | "meeting";
+          body: string;
+          meta?: Json;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          contact_id?: string;
+          created_by?: string | null;
+          created_at?: string;
+          type?: "note" | "call" | "email" | "meeting";
+          body?: string;
+          meta?: Json;
         };
         Relationships: [];
       };

@@ -193,16 +193,15 @@ export default function AppShell({ children }: AppShellProps) {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "hidden md:flex flex-col shrink-0 border-r border-sidebar-border transition-all duration-200",
+          "hidden md:flex flex-col relative shrink-0 border-r border-sidebar-border transition-all duration-200",
           collapsed ? "w-16" : "w-56"
         )}
       >
         <SidebarContent collapsed={collapsed} />
-        {/* Collapse toggle */}
+        {/* Collapse toggle — always anchored to the sidebar's right edge */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute left-0 top-1/2 -translate-y-1/2 translate-x-[calc(100%-1px)] z-10 bg-sidebar border border-sidebar-border rounded-r-md p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-          style={{ marginLeft: collapsed ? "4rem" : "14rem" }}
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-20 bg-sidebar border border-l-0 border-sidebar-border rounded-r-md p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>

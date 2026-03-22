@@ -1,9 +1,11 @@
-import { useState, useMemo, useCallback } from "react";
-import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import ContactDetailModal from "@/components/contacts/ContactDetailModal";
 import ContactFormModal from "@/components/contacts/ContactFormModal";
+import ContactSlideOver from "@/components/contacts/ContactSlideOver";
+import PipelineView from "@/components/contacts/PipelineView";
 import ProspectSearchPanel from "@/components/contacts/ProspectSearchPanel";
 import ApolloPanel from "@/components/contacts/ApolloPanel";
 import { Input } from "@/components/ui/input";
@@ -61,8 +63,26 @@ export default function Contacts() {
   const [sortDir, setSortDir] = useState<SortDir>(-1);
   const [selected, setSelected] = useState<Contact | null>(null);
 
-  // Hidden static IDs (deleted locally)
-  const [hiddenStaticIds, setHiddenStaticIds] = useState<Set<number>>(new Set());
+  // Slide-over for imported contacts
+  const [slideOverContact, setSlideOverContact] = useState<ImportedContact | null>(null);
+
+  // Hidden static IDs — persisted in localStorage so deletions survive refresh
+  const [hiddenStaticIds, setHiddenStaticIds] = useState<Set<number>>(() => {
+    try {
+      const stored = localStorage.getItem("contacts:hiddenStaticIds");
+      return stored ? new Set<number>(JSON.parse(stored)) : new Set<number>();
+    } catch {
+      return new Set<number>();
+    }
+  });
+
+  // Keep localStorage in sync whenever hiddenStaticIds changes
+  useEffect(() => {
+    localStorage.setItem(
+      "contacts:hiddenStaticIds",
+      JSON.stringify(Array.from(hiddenStaticIds))
+    );
+  }, [hiddenStaticIds]);
 
   // Form modal
   const [formOpen, setFormOpen]       = useState(false);
@@ -146,12 +166,10 @@ export default function Contacts() {
       }
     }
 
-    // Hide static contacts
     if (staticToHide.length) {
       setHiddenStaticIds((prev) => new Set([...prev, ...staticToHide]));
     }
 
-    // Delete imported contacts from DB
     for (const id of importedToDelete) {
       await deleteContact.mutateAsync(id);
     }
@@ -174,6 +192,42 @@ export default function Contacts() {
     await deleteContact.mutateAsync(id);
     setSelectionSet((prev) => { const n = new Set(prev); n.delete(id); return n; });
     toast({ description: "Contact deleted." });
+  };
+
+  // ── Add to Pipeline (static contact → DB contact with pipeline_stage: lead) ──
+  const handleAddToPipeline = async (c: Contact, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await addContact.mutateAsync({
+      first_name:      c.first,
+      last_name:       c.last,
+      title:           c.title,
+      company:         c.company,
+      email:           c.email !== "—" ? c.email : null,
+      phone:           null,
+      linkedin_url:    null,
+      website:         null,
+      city:            "Houston",
+      state:           "TX",
+      country:         "US",
+      employees_range: null,
+      fit_score:       c.score,
+      industry:        c.ind,
+      source:          "manual",
+      source_id:       null,
+      apollo_id:       null,
+      signals:         c.signals,
+      raw_data:        {},
+      pipeline_stage:  "lead",
+      deal_value:      null,
+      deal_probability: null,
+      last_contacted_at: null,
+      next_followup_at: null,
+      tags:            [],
+      crm_notes:       null,
+    });
+    // Hide from static list
+    setHiddenStaticIds((prev) => new Set([...prev, c.id]));
+    toast({ description: `${c.first} ${c.last} added to pipeline.` });
   };
 
   // ── Form open/close helpers ─────────────────────────────────────────────
@@ -211,6 +265,13 @@ export default function Contacts() {
       raw_data:        {},
       created_at:      new Date().toISOString(),
       updated_at:      new Date().toISOString(),
+      pipeline_stage:  "lead",
+      deal_value:      null,
+      deal_probability: null,
+      last_contacted_at: null,
+      next_followup_at: null,
+      tags:            [],
+      crm_notes:       null,
     } as ImportedContact);
     setFormOpen(true);
   };
@@ -219,11 +280,9 @@ export default function Contacts() {
 
   const handleSave = async (values: Partial<ImportedContact>) => {
     if (editTarget && !editTarget.id.startsWith("static-")) {
-      // Real DB contact — update
       await updateContact.mutateAsync({ id: editTarget.id, ...values });
       toast({ description: "Contact updated." });
     } else {
-      // New contact or static-prefill — insert
       await addContact.mutateAsync({
         ...values,
         source:    "manual",
@@ -238,22 +297,39 @@ export default function Contacts() {
   };
 
   // ── Stat helpers ────────────────────────────────────────────────────────
-  const signalCount = STATIC_CONTACTS.filter((c) => c.signals.length > 0).length;
+  const visibleStatic = useMemo(
+    () => STATIC_CONTACTS.filter((c) => !hiddenStaticIds.has(c.id)),
+    [hiddenStaticIds]
+  );
+
+  const signalCount = useMemo(() => {
+    const fromStatic   = visibleStatic.filter((c) => c.signals.length > 0).length;
+    const fromImported = imported.filter((c) => c.signals && c.signals.length > 0).length;
+    return fromStatic + fromImported;
+  }, [visibleStatic, imported]);
 
   const indCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    STATIC_CONTACTS.forEach((c) => { counts[c.ind] = (counts[c.ind] ?? 0) + 1; });
+    visibleStatic.forEach((c) => { counts[c.ind] = (counts[c.ind] ?? 0) + 1; });
+    imported.forEach((c) => {
+      if (c.industry) { counts[c.industry] = (counts[c.industry] ?? 0) + 1; }
+    });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, []);
+  }, [visibleStatic, imported]);
   const indMax = indCounts[0]?.[1] ?? 1;
+
+  const industryCount = indCounts.length;
 
   const sigCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    STATIC_CONTACTS.forEach((c) =>
+    visibleStatic.forEach((c) =>
       c.signals.forEach((s) => { counts[s] = (counts[s] ?? 0) + 1; })
     );
+    imported.forEach((c) =>
+      (c.signals ?? []).forEach((s) => { counts[s] = (counts[s] ?? 0) + 1; })
+    );
     return counts;
-  }, []);
+  }, [visibleStatic, imported]);
   const sigMax = Math.max(...Object.values(sigCounts), 1);
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -268,7 +344,13 @@ export default function Contacts() {
               <TabsTrigger value="my-contacts">
                 My Contacts
                 <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                  {STATIC_CONTACTS.length - hiddenStaticIds.size + imported.length}
+                  {visibleStatic.length + imported.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="pipeline">
+                Pipeline
+                <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                  {imported.length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="vibe">Find Prospects</TabsTrigger>
@@ -285,10 +367,10 @@ export default function Contacts() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="Total contacts"  value={String(STATIC_CONTACTS.length - hiddenStaticIds.size + imported.length)} sub="Static + imported" />
-              <StatCard label="Growth signals"  value={String(signalCount)} sub="New role · hiring · expansion" accent />
-              <StatCard label="Industries"      value="11" sub="Across Houston metro" />
-              <StatCard label="Imported"        value={String(imported.length)} sub="Via Vibe or Apollo" />
+              <StatCard label="Total contacts" value={String(visibleStatic.length + imported.length)} sub={`${visibleStatic.length} Houston · ${imported.length} imported`} />
+              <StatCard label="Growth signals" value={String(signalCount)} sub="New role · hiring · expansion" accent />
+              <StatCard label="Industries"     value={String(industryCount)} sub="Unique sectors represented" />
+              <StatCard label="Imported"       value={String(imported.length)} sub="Via Vibe or Apollo" />
             </div>
 
             {/* Charts */}
@@ -350,7 +432,8 @@ export default function Contacts() {
                       return (
                         <div
                           key={c.id}
-                          className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/30"
+                          className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/30 cursor-pointer"
+                          onClick={() => setSlideOverContact(c)}
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             {/* Checkbox */}
@@ -467,8 +550,7 @@ export default function Contacts() {
             {/* Table */}
             <div className="border border-border rounded-lg overflow-hidden">
               {/* Header */}
-              <div className="grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_72px] bg-muted/50 border-b border-border">
-                {/* Select-all checkbox */}
+              <div className="grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] bg-muted/50 border-b border-border">
                 <div className="px-3 py-2 flex items-center justify-center border-r border-border">
                   <button
                     onClick={toggleSelectAll}
@@ -508,7 +590,7 @@ export default function Contacts() {
                     <div
                       key={c.id}
                       className={cn(
-                        "grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_72px] border-b border-border last:border-b-0 transition-colors group",
+                        "grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] border-b border-border last:border-b-0 transition-colors group",
                         isChecked ? "bg-primary/5" : "hover:bg-muted/40"
                       )}
                     >
@@ -596,6 +678,16 @@ export default function Contacts() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-emerald-600"
+                          onClick={(e) => handleAddToPipeline(c, e)}
+                          title="Add to pipeline"
+                          disabled={addContact.isPending}
+                        >
+                          <PlusCircle size={11} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                           onClick={(e) => openEditStatic(c, e)}
                           title="Edit contact"
@@ -619,6 +711,11 @@ export default function Contacts() {
             </div>
           </TabsContent>
 
+          {/* ── Pipeline ─────────────────────────────────────────── */}
+          <TabsContent value="pipeline">
+            <PipelineView contacts={imported} onSelect={setSlideOverContact} />
+          </TabsContent>
+
           {/* ── Vibe Prospecting ─────────────────────────────────── */}
           <TabsContent value="vibe">
             <ProspectSearchPanel />
@@ -631,7 +728,14 @@ export default function Contacts() {
         </Tabs>
       </div>
 
+      {/* Static contact detail modal */}
       <ContactDetailModal contact={selected} onClose={() => setSelected(null)} />
+
+      {/* Imported contact slide-over */}
+      <ContactSlideOver
+        contact={slideOverContact}
+        onClose={() => setSlideOverContact(null)}
+      />
 
       <ContactFormModal
         open={formOpen}
