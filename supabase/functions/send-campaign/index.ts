@@ -18,7 +18,10 @@ function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
-const LV_LOGO_B64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8yIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4NTIuNSA4NTIuNSI+PGRlZnM+PHN0eWxlPi5jbHMtMXtmaWxsOiNjYjIwMzk7c3Ryb2tlLXdpZHRoOjBweDt9PC9zdHlsZT48L2RlZnM+PGcgaWQ9IkxheWVyXzEtMiI+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNDI2LjI1LDBjLTEwNy42OCwwLTIwNi4wMywzOS45My0yODEuMDYsMTA1Ljc5djI0NS4xMWMwLDEwLjc1LDguNzEsMTkuNDYsMTkuNDYsMTkuNDZoMTQxLjExYzE0LjU2LjE0LDE4LjAzLDEwLjA3LDE5LjI2LDIxLjk4LDEuMjksMTIuNTksMi4yNSwyMy44OCw0LjE1LDQwLjE0LDIuMTgsMTguNTEtNy43NiwyMy43NS0yMywyMy43NUg4MC4wOGMtMTAuNzUsMC0xOS40Ni04LjcxLTE5LjQ2LTE5LjQ2di0yMjkuNzJDMjIuMTQsMjcxLjA5LDAsMzQ2LjA4LDAsNDI2LjI1YzAsMjM1LjQxLDE5MC44NCw0MjYuMjUsNDI2LjI1LDQyNi4yNSwxLjUyLDAsMy4wMy0uMDEsNC41NS0uMDMtMTUuMS0xMjEuNDEtNDMuMjktMzQ4LjgtNTcuNjctNDY0LjU2LTEuMTYtOS4zOSw0LjIyLTE4LjE3LDEzLjY4LTE4LjE3aDQzLjU1YzYuNiwwLDEyLjMyLDQuNTYsMTMuODEsMTAuOTUsMCwwLDI2LjY3LDI1My42NSwzNS43MiwzMzguOTcsMS41NiwxNS4wNCwyOS44LDEzLjQsMzYuNC0uMiw0My04OC42NiwxMTkuNDgtMjUwLjU5LDE2MS4yNS0zMzguNTcsMi44Ni02LjA2LDkuNDYtMTAuNjgsMTYuMTMtMTAuNjEsMjAuMTQuMjcsNDcuNDksMCw2MS44NSwwLDEzLjI3LDAsMTcuOTYsOS4wNSwxMy42OCwxNy40OS02MC41MSwxMTguODYtMTY3Ljc3LDMyNS40MS0yMzIuMzcsNDUwLjI0LDE4MS44MS00OC43LDMxNS42OC0yMTQuNTksMzE1LjY4LTQxMS43NkM4NTIuNSwxOTAuODQsNjYxLjY2LDAsNDI2LjI1LDBaIi8+PC9nPjwvc3ZnPg==";
+// Hosted PNG (upload a 160×160 PNG to this path in Supabase Storage for Gmail support)
+const LV_LOGO_PNG = `${Deno.env.get("SUPABASE_URL") ?? ""}/storage/v1/object/public/email-assets/brand/lv-logo.png`;
+// SVG fallback — shown in Outlook desktop, Apple Mail (Gmail blocks all SVG)
+const LV_LOGO_SVG = "https://lv-marketing-suite.vercel.app/favicon.svg";
 
 function wrapHtml(bodyHtml: string, unsubUrl: string): string {
   return `<!DOCTYPE html>
@@ -30,19 +33,21 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
-    <tr><td align="center" style="padding:28px 16px 0;">
+    <tr><td align="center" style="padding:32px 16px 0;">
       <table role="presentation" style="max-width:600px;width:100%;" cellpadding="0" cellspacing="0">
 
-        <!-- ── Logo ── -->
-        <tr><td align="center" style="padding:0 0 24px;">
-          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;">
+        <!-- ── Logo: symbol centered above wordmark ── -->
+        <tr><td align="center" style="padding:0 0 28px;">
+          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:block;">
+            <!-- Symbol -->
             <img
-              src="data:image/svg+xml;base64,${LV_LOGO_B64}"
-              alt="LV Branding"
-              width="42" height="42"
-              style="display:inline-block;vertical-align:middle;width:42px;height:42px;"
+              src="${LV_LOGO_SVG}"
+              alt=""
+              width="56" height="56"
+              style="display:block;margin:0 auto 10px;width:56px;height:56px;"
             />
-            <span style="vertical-align:middle;font-size:24px;font-weight:800;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <!-- Wordmark -->
+            <span style="display:block;font-size:22px;font-weight:800;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
               <span style="color:#CB2039;">LV</span><span style="color:#231F20;">Branding</span>
             </span>
           </a>
