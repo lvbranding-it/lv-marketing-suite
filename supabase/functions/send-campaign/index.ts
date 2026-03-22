@@ -18,6 +18,8 @@ function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
+const LV_LOGO_B64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8yIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4NTIuNSA4NTIuNSI+PGRlZnM+PHN0eWxlPi5jbHMtMXtmaWxsOiNjYjIwMzk7c3Ryb2tlLXdpZHRoOjBweDt9PC9zdHlsZT48L2RlZnM+PGcgaWQ9IkxheWVyXzEtMiI+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNDI2LjI1LDBjLTEwNy42OCwwLTIwNi4wMywzOS45My0yODEuMDYsMTA1Ljc5djI0NS4xMWMwLDEwLjc1LDguNzEsMTkuNDYsMTkuNDYsMTkuNDZoMTQxLjExYzE0LjU2LjE0LDE4LjAzLDEwLjA3LDE5LjI2LDIxLjk4LDEuMjksMTIuNTksMi4yNSwyMy44OCw0LjE1LDQwLjE0LDIuMTgsMTguNTEtNy43NiwyMy43NS0yMywyMy43NUg4MC4wOGMtMTAuNzUsMC0xOS40Ni04LjcxLTE5LjQ2LTE5LjQ2di0yMjkuNzJDMjIuMTQsMjcxLjA5LDAsMzQ2LjA4LDAsNDI2LjI1YzAsMjM1LjQxLDE5MC44NCw0MjYuMjUsNDI2LjI1LDQyNi4yNSwxLjUyLDAsMy4wMy0uMDEsNC41NS0uMDMtMTUuMS0xMjEuNDEtNDMuMjktMzQ4LjgtNTcuNjctNDY0LjU2LTEuMTYtOS4zOSw0LjIyLTE4LjE3LDEzLjY4LTE4LjE3aDQzLjU1YzYuNiwwLDEyLjMyLDQuNTYsMTMuODEsMTAuOTUsMCwwLDI2LjY3LDI1My42NSwzNS43MiwzMzguOTcsMS41NiwxNS4wNCwyOS44LDEzLjQsMzYuNC0uMiw0My04OC42NiwxMTkuNDgtMjUwLjU5LDE2MS4yNS0zMzguNTcsMi44Ni02LjA2LDkuNDYtMTAuNjgsMTYuMTMtMTAuNjEsMjAuMTQuMjcsNDcuNDksMCw2MS44NSwwLDEzLjI3LDAsMTcuOTYsOS4wNSwxMy42OCwxNy40OS02MC41MSwxMTguODYtMTY3Ljc3LDMyNS40MS0yMzIuMzcsNDUwLjI0LDE4MS44MS00OC43LDMxNS42OC0yMTQuNTksMzE1LjY4LTQxMS43NkM4NTIuNSwxOTAuODQsNjYxLjY2LDAsNDI2LjI1LDBaIi8+PC9nPjwvc3ZnPg==";
+
 function wrapHtml(bodyHtml: string, unsubUrl: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -33,8 +35,14 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
 
         <!-- ── Logo ── -->
         <tr><td align="center" style="padding:0 0 24px;">
-          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:inline-block;">
-            <span style="font-size:26px;font-weight:800;letter-spacing:-1px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;">
+            <img
+              src="data:image/svg+xml;base64,${LV_LOGO_B64}"
+              alt="LV Branding"
+              width="42" height="42"
+              style="display:inline-block;vertical-align:middle;width:42px;height:42px;"
+            />
+            <span style="vertical-align:middle;font-size:24px;font-weight:800;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
               <span style="color:#CB2039;">LV</span><span style="color:#231F20;">Branding</span>
             </span>
           </a>
@@ -46,19 +54,18 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
         </td></tr>
 
         <!-- ── Footer ── -->
-        <tr><td align="center" style="padding:24px 0 32px;color:#71717a;font-size:12px;line-height:1.8;">
-          <p style="margin:0 0 4px;">
-            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:600;">LV Branding</a>
+        <tr><td align="center" style="padding:24px 0 32px;font-size:12px;line-height:2;">
+          <p style="margin:0 0 4px;color:#374151;">
+            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:700;">LV Branding</a>
             &nbsp;&middot;&nbsp;Houston, TX
           </p>
-          <p style="margin:0 0 8px;color:#a1a1aa;">
-            <a href="${unsubUrl}" style="color:#a1a1aa;text-decoration:underline;">Unsubscribe</a>
+          <p style="margin:0 0 6px;color:#4B5563;">
+            <a href="${unsubUrl}" style="color:#4B5563;text-decoration:underline;">Unsubscribe</a>
             &nbsp;&middot;&nbsp;You're receiving this as a valued contact.
           </p>
-          <p style="margin:0;font-size:11px;color:#c4c4cc;">
+          <p style="margin:0;font-size:11px;color:#6B7280;">
             Made with ❤️ by
-            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;">LV Branding</a>
-            (www.lvbranding.com)
+            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:600;">LV Branding</a>
           </p>
         </td></tr>
 
