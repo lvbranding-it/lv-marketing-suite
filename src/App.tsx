@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +18,12 @@ import Settings from "@/pages/Settings";
 import Contacts from "@/pages/Contacts";
 import Intake from "@/pages/Intake";
 import IntakeForm from "@/pages/IntakeForm";
+
+// Lazy pages
+const Campaigns = lazy(() => import("@/pages/Campaigns"));
+const CampaignComposer = lazy(() => import("@/pages/CampaignComposer"));
+const CampaignDetail = lazy(() => import("@/pages/CampaignDetail"));
+const Unsubscribe = lazy(() => import("@/pages/Unsubscribe"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +46,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<Auth />} />
       <Route path="/intake/:orgId" element={<IntakeForm />} />
+      <Route path="/unsubscribe" element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/dashboard"
@@ -85,6 +93,30 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Contacts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><Campaigns /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns/new"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><CampaignComposer /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns/:id"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><CampaignDetail /></Suspense>
           </ProtectedRoute>
         }
       />

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Menu,
   ClipboardList,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -32,9 +33,10 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/skills", label: "Skills", icon: Zap },
   { to: "/projects", label: "Projects", icon: FolderOpen },
-  { to: "/contacts", label: "Contacts",     icon: Users },
-  { to: "/intake",   label: "Intake",       icon: ClipboardList },
-  { to: "/history",  label: "History",      icon: History },
+  { to: "/contacts",  label: "Contacts",  icon: Users },
+  { to: "/intake",    label: "Intake",     icon: ClipboardList },
+  { to: "/campaigns", label: "Campaigns",  icon: Mail },
+  { to: "/history",   label: "History",    icon: History },
 ];
 
 interface SidebarContentProps {
