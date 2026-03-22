@@ -76,6 +76,7 @@ export default function ProspectSearchPanel({ onImported }: Props) {
         source_id: p.prospect_id ?? null,
         apollo_id: null,
         raw_data: p as Record<string, unknown>,
+        verification_status: "unverified" as const,
       });
       toast({ description: `${p.first_name} ${p.last_name} imported to My Contacts.` });
       onImported?.();

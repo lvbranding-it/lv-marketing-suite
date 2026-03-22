@@ -6,6 +6,7 @@ import ContactDetailModal from "@/components/contacts/ContactDetailModal";
 import ContactFormModal from "@/components/contacts/ContactFormModal";
 import ContactSlideOver from "@/components/contacts/ContactSlideOver";
 import PipelineView from "@/components/contacts/PipelineView";
+import ResearchQueue from "@/components/contacts/ResearchQueue";
 import ProspectSearchPanel from "@/components/contacts/ProspectSearchPanel";
 import ApolloPanel from "@/components/contacts/ApolloPanel";
 import { Input } from "@/components/ui/input";
@@ -337,7 +338,7 @@ export default function Contacts() {
     <AppShell>
       <Header title="Contacts" subtitle="Houston MSA · brand-ready decision makers" />
 
-      <div className="p-6">
+      <div className="p-6 pb-16">
         <Tabs defaultValue="my-contacts">
           <div className="flex items-center justify-between mb-6">
             <TabsList>
@@ -347,10 +348,18 @@ export default function Contacts() {
                   {visibleStatic.length + imported.length}
                 </span>
               </TabsTrigger>
+              <TabsTrigger value="research">
+                Research
+                {imported.filter((c) => c.verification_status === "unverified").length > 0 && (
+                  <span className="ml-1.5 text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full">
+                    {imported.filter((c) => c.verification_status === "unverified").length}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="pipeline">
                 Pipeline
                 <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                  {imported.length}
+                  {imported.filter((c) => c.verification_status === "verified").length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="vibe">Find Prospects</TabsTrigger>
@@ -581,7 +590,7 @@ export default function Contacts() {
               </div>
 
               {/* Rows */}
-              <div className="max-h-[520px] overflow-y-auto">
+              <div className="max-h-[640px] overflow-y-auto">
                 {filtered.map((c) => {
                   const ind = IND_META[c.ind] ?? IND_META.biz;
                   const key = toStaticKey(c.id);
@@ -711,9 +720,17 @@ export default function Contacts() {
             </div>
           </TabsContent>
 
+          {/* ── Research Queue ────────────────────────────────────── */}
+          <TabsContent value="research">
+            <ResearchQueue contacts={imported} />
+          </TabsContent>
+
           {/* ── Pipeline ─────────────────────────────────────────── */}
           <TabsContent value="pipeline">
-            <PipelineView contacts={imported} onSelect={setSlideOverContact} />
+            <PipelineView
+              contacts={imported.filter((c) => c.verification_status === "verified" || !c.verification_status)}
+              onSelect={setSlideOverContact}
+            />
           </TabsContent>
 
           {/* ── Vibe Prospecting ─────────────────────────────────── */}

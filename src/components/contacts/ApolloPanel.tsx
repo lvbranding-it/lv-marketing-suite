@@ -82,6 +82,7 @@ export default function ApolloPanel({ onImported }: Props) {
         source_id: p.id,
         apollo_id: p.id,
         raw_data: p as Record<string, unknown>,
+        verification_status: "unverified" as const,
       });
       toast({ description: `${p.first_name} ${p.last_name} imported.` });
       onImported?.();

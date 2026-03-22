@@ -234,6 +234,10 @@ export type Database = {
           next_followup_at: string | null;
           tags: string[];
           crm_notes: string | null;
+          verification_status: "unverified" | "verified" | "invalid";
+          research_notes: string | null;
+          research_result: string | null;
+          verified_at: string | null;
         };
         Insert: {
           id?: string;
@@ -267,6 +271,10 @@ export type Database = {
           next_followup_at?: string | null;
           tags?: string[];
           crm_notes?: string | null;
+          verification_status?: "unverified" | "verified" | "invalid";
+          research_notes?: string | null;
+          research_result?: string | null;
+          verified_at?: string | null;
         };
         Update: {
           id?: string;
@@ -300,6 +308,10 @@ export type Database = {
           next_followup_at?: string | null;
           tags?: string[];
           crm_notes?: string | null;
+          verification_status?: "unverified" | "verified" | "invalid";
+          research_notes?: string | null;
+          research_result?: string | null;
+          verified_at?: string | null;
         };
         Relationships: [];
       };

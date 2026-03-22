@@ -34,6 +34,11 @@ export interface ImportedContact {
   next_followup_at?: string | null;
   tags?: string[];
   crm_notes?: string | null;
+  // Research / verification
+  verification_status?: "unverified" | "verified" | "invalid";
+  research_notes?: string | null;
+  research_result?: string | null;
+  verified_at?: string | null;
 }
 
 export type NewContact = Omit<ImportedContact, "id" | "org_id" | "created_at" | "updated_at">;
