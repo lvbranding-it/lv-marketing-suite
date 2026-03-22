@@ -39,7 +39,7 @@ export default function Projects() {
         }
       />
 
-      <div className="p-6 max-w-6xl mx-auto space-y-4">
+      <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4">
         <Tabs value={statusFilter} onValueChange={setStatusFilter}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
@@ -50,7 +50,7 @@ export default function Projects() {
         </Tabs>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
@@ -69,7 +69,7 @@ export default function Projects() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
             {filtered.map((project) => (
               <ProjectCard
                 key={project.id}

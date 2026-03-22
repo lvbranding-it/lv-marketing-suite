@@ -199,7 +199,7 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
 
       {/* Expanded panel */}
       {expanded && (
-        <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
+        <div className="border-t border-border px-3 pb-3 pt-2.5 sm:px-4 sm:pb-4 space-y-4">
           {/* Contact data pills */}
           <div className="flex flex-wrap gap-2 text-[10px]">
             {contact.email && (
@@ -321,11 +321,11 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
             <Button
               size="sm"
               onClick={verify}
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
             >
               <CheckCircle2 size={13} />
               Verify & Add to Pipeline
@@ -334,7 +334,7 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
               size="sm"
               variant="outline"
               onClick={archive}
-              className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
+              className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive w-full sm:w-auto"
             >
               <XCircle size={13} />
               Archive
@@ -384,18 +384,18 @@ export default function ResearchQueue({ contacts }: Props) {
   return (
     <div className="space-y-4">
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-card border border-border rounded-lg p-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="bg-card border border-border rounded-lg p-2 sm:p-3">
           <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Awaiting Review</p>
-          <p className="text-2xl font-bold mt-0.5">{unverified.length}</p>
+          <p className="text-xl sm:text-2xl font-bold mt-0.5">{unverified.length}</p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-3">
+        <div className="bg-card border border-border rounded-lg p-2 sm:p-3">
           <p className="text-[9px] uppercase tracking-widest text-violet-500">From Vibe</p>
-          <p className="text-2xl font-bold mt-0.5 text-violet-600">{vibeCount}</p>
+          <p className="text-xl sm:text-2xl font-bold mt-0.5 text-violet-600">{vibeCount}</p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-3">
+        <div className="bg-card border border-border rounded-lg p-2 sm:p-3">
           <p className="text-[9px] uppercase tracking-widest text-blue-500">From Apollo</p>
-          <p className="text-2xl font-bold mt-0.5 text-blue-600">{apolloCount}</p>
+          <p className="text-xl sm:text-2xl font-bold mt-0.5 text-blue-600">{apolloCount}</p>
         </div>
       </div>
 
@@ -408,8 +408,8 @@ export default function ResearchQueue({ contacts }: Props) {
       </div>
 
       {/* Search + source filter */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div className="relative flex-1 w-full">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             className="w-full pl-8 pr-3 h-8 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
@@ -418,7 +418,7 @@ export default function ResearchQueue({ contacts }: Props) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto">
           {(["all", "vibe", "apollo"] as const).map((f) => (
             <button
               key={f}

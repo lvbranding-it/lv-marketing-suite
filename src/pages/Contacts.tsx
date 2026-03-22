@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle } from "lucide-react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import ContactDetailModal from "@/components/contacts/ContactDetailModal";
@@ -338,9 +338,9 @@ export default function Contacts() {
     <AppShell>
       <Header title="Contacts" subtitle="Houston MSA · brand-ready decision makers" />
 
-      <div className="p-6 pb-16">
+      <div className="p-3 sm:p-6 pb-16">
         <Tabs defaultValue="my-contacts">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 overflow-x-auto">
             <TabsList>
               <TabsTrigger value="my-contacts">
                 My Contacts
@@ -375,7 +375,7 @@ export default function Contacts() {
           <TabsContent value="my-contacts" className="space-y-6">
 
             {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
               <StatCard label="Total contacts" value={String(visibleStatic.length + imported.length)} sub={`${visibleStatic.length} Houston · ${imported.length} imported`} />
               <StatCard label="Growth signals" value={String(signalCount)} sub="New role · hiring · expansion" accent />
               <StatCard label="Industries"     value={String(industryCount)} sub="Unique sectors represented" />
@@ -523,7 +523,7 @@ export default function Contacts() {
 
             {/* Bulk action bar */}
             {someSelected && (
-              <div className="flex items-center justify-between px-4 py-2.5 bg-primary/10 border border-primary/30 rounded-lg">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-primary/10 border border-primary/30 rounded-lg">
                 <span className="text-sm font-medium text-primary">
                   {selectionSet.size} contact{selectionSet.size !== 1 ? "s" : ""} selected
                 </span>
@@ -559,7 +559,7 @@ export default function Contacts() {
             {/* Table */}
             <div className="border border-border rounded-lg overflow-hidden">
               {/* Header */}
-              <div className="grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] bg-muted/50 border-b border-border">
+              <div className="hidden md:grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] bg-muted/50 border-b border-border">
                 <div className="px-3 py-2 flex items-center justify-center border-r border-border">
                   <button
                     onClick={toggleSelectAll}
@@ -596,10 +596,10 @@ export default function Contacts() {
                   const key = toStaticKey(c.id);
                   const isChecked = selectionSet.has(key);
                   return (
+                    <React.Fragment key={c.id}>
                     <div
-                      key={c.id}
                       className={cn(
-                        "grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] border-b border-border last:border-b-0 transition-colors group",
+                        "hidden md:grid grid-cols-[36px_36px_1fr_1fr_0.8fr_0.7fr_0.8fr_60px_100px] border-b border-border last:border-b-0 transition-colors group",
                         isChecked ? "bg-primary/5" : "hover:bg-muted/40"
                       )}
                     >
@@ -714,6 +714,32 @@ export default function Contacts() {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Mobile card — only visible below md */}
+                    <div
+                      className="flex md:hidden items-center justify-between px-3 py-3 cursor-pointer hover:bg-muted/50 border-b border-border"
+                      onClick={() => setSelected(c)}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                          {`${c.first[0] ?? ""}${c.last[0] ?? ""}`.toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{c.first} {c.last}</p>
+                          <p className="text-xs text-muted-foreground truncate">{c.title} · {c.company}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {c.signals.length > 0 && (
+                          <span className="flex items-center gap-1 text-[9px] text-primary border border-primary/30 bg-primary/5 px-1.5 py-0.5 rounded-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                            {c.signals.length}
+                          </span>
+                        )}
+                        <ChevronRight size={14} className="text-muted-foreground" />
+                      </div>
+                    </div>
+                    </React.Fragment>
                   );
                 })}
               </div>

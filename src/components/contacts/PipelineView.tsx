@@ -66,7 +66,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <SummaryCard label="In Pipeline" value={String(contacts.length)} />
         <SummaryCard label="Pipeline Value" value={formatCurrency(totalValue)} />
         <SummaryCard label="Won" value={String(wonCount)} />
@@ -74,17 +74,17 @@ export default function PipelineView({ contacts, onSelect }: Props) {
       </div>
 
       {/* Kanban columns */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory">
         {PIPELINE_STAGES.map((stage) => {
           const cols = stageContacts(stage.key);
           const stageValue = cols.reduce((s, c) => s + (c.deal_value ?? 0), 0);
 
           return (
-            <div key={stage.key} className="w-72 shrink-0 flex flex-col">
+            <div key={stage.key} className="w-[280px] shrink-0 flex flex-col snap-start">
               {/* Column header */}
               <div
                 className={cn(
-                  "rounded-t-lg px-3 py-2.5 border border-b-0",
+                  "rounded-t-lg px-2 sm:px-3 py-2 sm:py-2.5 border border-b-0",
                   stage.border,
                   stage.headerBg
                 )}
@@ -128,7 +128,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
                       <div
                         key={c.id}
                         onClick={() => onSelect(c)}
-                        className="bg-white border border-border rounded-xl p-3 cursor-pointer hover:shadow-md transition-shadow space-y-2"
+                        className="bg-white border border-border rounded-lg sm:rounded-xl p-2.5 sm:p-3 cursor-pointer hover:shadow-md transition-shadow space-y-2"
                       >
                         {/* Top row */}
                         <div className="flex items-center gap-2">
@@ -193,7 +193,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
                           <button
                             onClick={(e) => moveStage(c, "prev", e)}
                             disabled={stageIdx === 0}
-                            className="p-0.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Move to previous stage"
                           >
                             <ChevronLeft size={12} />
@@ -204,7 +204,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
                           <button
                             onClick={(e) => moveStage(c, "next", e)}
                             disabled={stageIdx === PIPELINE_STAGES.length - 1}
-                            className="p-0.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="h-7 w-7 sm:h-8 sm:w-8 flex items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Move to next stage"
                           >
                             <ChevronRight size={12} />

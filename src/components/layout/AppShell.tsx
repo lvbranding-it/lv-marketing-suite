@@ -213,18 +213,18 @@ export default function AppShell({ children }: AppShellProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden fixed top-3 left-3 z-50 bg-background shadow-md"
+            className="md:hidden fixed top-3 left-3 z-50 bg-background shadow-md p-2"
           >
             <Menu size={20} />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-56 bg-sidebar border-sidebar-border">
+        <SheetContent side="left" className="p-0 w-64 bg-sidebar border-sidebar-border">
           <SidebarContent />
         </SheetContent>
       </Sheet>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">{children}</main>
     </div>
   );
 }

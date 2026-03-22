@@ -38,7 +38,7 @@ export default function SkillRunnerPage() {
     <AppShell>
       <div className="flex flex-col h-full">
         {/* Page header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0">
+        <div className="flex items-center flex-wrap gap-3 px-2 sm:px-4 py-2 sm:py-3 border-b bg-background shrink-0">
           <button
             onClick={() => navigate("/skills")}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

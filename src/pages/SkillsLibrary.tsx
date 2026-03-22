@@ -29,7 +29,7 @@ export default function SkillsLibrary() {
     <AppShell>
       <Header title="Skills Library" subtitle="33 AI-powered marketing skills" />
 
-      <div className="p-6 max-w-6xl mx-auto space-y-4">
+      <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4">
         {/* Context warning banner */}
         {!hasContext && (
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
@@ -66,7 +66,7 @@ export default function SkillsLibrary() {
           value={activeCategory}
           onValueChange={(v) => setActiveCategory(v as "all" | SkillCategory)}
         >
-          <TabsList className="flex-wrap h-auto gap-1 bg-muted p-1">
+          <TabsList className="flex-wrap h-auto gap-1 bg-muted p-1 overflow-x-auto">
             {ALL_CATEGORIES.map(({ value, label }) => (
               <TabsTrigger
                 key={value}

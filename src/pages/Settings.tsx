@@ -85,7 +85,7 @@ export default function Settings() {
     <AppShell>
       <Header title="Settings" />
 
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className="p-3 sm:p-6 max-w-2xl mx-auto">
         <Tabs defaultValue="account">
           <TabsList>
             <TabsTrigger value="account">Account</TabsTrigger>
@@ -144,7 +144,7 @@ export default function Settings() {
                   {members.map((member) => (
                     <div
                       key={`${member.org_id}-${member.user_id}`}
-                      className="bg-card border border-border rounded-lg px-3 py-2 flex items-center justify-between"
+                      className="bg-card border border-border rounded-lg px-3 py-2 flex items-center justify-between flex-wrap gap-2"
                     >
                       <div className="flex items-center gap-2">
                         <Avatar className="h-7 w-7">

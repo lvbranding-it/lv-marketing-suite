@@ -27,7 +27,7 @@ export default function SkillGrid({
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
         <p className="text-4xl mb-3">🔍</p>
         <p className="text-muted-foreground text-sm">No skills match your search.</p>
       </div>
@@ -66,7 +66,7 @@ export default function SkillGrid({
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 {SKILL_CATEGORIES[cat].label}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
                 {skills.map((skill) => (
                   <SkillCard key={skill.id} skill={skill} hasContext={hasContext} />
                 ))}
@@ -79,7 +79,7 @@ export default function SkillGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
       {filtered.map((skill) => (
         <SkillCard key={skill.id} skill={skill} hasContext={hasContext} />
       ))}

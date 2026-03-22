@@ -95,8 +95,8 @@ export default function Auth() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-sm space-y-6">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="w-full max-w-sm space-y-4 sm:space-y-6">
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center mb-2">
             <LVLogo size={48} className="mb-2" />

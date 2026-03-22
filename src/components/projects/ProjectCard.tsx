@@ -28,7 +28,7 @@ export default function ProjectCard({ project, outputCount = 0 }: ProjectCardPro
   return (
     <button
       onClick={() => navigate(`/projects/${project.id}`)}
-      className="group text-left w-full bg-card border border-border rounded-lg p-4 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-150"
+      className="group text-left w-full bg-card border border-border rounded-lg p-3 sm:p-4 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-150"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
@@ -52,12 +52,12 @@ export default function ProjectCard({ project, outputCount = 0 }: ProjectCardPro
       </div>
 
       {project.description && (
-        <p className="text-xs text-muted-foreground line-clamp-1 mb-3">
+        <p className="text-xs text-muted-foreground line-clamp-2 sm:line-clamp-1 mb-3">
           {project.description}
         </p>
       )}
 
-      <div className="flex items-center justify-between mt-3">
+      <div className="flex items-center justify-between mt-2 sm:mt-3">
         <div className="flex items-center gap-1.5">
           {project.context_complete ? (
             <span className="flex items-center gap-1 text-[11px] text-green-600">

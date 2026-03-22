@@ -148,10 +148,10 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
 
   return (
     <Dialog open={!!contact} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-0">
           {/* pr-10 keeps content clear of the Radix auto-close button (absolute right-4 top-4) */}
-          <div className="flex items-start gap-4 pr-10">
+          <div className="flex items-start gap-3 pr-10">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-xl font-bold text-foreground">
                 {contact.first} {contact.last}
@@ -181,7 +181,7 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
 
         <Separator />
 
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-4 text-sm">
           <Field label="Email">
             {contact.email !== '—'
               ? <a href={`mailto:${contact.email}`} className="text-primary hover:underline text-xs break-all">{contact.email}</a>
@@ -330,7 +330,7 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
 
           {/* Streamed result */}
           {researchText && (
-            <div className="bg-muted/40 border border-border rounded-lg p-4">
+            <div className="bg-muted/40 border border-border rounded-lg p-3 sm:p-4">
               <div className="flex items-center gap-1.5 mb-3">
                 <ShieldCheck size={12} className="text-primary" />
                 <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">

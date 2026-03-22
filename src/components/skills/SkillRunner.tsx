@@ -145,8 +145,8 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-0 gap-0">
       {/* ── Left Panel: Context Form ─────────────────────────────────────── */}
-      <div className="w-full lg:w-80 xl:w-96 shrink-0 border-r border-border overflow-y-auto bg-muted/30">
-        <div className="p-4 space-y-4">
+      <div className="w-full lg:w-80 xl:w-96 shrink-0 border-b lg:border-b-0 lg:border-r border-border overflow-y-auto max-h-[45vh] lg:max-h-none bg-muted/30">
+        <div className="px-3 sm:px-4 py-3 sm:py-4 space-y-4">
           {/* Skill header */}
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -282,11 +282,11 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
           <>
             {/* Conversation history */}
             <ScrollArea className="flex-1">
-              <div ref={outputRef} className="p-4 space-y-4">
+              <div ref={outputRef} className="px-2 sm:px-4 py-3 sm:py-4 space-y-4">
                 {conversationHistory.map((msg, i) => (
                   <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
                     {msg.role === "user" ? (
-                      <div className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 max-w-[80%] text-sm whitespace-pre-wrap shadow-sm">
+                      <div className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 max-w-[90%] sm:max-w-[80%] text-sm whitespace-pre-wrap shadow-sm">
                         {msg.content}
                       </div>
                     ) : (
@@ -326,7 +326,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
 
             {/* Toolbar */}
             <div className="border-t bg-background p-3 space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1">
                 <Button
                   variant="outline"
                   size="sm"
@@ -360,7 +360,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
 
               {/* Follow-up input */}
               {conversationHistory.length > 0 && (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Textarea
                     value={followUp}
                     onChange={(e) => setFollowUp(e.target.value)}
@@ -378,7 +378,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                     size="icon"
                     onClick={handleFollowUp}
                     disabled={!followUp.trim() || streaming}
-                    className="shrink-0 self-end h-9 w-9"
+                    className="shrink-0 self-end h-9 w-full sm:w-9"
                   >
                     <Send size={14} />
                   </Button>

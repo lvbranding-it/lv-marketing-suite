@@ -68,9 +68,9 @@ export default function Dashboard() {
         subtitle="Here's your marketing workspace."
       />
 
-      <div className="p-6 space-y-8 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-8 max-w-6xl mx-auto">
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
             icon={BarChart3}
             label="Total Outputs"
@@ -107,7 +107,7 @@ export default function Dashboard() {
               View all skills →
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             {featuredSkills.map((skill) =>
               skill ? (
                 <SkillCard key={skill.id} skill={skill} hasContext={hasContext} />
@@ -116,7 +116,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
           {/* Recent Outputs */}
           <section>
             <div className="flex items-center justify-between mb-3">

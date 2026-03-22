@@ -212,7 +212,7 @@ Please produce a comprehensive, well-structured marketing context document that 
 
   if (step === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center max-w-lg mx-auto">
+      <div className="flex flex-col items-center justify-center p-4 sm:p-8 text-center max-w-lg mx-auto">
         <span className="text-5xl mb-4">🏗️</span>
         <h2 className="text-xl font-semibold mb-2">Set Up Product Marketing Context</h2>
         <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
@@ -254,7 +254,7 @@ Please produce a comprehensive, well-structured marketing context document that 
 
   if (step === 6) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center max-w-lg mx-auto">
+      <div className="flex flex-col items-center justify-center p-4 sm:p-8 text-center max-w-lg mx-auto">
         <CheckCircle2 size={48} className="text-green-500 mb-4" />
         <h2 className="text-xl font-semibold mb-2">Context Document Created!</h2>
         <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
@@ -304,7 +304,7 @@ Please produce a comprehensive, well-structured marketing context document that 
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
           {/* Step 1: Product Basics */}
           {step === 1 && (
             <>
@@ -447,16 +447,17 @@ Please produce a comprehensive, well-structured marketing context document that 
       </ScrollArea>
 
       {/* Navigation */}
-      <div className="p-4 border-t flex items-center justify-between bg-background">
+      <div className="p-3 sm:p-4 border-t flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-0 bg-background">
         <Button
           variant="outline"
+          className="w-full sm:w-auto"
           onClick={() => setStep(Math.max(1, step - 1))}
           disabled={step === 1}
         >
           <ChevronLeft size={14} className="mr-1" />
           Back
         </Button>
-        <Button onClick={handleNext}>
+        <Button className="w-full sm:w-auto" onClick={handleNext}>
           {step === 4 ? (
             <>
               <Sparkles size={14} className="mr-2" />

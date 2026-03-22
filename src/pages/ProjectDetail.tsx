@@ -112,9 +112,9 @@ export default function ProjectDetail() {
         </Badge>
       </div>
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
         {/* Project header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-foreground">{project.name}</h1>
             {project.client_name && (
@@ -202,7 +202,7 @@ export default function ProjectDetail() {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                 {outputs.map((output) => (
                   <SkillOutputCard key={output.id} output={output} />
                 ))}

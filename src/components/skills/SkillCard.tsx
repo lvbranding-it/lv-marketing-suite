@@ -24,7 +24,7 @@ export default function SkillCard({ skill, hasContext = false }: SkillCardProps)
     <button
       onClick={handleClick}
       className={cn(
-        "group text-left w-full bg-card border border-border rounded-lg p-4 transition-all duration-150",
+        "group text-left w-full bg-card border border-border rounded-lg p-3 sm:p-4 transition-all duration-150",
         "hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5",
         "border-t-[3px]",
         CATEGORY_BORDER_COLORS[skill.category]

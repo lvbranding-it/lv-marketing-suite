@@ -39,7 +39,7 @@ export default function History() {
         subtitle={`${filtered.length} output${filtered.length !== 1 ? "s" : ""}`}
       />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4">
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
@@ -84,7 +84,7 @@ export default function History() {
 
         {/* Outputs */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
@@ -97,7 +97,7 @@ export default function History() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {filtered.map((output) => (
               <SkillOutputCard key={output.id} output={output} />
             ))}

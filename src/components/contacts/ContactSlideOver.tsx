@@ -238,15 +238,15 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     <Sheet open={!!contact} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[520px] p-0 flex flex-col"
+        className="w-full sm:max-w-[520px] max-h-[100dvh] p-0 flex flex-col"
       >
         {/* Header */}
-        <div className="p-5 border-b border-border flex-shrink-0">
+        <div className="p-3 sm:p-5 border-b border-border flex-shrink-0">
           <div className="flex items-start gap-4">
             {/* Avatar */}
             <div
               className={cn(
-                "w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0",
+                "w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg shrink-0",
                 avatarBg
               )}
             >
@@ -256,7 +256,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-bold leading-tight truncate">
+                <h2 className="text-sm sm:text-base font-bold leading-tight truncate">
                   {contact.first_name} {contact.last_name}
                 </h2>
                 <FitBadge score={contact.fit_score} />
@@ -277,7 +277,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                   value={contact.pipeline_stage ?? "lead"}
                   onValueChange={handleStageChange}
                 >
-                  <SelectTrigger className="h-7 text-xs w-40">
+                  <SelectTrigger className="h-7 text-xs w-full sm:w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -300,7 +300,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
         {/* Tabs */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="mx-5 mt-3 mb-0 self-start">
+            <TabsList className="mx-3 sm:mx-5 mt-3 mb-0 self-start">
               <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
               <TabsTrigger value="activity" className="text-xs">Activity</TabsTrigger>
               <TabsTrigger value="followup" className="text-xs">Follow-up</TabsTrigger>
@@ -316,7 +316,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
             {/* ── Overview Tab ── */}
             <TabsContent
               value="overview"
-              className="flex-1 overflow-y-auto px-5 py-4 space-y-5 mt-0"
+              className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-5 mt-0"
             >
               {/* Contact Info */}
               <Section title="Contact Info">
@@ -389,7 +389,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                       <span className="text-xs text-muted-foreground">$</span>
                       <Input
                         type="number"
-                        className="h-7 text-xs w-28"
+                        className="h-7 text-xs w-full sm:w-28"
                         placeholder="0.00"
                         value={dealValue}
                         onChange={(e) => setDealValue(e.target.value)}
@@ -402,7 +402,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                     <div className="flex items-center gap-1">
                       <Input
                         type="number"
-                        className="h-7 text-xs w-20"
+                        className="h-7 text-xs w-full sm:w-20"
                         placeholder="0-100"
                         min={0}
                         max={100}
@@ -425,7 +425,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                     <label className="text-[10px] text-muted-foreground w-28 shrink-0">Next Follow-up</label>
                     <Input
                       type="date"
-                      className="h-7 text-xs w-36"
+                      className="h-7 text-xs w-full sm:w-36"
                       value={followupDate}
                       onChange={(e) => {
                         setFollowupDate(e.target.value);
@@ -484,11 +484,11 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
             {/* ── Activity Tab ── */}
             <TabsContent
               value="activity"
-              className="flex-1 overflow-y-auto px-5 py-4 space-y-4 mt-0"
+              className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-5 mt-0"
             >
               {/* Quick add form */}
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/20">
-                <div className="flex gap-1.5">
+                <div className="flex gap-1 sm:gap-1.5 flex-wrap">
                   {ACTIVITY_META.map((m) => (
                     <button
                       key={m.type}
@@ -575,7 +575,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
             {/* ── Follow-up Tab ── */}
             <TabsContent
               value="followup"
-              className="flex-1 overflow-y-auto px-5 py-4 space-y-4 mt-0"
+              className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-5 mt-0"
             >
               <div className="space-y-3">
                 <div>
@@ -585,7 +585,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                   <div className="flex items-center gap-2">
                     <Input
                       type="date"
-                      className="h-8 text-sm w-44"
+                      className="h-8 text-sm w-full sm:w-44"
                       value={followupDate}
                       onChange={(e) => {
                         setFollowupDate(e.target.value);
@@ -603,7 +603,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                 {/* Quick set buttons */}
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Quick Set</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {[
                       { label: "Tomorrow", days: 1 },
                       { label: "In 3 days", days: 3 },
@@ -614,7 +614,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                         key={label}
                         variant="outline"
                         size="sm"
-                        className="h-7 text-xs"
+                        className="h-7 text-xs flex-1 sm:flex-auto"
                         onClick={() => {
                           const d = new Date();
                           d.setDate(d.getDate() + days);
@@ -649,14 +649,14 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
             {/* ── Research Tab ── */}
             <TabsContent
               value="research"
-              className="flex-1 overflow-y-auto px-5 py-4 space-y-4 mt-0"
+              className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 sm:py-4 space-y-3 sm:space-y-5 mt-0"
             >
               {/* Action button */}
               <div className="flex items-center gap-3">
                 <Button
                   onClick={runResearch}
                   disabled={researchVerifying || researchStreaming}
-                  className="gap-2"
+                  className="gap-2 w-full sm:w-auto"
                   size="sm"
                 >
                   {researchVerifying ? (
@@ -716,7 +716,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
 
               {/* Result */}
               {researchText ? (
-                <div className="bg-muted/40 border border-border rounded-lg p-4">
+                <div className="bg-muted/40 border border-border rounded-lg p-3 sm:p-4">
                   <div className="flex items-center gap-1.5 mb-3">
                     <ShieldCheck size={12} className="text-primary" />
                     <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
