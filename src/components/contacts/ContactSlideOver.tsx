@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2, Sparkles, Loader2, CheckCircle2, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,12 @@ import { runSkillStream } from "@/lib/claude";
 import { useToast } from "@/hooks/use-toast";
 import { type ImportedContact } from "@/hooks/useContacts";
 import {
+  verifyContact,
+  buildResearchPrompt,
+  RESEARCH_SYSTEM_PROMPT,
+  type VerifyResult,
+} from "@/lib/contactResearch";
+import {
   PIPELINE_STAGES,
   ACTIVITY_META,
   useUpdatePipelineStage,
@@ -30,44 +36,6 @@ import {
   useDeleteActivity,
   type PipelineStage,
 } from "@/hooks/useCRM";
-
-// ── Shared research prompt (mirrors ResearchQueue) ───────────────────────────
-const RESEARCH_SYSTEM_PROMPT = `You are a B2B sales intelligence analyst. Your job is to assess whether a contact is a real, reachable prospect worth pursuing.
-
-Analyze the provided contact data and return a concise research brief with these exact sections:
-
-## Validity Assessment
-Is this likely a real person at this company? State your confidence level (High / Medium / Low) and why.
-
-## Company Overview
-Brief facts about the company if recognizable. Otherwise assess based on the domain/industry.
-
-## Prospect Fit
-Why this person's role and company make them a valuable prospect to approach.
-
-## Red Flags
-Any concerns: generic email domains, inconsistent data, unusual patterns. Write "None detected" if clean.
-
-## Verdict
-Choose one: 🟢 **Strong Lead** / 🟡 **Needs More Research** / 🔴 **Likely Invalid**
-One sentence explaining the verdict.
-
-Be concise — 2 sentences max per section.`;
-
-function buildResearchPrompt(c: ImportedContact): string {
-  const lines = [
-    `**Name:** ${[c.first_name, c.last_name].filter(Boolean).join(" ") || "Unknown"}`,
-    `**Title:** ${c.title || "Unknown"}`,
-    `**Company:** ${c.company || "Unknown"}`,
-    `**Email:** ${c.email || "Not provided"}`,
-    `**LinkedIn:** ${c.linkedin_url || "Not provided"}`,
-    `**Location:** ${[c.city, c.state, c.country].filter(Boolean).join(", ") || "Unknown"}`,
-    `**Industry:** ${c.industry || "Unknown"}`,
-    `**Company size:** ${c.employees_range || "Unknown"}`,
-    `**Source:** ${c.source}`,
-  ];
-  return `Please research and assess this B2B contact:\n\n${lines.join("\n")}`;
-}
 
 interface Props {
   contact: ImportedContact | null;
@@ -128,6 +96,8 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   // Research state
   const [researchText, setResearchText] = useState<string>("");
   const [researchStreaming, setResearchStreaming] = useState(false);
+  const [researchVerifying, setResearchVerifying] = useState(false);
+  const [verification, setVerification] = useState<VerifyResult | null>(null);
 
   // Track which contact we've initialized state for
   const initializedContactId = useRef<string | null>(null);
@@ -140,6 +110,9 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     setCrmNotes(contact.crm_notes ?? "");
     setTags(contact.tags ?? []);
     setResearchText(contact.research_result ?? "");
+    setVerification(null);
+    setResearchVerifying(false);
+    setResearchStreaming(false);
     setFollowupDate(
       contact.next_followup_at
         ? contact.next_followup_at.substring(0, 10)
@@ -149,13 +122,21 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
 
   const runResearch = async () => {
     if (!contact) return;
-    setResearchStreaming(true);
     setResearchText("");
+    setVerification(null);
 
+    // Step 1 — real HTTP checks
+    setResearchVerifying(true);
+    const vr = await verifyContact(contact);
+    setVerification(vr);
+    setResearchVerifying(false);
+
+    // Step 2 — stream Claude analysis grounded in real verification data
+    setResearchStreaming(true);
     await runSkillStream(
       {
         skillSystemPrompt: RESEARCH_SYSTEM_PROMPT,
-        userMessage: buildResearchPrompt(contact),
+        userMessage: buildResearchPrompt(contact, vr),
         conversationHistory: [],
         marketingContext: {},
       },
@@ -674,19 +655,21 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
               <div className="flex items-center gap-3">
                 <Button
                   onClick={runResearch}
-                  disabled={researchStreaming}
+                  disabled={researchVerifying || researchStreaming}
                   className="gap-2"
                   size="sm"
                 >
-                  {researchStreaming ? (
-                    <><Loader2 size={13} className="animate-spin" />Researching…</>
+                  {researchVerifying ? (
+                    <><Loader2 size={13} className="animate-spin" />Checking links…</>
+                  ) : researchStreaming ? (
+                    <><Loader2 size={13} className="animate-spin" />Analyzing…</>
                   ) : researchText ? (
                     <><Sparkles size={13} />Re-research</>
                   ) : (
                     <><Sparkles size={13} />Research with AI</>
                   )}
                 </Button>
-                {researchText && !researchStreaming && (
+                {researchText && !researchVerifying && !researchStreaming && (
                   <span className="text-[10px] text-emerald-600 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     Analysis ready
@@ -694,13 +677,50 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                 )}
               </div>
 
+              {/* Verification pills — shown after HTTP checks run */}
+              {verification && (
+                <div className="space-y-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-muted-foreground">
+                    Pre-verification checks
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <VerifyPillInline
+                      label="Website"
+                      live={verification.website.live}
+                      detail={
+                        verification.website.live
+                          ? `HTTP ${verification.website.status}`
+                          : (verification.website.error ?? "no response")
+                      }
+                    />
+                    <VerifyPillInline
+                      label="Email domain"
+                      live={verification.email.mx_valid}
+                      detail={verification.email.domain ?? "—"}
+                    />
+                    <VerifyPillInline
+                      label="LinkedIn"
+                      live={
+                        !verification.linkedin.url
+                          ? null
+                          : verification.linkedin.format_valid
+                      }
+                      detail={
+                        verification.linkedin.username ??
+                        (verification.linkedin.url ? "bad URL" : "not provided")
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Result */}
               {researchText ? (
                 <div className="bg-muted/40 border border-border rounded-lg p-4">
                   <div className="flex items-center gap-1.5 mb-3">
-                    <Sparkles size={12} className="text-primary" />
+                    <ShieldCheck size={12} className="text-primary" />
                     <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
-                      AI Research Brief
+                      AI Research — verified data
                     </span>
                     {researchStreaming && (
                       <Loader2 size={10} className="animate-spin text-muted-foreground ml-1" />
@@ -711,14 +731,14 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                     <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 align-middle mt-1" />
                   )}
                 </div>
-              ) : !researchStreaming ? (
+              ) : !researchVerifying && !researchStreaming ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <Sparkles size={22} className="text-primary" />
                   </div>
                   <p className="text-sm font-medium text-foreground">No research yet</p>
                   <p className="text-xs text-muted-foreground max-w-[240px]">
-                    Click "Research with AI" to get an instant analysis of this contact's validity, company, and prospect fit.
+                    Runs real HTTP checks on the website, email domain, and LinkedIn before asking AI to assess this contact.
                   </p>
                 </div>
               ) : null}
@@ -727,6 +747,36 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function VerifyPillInline({
+  label,
+  live,
+  detail,
+}: {
+  label: string;
+  live: boolean | null;
+  detail: string;
+}) {
+  if (live === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">
+        <AlertCircle size={9} />
+        {label}: {detail}
+      </span>
+    );
+  }
+  return live ? (
+    <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+      <CheckCircle2 size={9} />
+      {label}: {detail}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">
+      <XCircle size={9} />
+      {label}: {detail}
+    </span>
   );
 }
 

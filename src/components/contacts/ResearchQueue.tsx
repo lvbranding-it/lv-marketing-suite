@@ -3,7 +3,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   Search, CheckCircle2, XCircle, ChevronDown, ChevronUp,
   Loader2, Sparkles, Mail, Linkedin, Globe, Building2,
-  AlertCircle, FlaskConical,
+  AlertCircle, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,48 +14,48 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ImportedContact } from "@/hooks/useContacts";
 import { runSkillStream } from "@/lib/claude";
 import { useToast } from "@/hooks/use-toast";
+import {
+  verifyContact,
+  buildResearchPrompt,
+  RESEARCH_SYSTEM_PROMPT,
+  type VerifyResult,
+} from "@/lib/contactResearch";
 
 interface Props {
   contacts: ImportedContact[];
 }
 
-type ResearchState = "idle" | "streaming" | "done" | "error";
+type ResearchState = "idle" | "verifying" | "streaming" | "done" | "error";
 
-const RESEARCH_SYSTEM_PROMPT = `You are a B2B sales intelligence analyst. Your job is to assess whether a contact is a real, reachable prospect worth pursuing.
-
-Analyze the provided contact data and return a concise research brief with these exact sections:
-
-## Validity Assessment
-Is this likely a real person at this company? State your confidence level (High / Medium / Low) and why.
-
-## Company Overview
-Brief facts about the company if recognizable. Otherwise assess based on the domain/industry.
-
-## Prospect Fit
-Why this person's role and company make them a valuable prospect to approach.
-
-## Red Flags
-Any concerns: generic email domains, inconsistent data, unusual patterns. Write "None detected" if clean.
-
-## Verdict
-Choose one: 🟢 **Strong Lead** / 🟡 **Needs More Research** / 🔴 **Likely Invalid**
-One sentence explaining the verdict.
-
-Be concise — 2 sentences max per section.`;
-
-function buildResearchPrompt(c: ImportedContact): string {
-  const lines = [
-    `**Name:** ${[c.first_name, c.last_name].filter(Boolean).join(" ") || "Unknown"}`,
-    `**Title:** ${c.title || "Unknown"}`,
-    `**Company:** ${c.company || "Unknown"}`,
-    `**Email:** ${c.email || "Not provided"}`,
-    `**LinkedIn:** ${c.linkedin_url || "Not provided"}`,
-    `**Location:** ${[c.city, c.state, c.country].filter(Boolean).join(", ") || "Unknown"}`,
-    `**Industry:** ${c.industry || "Unknown"}`,
-    `**Company size:** ${c.employees_range || "Unknown"}`,
-    `**Source:** ${c.source} (imported ${formatDistanceToNow(new Date(c.created_at), { addSuffix: true })})`,
-  ];
-  return `Please research and assess this B2B contact:\n\n${lines.join("\n")}`;
+// ── Verification pill ────────────────────────────────────────────────────────
+function VerifyPill({
+  label,
+  live,
+  detail,
+}: {
+  label: string;
+  live: boolean | null;
+  detail: string;
+}) {
+  if (live === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">
+        <AlertCircle size={9} />
+        {label}: {detail}
+      </span>
+    );
+  }
+  return live ? (
+    <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
+      <CheckCircle2 size={9} />
+      {label}: {detail}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">
+      <XCircle size={9} />
+      {label}: {detail}
+    </span>
+  );
 }
 
 // ── Source badge colors ──────────────────────────────────────────────────────
@@ -77,24 +77,28 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
   const sourceMeta = SOURCE_META[contact.source] ?? SOURCE_META.manual;
   const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
 
+  const [verification, setVerification] = useState<VerifyResult | null>(null);
+
   const runResearch = async () => {
-    setResearchState("streaming");
+    setResearchState("verifying");
     setStreamedText("");
     setExpanded(true);
-    let fullText = "";
 
+    // Step 1: run real HTTP checks
+    const vr = await verifyContact(contact);
+    setVerification(vr);
+
+    // Step 2: stream Claude analysis with real verification data
+    setResearchState("streaming");
     await runSkillStream(
       {
         skillSystemPrompt: RESEARCH_SYSTEM_PROMPT,
-        userMessage: buildResearchPrompt(contact),
+        userMessage: buildResearchPrompt(contact, vr),
         conversationHistory: [],
         marketingContext: {},
       },
       {
-        onToken: (t) => {
-          fullText += t;
-          setStreamedText((prev) => prev + t);
-        },
+        onToken: (t) => setStreamedText((prev) => prev + t),
         onComplete: async (text) => {
           await supabase
             .from("contacts")
@@ -140,7 +144,9 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
   };
 
   const hasResult = streamedText.length > 0;
+  const isVerifying = researchState === "verifying";
   const isStreaming = researchState === "streaming";
+  const isBusy = isVerifying || isStreaming;
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-card transition-shadow hover:shadow-sm">
@@ -230,15 +236,38 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
             )}
           </div>
 
+          {/* Verification status pills — shown after checks run */}
+          {verification && (
+            <div className="flex flex-wrap gap-1.5">
+              <VerifyPill
+                label="Website"
+                live={verification.website.live}
+                detail={verification.website.live
+                  ? `HTTP ${verification.website.status}`
+                  : (verification.website.error ?? "no response")}
+              />
+              <VerifyPill
+                label="Email domain"
+                live={verification.email.mx_valid}
+                detail={verification.email.domain ?? "—"}
+              />
+              <VerifyPill
+                label="LinkedIn"
+                live={verification.linkedin.format_valid ? true : (verification.linkedin.url ? false : null)}
+                detail={verification.linkedin.username ?? (verification.linkedin.url ? "bad URL" : "not provided")}
+              />
+            </div>
+          )}
+
           {/* AI Research result */}
           {hasResult ? (
             <div className="bg-muted/40 border border-border rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-2">
-                <Sparkles size={11} className="text-primary" />
+                <ShieldCheck size={11} className="text-primary" />
                 <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
-                  AI Research
+                  AI Research — verified data
                 </span>
-                {isStreaming && (
+                {isBusy && (
                   <Loader2 size={10} className="animate-spin text-muted-foreground ml-1" />
                 )}
               </div>
@@ -254,11 +283,13 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
               variant="outline"
               size="sm"
               onClick={runResearch}
-              disabled={isStreaming}
+              disabled={isBusy}
               className="gap-2 border-primary/30 text-primary hover:bg-primary/5 hover:border-primary"
             >
-              {isStreaming ? (
-                <><Loader2 size={13} className="animate-spin" />Researching…</>
+              {isVerifying ? (
+                <><Loader2 size={13} className="animate-spin" />Checking links…</>
+              ) : isStreaming ? (
+                <><Loader2 size={13} className="animate-spin" />Analyzing…</>
               ) : (
                 <><Sparkles size={13} />Research with AI</>
               )}
@@ -266,7 +297,7 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
           )}
 
           {/* Re-research button if result already exists */}
-          {hasResult && researchState !== "streaming" && (
+          {hasResult && !isBusy && (
             <Button
               variant="ghost"
               size="sm"
