@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -12,9 +12,11 @@ import {
   Bold, Italic, UnderlineIcon, Link2, Image as ImageIcon,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, Minus, Undo, Redo,
-  Palette, Link2Off,
+  Palette, Link2Off, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "@/hooks/useOrg";
 
 interface Props {
   value: string;
@@ -58,10 +60,11 @@ function Divider() {
 }
 
 export default function RichEmailEditor({ value, onChange, placeholder }: Props) {
-  const [linkUrl,      setLinkUrl]      = useState("");
-  const [showLinkBox,  setShowLinkBox]  = useState(false);
-  const [imageUrl,     setImageUrl]     = useState("");
-  const [showImageBox, setShowImageBox] = useState(false);
+  const { org } = useOrg();
+  const [linkUrl,        setLinkUrl]        = useState("");
+  const [showLinkBox,    setShowLinkBox]    = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -110,12 +113,28 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
     setShowLinkBox(false);
   }, [editor, linkUrl]);
 
-  const addImage = useCallback(() => {
-    if (!editor || !imageUrl.trim()) return;
-    editor.chain().focus().setImage({ src: imageUrl.trim() }).run();
-    setImageUrl("");
-    setShowImageBox(false);
-  }, [editor, imageUrl]);
+  const handleImageFile = useCallback(async (file: File) => {
+    if (!editor || !org) return;
+    setImageUploading(true);
+    try {
+      const ext  = file.name.split(".").pop() ?? "jpg";
+      const path = `${org.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage
+        .from("email-assets")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage
+        .from("email-assets")
+        .getPublicUrl(path);
+      editor.chain().focus().setImage({ src: publicUrl }).run();
+    } catch (err) {
+      console.error("Image upload failed:", err);
+    } finally {
+      setImageUploading(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [editor, org]);
 
   if (!editor) return null;
 
@@ -184,7 +203,7 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
         <Divider />
 
         {/* Link */}
-        <ToolbarBtn onClick={() => { setShowLinkBox((v) => !v); setShowImageBox(false); }} active={editor.isActive("link") || showLinkBox} title="Insert link">
+        <ToolbarBtn onClick={() => setShowLinkBox((v) => !v)} active={editor.isActive("link") || showLinkBox} title="Insert link">
           <Link2 size={13} />
         </ToolbarBtn>
         {editor.isActive("link") && (
@@ -193,10 +212,31 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
           </ToolbarBtn>
         )}
 
-        {/* Image */}
-        <ToolbarBtn onClick={() => { setShowImageBox((v) => !v); setShowLinkBox(false); }} active={showImageBox} title="Insert image">
-          <ImageIcon size={13} />
-        </ToolbarBtn>
+        {/* Image — triggers hidden file input */}
+        <label
+          title="Upload image from computer"
+          className={cn(
+            "p-1.5 rounded transition-colors cursor-pointer",
+            imageUploading
+              ? "opacity-50 pointer-events-none"
+              : "hover:bg-muted text-foreground/70 hover:text-foreground"
+          )}
+        >
+          {imageUploading
+            ? <Loader2 size={13} className="animate-spin" />
+            : <ImageIcon size={13} />
+          }
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImageFile(file);
+            }}
+          />
+        </label>
 
         <Divider />
 
@@ -232,23 +272,6 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
           />
           <button onClick={applyLink} className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">Apply</button>
           <button onClick={() => setShowLinkBox(false)} className="text-[10px] text-muted-foreground px-1">✕</button>
-        </div>
-      )}
-
-      {/* Image URL input row */}
-      {showImageBox && (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20">
-          <ImageIcon size={12} className="text-muted-foreground shrink-0" />
-          <input
-            autoFocus
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addImage()}
-            placeholder="https://example.com/image.jpg"
-            className="flex-1 text-xs bg-transparent focus:outline-none"
-          />
-          <button onClick={addImage} className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded font-medium">Insert</button>
-          <button onClick={() => setShowImageBox(false)} className="text-[10px] text-muted-foreground px-1">✕</button>
         </div>
       )}
 
