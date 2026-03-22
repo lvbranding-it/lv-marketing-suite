@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2 } from "lucide-react";
+import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { runSkillStream } from "@/lib/claude";
+import { useToast } from "@/hooks/use-toast";
 import { type ImportedContact } from "@/hooks/useContacts";
 import {
   PIPELINE_STAGES,
@@ -25,6 +30,44 @@ import {
   useDeleteActivity,
   type PipelineStage,
 } from "@/hooks/useCRM";
+
+// ── Shared research prompt (mirrors ResearchQueue) ───────────────────────────
+const RESEARCH_SYSTEM_PROMPT = `You are a B2B sales intelligence analyst. Your job is to assess whether a contact is a real, reachable prospect worth pursuing.
+
+Analyze the provided contact data and return a concise research brief with these exact sections:
+
+## Validity Assessment
+Is this likely a real person at this company? State your confidence level (High / Medium / Low) and why.
+
+## Company Overview
+Brief facts about the company if recognizable. Otherwise assess based on the domain/industry.
+
+## Prospect Fit
+Why this person's role and company make them a valuable prospect to approach.
+
+## Red Flags
+Any concerns: generic email domains, inconsistent data, unusual patterns. Write "None detected" if clean.
+
+## Verdict
+Choose one: 🟢 **Strong Lead** / 🟡 **Needs More Research** / 🔴 **Likely Invalid**
+One sentence explaining the verdict.
+
+Be concise — 2 sentences max per section.`;
+
+function buildResearchPrompt(c: ImportedContact): string {
+  const lines = [
+    `**Name:** ${[c.first_name, c.last_name].filter(Boolean).join(" ") || "Unknown"}`,
+    `**Title:** ${c.title || "Unknown"}`,
+    `**Company:** ${c.company || "Unknown"}`,
+    `**Email:** ${c.email || "Not provided"}`,
+    `**LinkedIn:** ${c.linkedin_url || "Not provided"}`,
+    `**Location:** ${[c.city, c.state, c.country].filter(Boolean).join(", ") || "Unknown"}`,
+    `**Industry:** ${c.industry || "Unknown"}`,
+    `**Company size:** ${c.employees_range || "Unknown"}`,
+    `**Source:** ${c.source}`,
+  ];
+  return `Please research and assess this B2B contact:\n\n${lines.join("\n")}`;
+}
 
 interface Props {
   contact: ImportedContact | null;
@@ -61,6 +104,8 @@ function FitBadge({ score }: { score: number | null }) {
 }
 
 export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const updateStage = useUpdatePipelineStage();
   const updateCRM = useUpdateContactCRM();
   const addActivity = useAddActivity();
@@ -80,6 +125,10 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   const [activityType, setActivityType] = useState<"note" | "call" | "email" | "meeting">("note");
   const [activityBody, setActivityBody] = useState("");
 
+  // Research state
+  const [researchText, setResearchText] = useState<string>("");
+  const [researchStreaming, setResearchStreaming] = useState(false);
+
   // Track which contact we've initialized state for
   const initializedContactId = useRef<string | null>(null);
 
@@ -90,12 +139,44 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     setDealProb(contact.deal_probability != null ? String(contact.deal_probability) : "");
     setCrmNotes(contact.crm_notes ?? "");
     setTags(contact.tags ?? []);
+    setResearchText(contact.research_result ?? "");
     setFollowupDate(
       contact.next_followup_at
         ? contact.next_followup_at.substring(0, 10)
         : ""
     );
   }
+
+  const runResearch = async () => {
+    if (!contact) return;
+    setResearchStreaming(true);
+    setResearchText("");
+
+    await runSkillStream(
+      {
+        skillSystemPrompt: RESEARCH_SYSTEM_PROMPT,
+        userMessage: buildResearchPrompt(contact),
+        conversationHistory: [],
+        marketingContext: {},
+      },
+      {
+        onToken: (t) => setResearchText((prev) => prev + t),
+        onComplete: async (text) => {
+          await supabase
+            .from("contacts")
+            .update({ research_result: text })
+            .eq("id", contact.id);
+          qc.invalidateQueries({ queryKey: ["contacts"] });
+          setResearchStreaming(false);
+          onUpdate?.();
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", description: err.message });
+          setResearchStreaming(false);
+        },
+      }
+    );
+  };
 
   if (!contact) return null;
 
@@ -232,14 +313,6 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
               </div>
             </div>
 
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity p-1"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
         </div>
 
@@ -250,6 +323,13 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
               <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
               <TabsTrigger value="activity" className="text-xs">Activity</TabsTrigger>
               <TabsTrigger value="followup" className="text-xs">Follow-up</TabsTrigger>
+              <TabsTrigger value="research" className="text-xs flex items-center gap-1">
+                <Sparkles size={10} />
+                Research
+                {researchText && !researchStreaming && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
+                )}
+              </TabsTrigger>
             </TabsList>
 
             {/* ── Overview Tab ── */}
@@ -583,6 +663,65 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                   </Button>
                 )}
               </div>
+            </TabsContent>
+
+            {/* ── Research Tab ── */}
+            <TabsContent
+              value="research"
+              className="flex-1 overflow-y-auto px-5 py-4 space-y-4 mt-0"
+            >
+              {/* Action button */}
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={runResearch}
+                  disabled={researchStreaming}
+                  className="gap-2"
+                  size="sm"
+                >
+                  {researchStreaming ? (
+                    <><Loader2 size={13} className="animate-spin" />Researching…</>
+                  ) : researchText ? (
+                    <><Sparkles size={13} />Re-research</>
+                  ) : (
+                    <><Sparkles size={13} />Research with AI</>
+                  )}
+                </Button>
+                {researchText && !researchStreaming && (
+                  <span className="text-[10px] text-emerald-600 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Analysis ready
+                  </span>
+                )}
+              </div>
+
+              {/* Result */}
+              {researchText ? (
+                <div className="bg-muted/40 border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <Sparkles size={12} className="text-primary" />
+                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">
+                      AI Research Brief
+                    </span>
+                    {researchStreaming && (
+                      <Loader2 size={10} className="animate-spin text-muted-foreground ml-1" />
+                    )}
+                  </div>
+                  <MarkdownContent>{researchText}</MarkdownContent>
+                  {researchStreaming && (
+                    <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 align-middle mt-1" />
+                  )}
+                </div>
+              ) : !researchStreaming ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Sparkles size={22} className="text-primary" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">No research yet</p>
+                  <p className="text-xs text-muted-foreground max-w-[240px]">
+                    Click "Research with AI" to get an instant analysis of this contact's validity, company, and prospect fit.
+                  </p>
+                </div>
+              ) : null}
             </TabsContent>
           </Tabs>
         </div>
