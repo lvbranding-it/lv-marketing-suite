@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, Users, CheckCircle2, XCircle, AlertCircle, ChevronDown } from "lucide-react";
+import { Search, Users, CheckCircle2, XCircle, AlertCircle, ChevronDown, Upload, UserPlus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,11 +23,45 @@ const STAGE_LABELS: Record<string, string> = {
   lost:      "Lost",
 };
 
+function parseCSV(text: string): SelectedRecipient[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/['"]/g, ""));
+  const idx = (name: string) => headers.indexOf(name);
+  const emailIdx = idx("email");
+  if (emailIdx === -1) return [];
+  return lines
+    .slice(1)
+    .map((line, i) => {
+      const cols = line.split(",").map((v) => v.trim().replace(/^["']|["']$/g, ""));
+      const email = cols[emailIdx];
+      if (!email || !email.includes("@")) return null;
+      return {
+        id: `csv-${Date.now()}-${i}`,
+        email,
+        first_name: idx("first_name") >= 0 ? cols[idx("first_name")] || null : null,
+        last_name:  idx("last_name")  >= 0 ? cols[idx("last_name")]  || null : null,
+        company:    idx("company")    >= 0 ? cols[idx("company")]    || null : null,
+        title:      idx("title")      >= 0 ? cols[idx("title")]      || null : null,
+        contact_id: null,
+        suppressed: false,
+      } as SelectedRecipient;
+    })
+    .filter(Boolean) as SelectedRecipient[];
+}
+
 export default function RecipientSelector({ selected, onChange }: Props) {
   const [search,       setSearch]       = useState("");
   const [stageFilter,  setStageFilter]  = useState<StageFilter>("all");
   const [tagFilter,    setTagFilter]    = useState<string>("");
   const [showFilters,  setShowFilters]  = useState(false);
+
+  const [manualEmail,     setManualEmail]     = useState("");
+  const [manualFirstName, setManualFirstName] = useState("");
+  const [manualLastName,  setManualLastName]  = useState("");
+  const [manualCompany,   setManualCompany]   = useState("");
+  const [showManualForm,  setShowManualForm]  = useState(false);
+  const [csvError,        setCsvError]        = useState("");
 
   const { data: contacts = [], isLoading } = useImportedContacts();
   const { data: suppressed = [] }          = useSuppressions();
@@ -110,38 +144,166 @@ export default function RecipientSelector({ selected, onChange }: Props) {
     onChange(selected.filter((r) => !filteredIds.has(r.id)));
   };
 
+  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) {
+        setCsvError("No valid rows found. Make sure your CSV has an 'email' column.");
+        return;
+      }
+      // Merge: skip emails already selected or suppressed
+      const existingEmails = new Set(selected.map((r) => r.email.toLowerCase()));
+      const toAdd = parsed.filter(
+        (r) => !existingEmails.has(r.email.toLowerCase()) && !suppSet.has(r.email.toLowerCase())
+      );
+      onChange([...selected, ...toAdd]);
+      setCsvError(parsed.length > toAdd.length
+        ? `Added ${toAdd.length} contacts (${parsed.length - toAdd.length} skipped — already selected or suppressed).`
+        : `Added ${toAdd.length} contacts from CSV.`
+      );
+    };
+    reader.readAsText(file);
+    e.target.value = ""; // reset so same file can be re-imported
+  };
+
+  const handleManualAdd = () => {
+    const email = manualEmail.trim().toLowerCase();
+    if (!email || !email.includes("@")) return;
+    if (suppSet.has(email)) {
+      setCsvError("This email is on the suppression list and cannot be added.");
+      return;
+    }
+    if (selected.some((r) => r.email.toLowerCase() === email)) {
+      setCsvError("This email is already in the recipient list.");
+      return;
+    }
+    onChange([
+      ...selected,
+      {
+        id:         `manual-${Date.now()}`,
+        email,
+        first_name: manualFirstName.trim() || null,
+        last_name:  manualLastName.trim()  || null,
+        company:    manualCompany.trim()   || null,
+        title:      null,
+        contact_id: null,
+        suppressed: false,
+      },
+    ]);
+    setManualEmail("");
+    setManualFirstName("");
+    setManualLastName("");
+    setManualCompany("");
+    setShowManualForm(false);
+    setCsvError("");
+  };
+
   const suppressedInView = filtered.filter((c) => c.email && suppSet.has(c.email.toLowerCase())).length;
 
   return (
     <div className="space-y-3 h-full flex flex-col">
       {/* Selection summary */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Users size={16} className="text-primary" />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Users size={16} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{selected.length} selected</p>
+              {suppressedInView > 0 && (
+                <p className="text-[10px] text-amber-600">{suppressedInView} suppressed (will be skipped)</p>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold">
-              {selected.length} selected
-            </p>
-            {suppressedInView > 0 && (
-              <p className="text-[10px] text-amber-600">
-                {suppressedInView} suppressed (will be skipped)
-              </p>
+          <div className="flex gap-1.5 flex-wrap">
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={selectAll}>
+              Select all visible
+            </Button>
+            {selected.length > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={clearAll}>
+                Clear
+              </Button>
             )}
           </div>
         </div>
-        <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={selectAll}>
-            Select all visible
+
+        {/* Import row */}
+        <div className="flex gap-1.5 flex-wrap">
+          {/* CSV import */}
+          <label className="flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border rounded-md cursor-pointer hover:border-primary hover:text-primary transition-colors font-medium text-muted-foreground bg-background">
+            <Upload size={11} /> Import CSV
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleCSVUpload} />
+          </label>
+          {/* Manual add */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            onClick={() => { setShowManualForm((v) => !v); setCsvError(""); }}
+          >
+            <UserPlus size={11} /> Add Contact
           </Button>
-          {selected.length > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={clearAll}>
-              Clear
-            </Button>
-          )}
         </div>
+
+        {/* CSV feedback */}
+        {csvError && (
+          <p className="text-[10px] text-amber-600 flex items-center gap-1">
+            <AlertCircle size={10} /> {csvError}
+          </p>
+        )}
       </div>
+
+      {/* Manual add form */}
+      {showManualForm && (
+        <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium">Add contact manually</p>
+            <button onClick={() => setShowManualForm(false)} className="text-muted-foreground hover:text-foreground">
+              <X size={12} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              placeholder="Email *"
+              value={manualEmail}
+              onChange={(e) => setManualEmail(e.target.value)}
+              className="h-8 text-xs border border-border rounded-md px-2.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+              onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
+            />
+            <input
+              placeholder="First name"
+              value={manualFirstName}
+              onChange={(e) => setManualFirstName(e.target.value)}
+              className="h-8 text-xs border border-border rounded-md px-2.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+            />
+            <input
+              placeholder="Last name"
+              value={manualLastName}
+              onChange={(e) => setManualLastName(e.target.value)}
+              className="h-8 text-xs border border-border rounded-md px-2.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+            />
+            <input
+              placeholder="Company"
+              value={manualCompany}
+              onChange={(e) => setManualCompany(e.target.value)}
+              className="h-8 text-xs border border-border rounded-md px-2.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring w-full"
+              onKeyDown={(e) => e.key === "Enter" && handleManualAdd()}
+            />
+          </div>
+          <Button size="sm" className="h-7 text-xs gap-1.5 w-full" onClick={handleManualAdd} disabled={!manualEmail.trim()}>
+            <UserPlus size={11} /> Add to list
+          </Button>
+          <p className="text-[10px] text-muted-foreground">
+            Tip: For bulk adds, use CSV import. Expected columns: email, first_name, last_name, company, title
+          </p>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">

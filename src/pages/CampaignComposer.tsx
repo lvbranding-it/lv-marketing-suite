@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Send, Users, Mail, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,14 +18,19 @@ const STEPS = [
 
 export default function CampaignComposer() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  const cloneData = location.state?.cloneFrom as {
+    name: string; subject: string; preview_text: string; body_html: string;
+  } | undefined;
 
   const [step,         setStep]         = useState<Step>(1);
   const [recipients,   setRecipients]   = useState<SelectedRecipient[]>([]);
-  const [campaignName, setCampaignName] = useState("");
-  const [subject,      setSubject]      = useState("");
-  const [previewText,  setPreviewText]  = useState("");
-  const [bodyHtml,     setBodyHtml]     = useState("");
+  const [campaignName, setCampaignName] = useState(cloneData?.name ?? "");
+  const [subject,      setSubject]      = useState(cloneData?.subject ?? "");
+  const [previewText,  setPreviewText]  = useState(cloneData?.preview_text ?? "");
+  const [bodyHtml,     setBodyHtml]     = useState(cloneData?.body_html ?? "");
   const [sending,      setSending]      = useState(false);
 
   const createCampaign = useCreateCampaign();

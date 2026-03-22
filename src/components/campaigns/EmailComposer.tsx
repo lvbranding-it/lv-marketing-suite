@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { runSkillStream } from "@/lib/claude";
+import RichEmailEditor from "@/components/campaigns/RichEmailEditor";
 
 const SYSTEM_PROMPT = `You are an expert B2B email marketing copywriter for LV Branding, a Houston-based full-service marketing agency.
 
@@ -213,32 +214,11 @@ export default function EmailComposer({
           </div>
 
           {view === "edit" ? (
-            <div className="relative">
-              <textarea
-                className="w-full text-xs border border-border rounded-xl p-4 bg-background resize-none min-h-[220px] focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                value={bodyHtml}
-                onChange={(e) => onBodyHtmlChange(e.target.value)}
-                placeholder="HTML email body…"
-              />
-              {streaming && (
-                <div className="absolute bottom-3 right-3 flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Loader2 size={10} className="animate-spin" />Writing…
-                </div>
-              )}
-              {/* Variable helper chips */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <p className="text-[10px] text-muted-foreground w-full">Insert variables:</p>
-                {["{{first_name}}", "{{last_name}}", "{{company}}", "{{title}}"].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => onBodyHtmlChange(bodyHtml + v)}
-                    className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded font-mono hover:bg-primary/20 transition-colors"
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <RichEmailEditor
+              value={bodyHtml}
+              onChange={onBodyHtmlChange}
+              placeholder="Write your email body here… or use AI to generate it above."
+            />
           ) : (
             <div className="border border-border rounded-xl overflow-hidden bg-[#f4f4f5] p-3">
               <p className="text-[9px] uppercase tracking-widest text-muted-foreground mb-2 px-1">

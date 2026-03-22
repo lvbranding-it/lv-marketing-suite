@@ -28,21 +28,40 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
-    <tr><td align="center" style="padding:24px 16px;">
+    <tr><td align="center" style="padding:28px 16px 0;">
       <table role="presentation" style="max-width:600px;width:100%;" cellpadding="0" cellspacing="0">
-        <tr><td align="center" style="padding:0 0 20px;">
-          <span style="font-size:22px;font-weight:700;color:#CB2039;letter-spacing:-0.5px;">LV Branding</span>
+
+        <!-- ── Logo ── -->
+        <tr><td align="center" style="padding:0 0 24px;">
+          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:inline-block;">
+            <span style="font-size:26px;font-weight:800;letter-spacing:-1px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <span style="color:#CB2039;">LV</span><span style="color:#231F20;">Branding</span>
+            </span>
+          </a>
         </td></tr>
-        <tr><td style="background:#ffffff;border-radius:12px;padding:32px 28px;border:1px solid #e4e4e7;line-height:1.7;color:#231F20;font-size:15px;">
+
+        <!-- ── Body card ── -->
+        <tr><td style="background:#ffffff;border-radius:12px;padding:36px 32px;border:1px solid #e4e4e7;line-height:1.75;color:#231F20;font-size:15px;">
           ${bodyHtml}
         </td></tr>
-        <tr><td align="center" style="padding:20px 0;color:#71717a;font-size:12px;line-height:1.6;">
-          <p style="margin:0 0 6px;">LV Branding &middot; Houston, TX</p>
-          <p style="margin:0;">
-            <a href="${unsubUrl}" style="color:#71717a;text-decoration:underline;">Unsubscribe</a>
+
+        <!-- ── Footer ── -->
+        <tr><td align="center" style="padding:24px 0 32px;color:#71717a;font-size:12px;line-height:1.8;">
+          <p style="margin:0 0 4px;">
+            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:600;">LV Branding</a>
+            &nbsp;&middot;&nbsp;Houston, TX
+          </p>
+          <p style="margin:0 0 8px;color:#a1a1aa;">
+            <a href="${unsubUrl}" style="color:#a1a1aa;text-decoration:underline;">Unsubscribe</a>
             &nbsp;&middot;&nbsp;You're receiving this as a valued contact.
           </p>
+          <p style="margin:0;font-size:11px;color:#c4c4cc;">
+            Made with ❤️ by
+            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;">LV Branding</a>
+            (www.lvbranding.com)
+          </p>
         </td></tr>
+
       </table>
     </td></tr>
   </table>

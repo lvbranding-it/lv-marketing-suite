@@ -2,8 +2,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, Send, BarChart2, MousePointerClick, AlertTriangle,
-  UserX, Loader2, CheckCircle2, XCircle, Clock, Eye, RefreshCw,
+  UserX, Loader2, CheckCircle2, XCircle, Clock, Eye, RefreshCw, Copy,
 } from "lucide-react";
+import AppShell from "@/components/layout/AppShell";
+import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,25 +44,45 @@ export default function CampaignDetail() {
     }
   };
 
+  const handleSendAgain = () => {
+    if (!campaign) return;
+    navigate("/campaigns/new", {
+      state: {
+        cloneFrom: {
+          name:         campaign.name + " (Copy)",
+          subject:      campaign.subject,
+          preview_text: campaign.preview_text,
+          body_html:    campaign.body_html,
+        },
+      },
+    });
+  };
+
   if (cLoading) {
     return (
-      <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+      <AppShell>
+        <Header title="Campaign" />
+        <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!campaign) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-muted-foreground">Campaign not found.</p>
-        <Button variant="ghost" onClick={() => navigate("/campaigns")} className="mt-4 gap-2">
-          <ArrowLeft size={14} /> Back to campaigns
-        </Button>
-      </div>
+      <AppShell>
+        <Header title="Campaign" />
+        <div className="p-6 text-center">
+          <p className="text-muted-foreground">Campaign not found.</p>
+          <Button variant="ghost" onClick={() => navigate("/campaigns")} className="mt-4 gap-2">
+            <ArrowLeft size={14} /> Back to campaigns
+          </Button>
+        </div>
+      </AppShell>
     );
   }
 
@@ -69,6 +91,8 @@ export default function CampaignDetail() {
   const isSending = campaign.status === "sending";
 
   return (
+    <AppShell>
+      <Header title={campaign.name ?? "Campaign"} />
     <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start gap-3 flex-wrap">
@@ -95,6 +119,11 @@ export default function CampaignDetail() {
             </p>
           )}
         </div>
+        {isSent && (
+          <Button variant="outline" onClick={handleSendAgain} className="gap-2 shrink-0">
+            <Copy size={13} /> Send Again
+          </Button>
+        )}
         {isDraft && (
           <Button onClick={handleSend} disabled={sendCampaign.isPending} className="gap-2 shrink-0">
             {sendCampaign.isPending
@@ -191,5 +220,6 @@ export default function CampaignDetail() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

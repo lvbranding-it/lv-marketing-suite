@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow, format } from "date-fns";
+import AppShell from "@/components/layout/AppShell";
+import Header from "@/components/layout/Header";
 import {
   Mail, Plus, Send, BarChart2, Users, MousePointerClick,
   AlertTriangle, Trash2, Loader2, TrendingUp,
@@ -130,13 +132,11 @@ export default function Campaigns() {
   };
 
   return (
+    <AppShell>
+      <Header title="Email Campaigns" subtitle="Compose, send and track email blasts" />
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Email Campaigns</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Compose, send, and track email blasts</p>
-        </div>
+      {/* New Campaign button */}
+      <div className="flex items-center justify-end">
         <Button onClick={() => navigate("/campaigns/new")} className="gap-2">
           <Plus size={15} /> New Campaign
         </Button>
@@ -213,5 +213,6 @@ export default function Campaigns() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </AppShell>
   );
 }
