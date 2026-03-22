@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ExternalLink, Sparkles, Loader2, CheckCircle2, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import {
   Dialog,
@@ -106,6 +106,14 @@ export default function ContactDetailModal({ contact, onClose }: ContactDetailMo
   const [researchStreaming, setResearchStreaming] = useState(false);
   const [researchText, setResearchText] = useState("");
   const [verification, setVerification] = useState<VerifyResult | null>(null);
+
+  // Reset research state whenever a different contact is opened
+  useEffect(() => {
+    setResearchText("");
+    setVerification(null);
+    setResearchVerifying(false);
+    setResearchStreaming(false);
+  }, [contact?.id]);
 
   if (!contact) return null;
 
