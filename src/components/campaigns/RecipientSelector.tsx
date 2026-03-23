@@ -272,27 +272,29 @@ export default function RecipientSelector({ selected, onChange }: Props) {
           </Button>
         </div>
 
-        {/* Tag group quick-add */}
-        {tagDefs.length > 0 && (
+        {/* Tag group quick-add — shows defined tags + any orphan tags on contacts */}
+        {allTags.length > 0 && (
           <div className="space-y-1">
             <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Tag size={9} /> Add entire tag group:
+              <Tag size={9} /> Add by tag group:
             </p>
             <div className="flex flex-wrap gap-1">
-              {tagDefs.map((def) => {
+              {allTags.map((tagName) => {
+                const def   = tagDefs.find((d) => d.name === tagName);
+                const color = def?.color ?? "#6366f1";
                 const count = contacts.filter(
-                  (c) => c.email && (c.tags ?? []).includes(def.name) && !suppSet.has(c.email.toLowerCase())
+                  (c) => c.email && (c.tags ?? []).includes(tagName) && !suppSet.has(c.email.toLowerCase())
                 ).length;
                 return (
                   <button
-                    key={def.id}
-                    onClick={() => addByTag(def.name)}
+                    key={tagName}
+                    onClick={() => addByTag(tagName)}
                     disabled={count === 0}
-                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium text-white disabled:opacity-40 hover:opacity-80 transition-opacity"
-                    style={{ background: def.color }}
-                    title={`Add all ${count} contacts tagged "${def.name}"`}
+                    className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium text-white disabled:opacity-40 hover:opacity-80 transition-opacity"
+                    style={{ background: color }}
+                    title={`Add all ${count} contacts tagged "${tagName}"`}
                   >
-                    {def.name} <span className="opacity-70">({count})</span>
+                    {tagName} <span className="opacity-75">· {count}</span>
                   </button>
                 );
               })}
