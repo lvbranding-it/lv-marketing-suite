@@ -18,6 +18,7 @@ import Settings from "@/pages/Settings";
 import Contacts from "@/pages/Contacts";
 import Intake from "@/pages/Intake";
 import IntakeForm from "@/pages/IntakeForm";
+import OutputDetail from "@/pages/OutputDetail";
 
 // Lazy pages
 const Campaigns = lazy(() => import("@/pages/Campaigns"));
@@ -117,6 +118,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Suspense fallback={null}><CampaignDetail /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/outputs/:outputId"
+        element={
+          <ProtectedRoute>
+            <OutputDetail />
           </ProtectedRoute>
         }
       />
