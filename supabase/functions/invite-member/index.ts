@@ -29,7 +29,7 @@ function buildInviteEmail(opts: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>You've been invited to ${opts.orgName}</title>
+  <title>You've been invited to join LV Branding's Workspace</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
@@ -51,11 +51,11 @@ function buildInviteEmail(opts: {
         <!-- Body card -->
         <tr><td style="background:#ffffff;border-radius:12px;padding:36px 32px;border:1px solid #e4e4e7;line-height:1.75;color:#231F20;font-size:15px;">
           <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#231F20;">
-            You've been invited to join ${opts.orgName}
+            You've been invited to join LV Branding's Workspace
           </h2>
           <p style="margin:0 0 16px;color:#374151;">
-            <strong>${opts.inviterName}</strong> has invited you to join
-            <strong>${opts.orgName}</strong> on LV Branding as a
+            The admin has invited you to join
+            <strong>LV Branding's Workspace</strong> on LV Branding as a
             <strong>${roleLabel}</strong>.
           </p>
           <p style="margin:0 0 28px;color:#374151;">
@@ -252,11 +252,11 @@ serve(async (req) => {
   const sgPayload = {
     personalizations: [{
       to: [{ email: email.toLowerCase() }],
-      subject: `You've been invited to join ${org.name} on LV Branding`,
+      subject: `You've been invited to join LV Branding's Workspace`,
     }],
     from: { email: FROM_EMAIL, name: FROM_NAME },
     reply_to: { email: FROM_EMAIL, name: FROM_NAME },
-    subject: `You've been invited to join ${org.name} on LV Branding`,
+    subject: `You've been invited to join LV Branding's Workspace`,
     content: [{ type: "text/html", value: emailHtml }],
   };
 
