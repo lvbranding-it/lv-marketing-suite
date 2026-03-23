@@ -32,7 +32,7 @@ const STATUS_META: Record<string, { label: string; class: string }> = {
 
 function rate(num: number, denom: number) {
   if (!denom) return "—";
-  return `${Math.round((num / denom) * 100)}%`;
+  return `${Math.min(Math.round((num / denom) * 100), 100)}%`;
 }
 
 function CampaignCard({

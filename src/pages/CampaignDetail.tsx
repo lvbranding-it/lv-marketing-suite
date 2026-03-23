@@ -27,7 +27,7 @@ const RECIPIENT_STATUS: Record<string, { label: string; class: string; icon: Rea
   failed:      { label: "Failed",      class: "bg-red-100 text-red-600",         icon: <XCircle size={10} /> },
 };
 
-function pct(n: number, d: number) { return d ? `${Math.round((n / d) * 100)}%` : "0%"; }
+function pct(n: number, d: number) { return d ? `${Math.min(Math.round((n / d) * 100), 100)}%` : "0%"; }
 
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();

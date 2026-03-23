@@ -26,19 +26,37 @@ serve(async (req) => {
     if (!recipientId || !campaignId) continue;
 
     switch (eventType) {
-      case "open":
-        await db.from("email_campaign_recipients")
-          .update({ status: "opened", opened_at: isoTs })
-          .eq("id", recipientId).eq("status", "sent");
-        await db.rpc("increment_campaign_stat", { p_campaign_id: campaignId, p_field: "open_count" });
+      case "open": {
+        // Only count the FIRST open per recipient (unique opens)
+        const { data: openRecip } = await db
+          .from("email_campaign_recipients")
+          .select("id, opened_at")
+          .eq("id", recipientId)
+          .maybeSingle();
+        if (openRecip && !openRecip.opened_at) {
+          await db.from("email_campaign_recipients")
+            .update({ status: "opened", opened_at: isoTs })
+            .eq("id", recipientId);
+          await db.rpc("increment_campaign_stat", { p_campaign_id: campaignId, p_field: "open_count" });
+        }
         break;
+      }
 
-      case "click":
-        await db.from("email_campaign_recipients")
-          .update({ status: "clicked", clicked_at: isoTs })
-          .eq("id", recipientId);
-        await db.rpc("increment_campaign_stat", { p_campaign_id: campaignId, p_field: "click_count" });
+      case "click": {
+        // Only count the FIRST click per recipient (unique clicks)
+        const { data: clickRecip } = await db
+          .from("email_campaign_recipients")
+          .select("id, clicked_at")
+          .eq("id", recipientId)
+          .maybeSingle();
+        if (clickRecip && !clickRecip.clicked_at) {
+          await db.from("email_campaign_recipients")
+            .update({ status: "clicked", clicked_at: isoTs })
+            .eq("id", recipientId);
+          await db.rpc("increment_campaign_stat", { p_campaign_id: campaignId, p_field: "click_count" });
+        }
         break;
+      }
 
       case "bounce":
       case "blocked":
