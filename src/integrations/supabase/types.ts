@@ -537,6 +537,30 @@ export type Database = {
         };
         Relationships: [];
       };
+      contact_tag_definitions: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          color: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          color?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          color?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -558,3 +582,4 @@ export type Invitation = Tables<"invitations">;
 export type EmailCampaign = Tables<"email_campaigns">;
 export type EmailCampaignRecipient = Tables<"email_campaign_recipients">;
 export type EmailSuppression = Tables<"email_suppressions">;
+export type ContactTagDefinition = Tables<"contact_tag_definitions">;

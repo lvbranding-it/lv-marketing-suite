@@ -36,6 +36,7 @@ import {
   useDeleteActivity,
   type PipelineStage,
 } from "@/hooks/useCRM";
+import { useContactTagDefinitions, useCreateTagDefinition, pickTagColor } from "@/hooks/useContactTags";
 
 interface Props {
   contact: ImportedContact | null;
@@ -78,6 +79,11 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   const updateCRM = useUpdateContactCRM();
   const addActivity = useAddActivity();
   const deleteActivity = useDeleteActivity();
+  const { data: tagDefs = [] } = useContactTagDefinitions();
+  const createTagDef = useCreateTagDefinition();
+
+  const tagColorMap = new Map(tagDefs.map((d) => [d.name, d.color]));
+  const tagSuggestions = tagDefs.map((d) => d.name).filter((n) => !tags.includes(n));
 
   const { data: activities = [], isLoading: activitiesLoading } = useContactActivities(contact?.id ?? null);
 
@@ -190,6 +196,10 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     const newTags = [...tags, trimmed];
     setTags(newTags);
     updateCRM.mutate({ id: contact.id, tags: newTags });
+    // Auto-create a tag definition if it doesn't exist yet
+    if (!tagColorMap.has(trimmed)) {
+      createTagDef.mutate({ name: trimmed, color: pickTagColor(tagDefs.map((d) => d.color)) });
+    }
     onUpdate?.();
   };
 
@@ -439,24 +449,47 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
               {/* Tags */}
               <Section title="Tags">
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {tags.map((t) => (
-                    <span
-                      key={t}
-                      className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full"
-                    >
-                      {t}
-                      <button
-                        onClick={() => removeTag(t)}
-                        className="hover:text-destructive transition-colors"
+                  {tags.map((t) => {
+                    const color = tagColorMap.get(t) ?? "#6366f1";
+                    return (
+                      <span
+                        key={t}
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium text-white"
+                        style={{ background: color }}
                       >
-                        <X size={9} />
-                      </button>
-                    </span>
-                  ))}
+                        {t}
+                        <button
+                          onClick={() => removeTag(t)}
+                          className="opacity-70 hover:opacity-100 transition-opacity"
+                        >
+                          <X size={9} />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
+                {/* Suggestions from defined tags */}
+                {tagSuggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {tagSuggestions.map((name) => {
+                      const color = tagColorMap.get(name) ?? "#6366f1";
+                      return (
+                        <button
+                          key={name}
+                          onClick={() => addTag(name)}
+                          className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border-2 font-medium transition-opacity hover:opacity-80"
+                          style={{ borderColor: color, color }}
+                          title={`Add tag: ${name}`}
+                        >
+                          + {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <Input
                   className="h-7 text-xs"
-                  placeholder="Add tag, press Enter or comma…"
+                  placeholder="Type a tag, press Enter or comma…"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}

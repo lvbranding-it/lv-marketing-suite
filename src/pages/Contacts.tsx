@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight } from "lucide-react";
+import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight, Tag } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import ContactDetailModal from "@/components/contacts/ContactDetailModal";
@@ -9,6 +9,7 @@ import PipelineView from "@/components/contacts/PipelineView";
 import ResearchQueue from "@/components/contacts/ResearchQueue";
 import ProspectSearchPanel from "@/components/contacts/ProspectSearchPanel";
 import ApolloPanel from "@/components/contacts/ApolloPanel";
+import TagSidebar from "@/components/contacts/TagSidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -27,6 +28,7 @@ import {
   useDeleteContact,
   type ImportedContact,
 } from "@/hooks/useContacts";
+import { useContactTagDefinitions } from "@/hooks/useContactTags";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -56,9 +58,18 @@ export default function Contacts() {
   const addContact    = useImportContact();
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
+  const { data: tagDefs = [] } = useContactTagDefinitions();
+
+  // Tag color lookup
+  const tagColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    tagDefs.forEach((d) => m.set(d.name, d.color));
+    return m;
+  }, [tagDefs]);
 
   // View state
   const [filter, setFilter]   = useState("all");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [search, setSearch]   = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>(-1);
@@ -116,6 +127,12 @@ export default function Contacts() {
         return sortDir * (b.score - a.score);
       });
   }, [filter, search, sortKey, sortDir, hiddenStaticIds]);
+
+  // Imported contacts filtered by selected tag
+  const filteredImported = useMemo(() => {
+    if (!selectedTag) return imported;
+    return imported.filter((c) => (c.tags ?? []).includes(selectedTag));
+  }, [imported, selectedTag]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
@@ -372,7 +389,47 @@ export default function Contacts() {
           </div>
 
           {/* ── My Contacts ─────────────────────────────────────── */}
-          <TabsContent value="my-contacts" className="space-y-6">
+          <TabsContent value="my-contacts">
+          <div className="flex gap-4 items-start">
+
+            {/* Tag sidebar */}
+            <div className="hidden lg:block w-48 shrink-0 sticky top-4">
+              <div className="bg-card border border-border rounded-lg p-3 max-h-[80vh] overflow-y-auto">
+                <TagSidebar
+                  contacts={imported}
+                  selectedTag={selectedTag}
+                  onSelectTag={setSelectedTag}
+                />
+              </div>
+            </div>
+
+            {/* Mobile tag strip */}
+            <div className="lg:hidden w-full overflow-x-auto flex gap-1.5 pb-1 mb-2">
+              <button
+                onClick={() => setSelectedTag(null)}
+                className={cn(
+                  "shrink-0 px-3 py-1 text-xs rounded-full border font-medium transition-colors",
+                  !selectedTag ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary"
+                )}
+              >All</button>
+              {tagDefs.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setSelectedTag(selectedTag === d.name ? null : d.name)}
+                  className={cn(
+                    "shrink-0 flex items-center gap-1 px-3 py-1 text-xs rounded-full border font-medium transition-colors",
+                    selectedTag === d.name ? "text-white border-transparent" : "border-border text-muted-foreground hover:border-primary"
+                  )}
+                  style={selectedTag === d.name ? { background: d.color, borderColor: d.color } : {}}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                  {d.name}
+                </button>
+              ))}
+            </div>
+
+            {/* Main content */}
+            <div className="flex-1 min-w-0 space-y-6">
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
@@ -425,17 +482,39 @@ export default function Contacts() {
             {/* Imported contacts */}
             {(isLoading || imported.length > 0) && (
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold">
-                  Imported ({imported.length})
-                  <span className="ml-2 text-[10px] font-normal text-muted-foreground">via Vibe Prospecting or Apollo</span>
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  {selectedTag ? (
+                    <>
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: tagColorMap.get(selectedTag) ?? "#6366f1" }}
+                      />
+                      {selectedTag}
+                      <span className="text-muted-foreground font-normal text-[11px]">({filteredImported.length})</span>
+                      <button
+                        onClick={() => setSelectedTag(null)}
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                      ><X size={12} /></button>
+                    </>
+                  ) : (
+                    <>
+                      <Tag size={13} className="text-muted-foreground" />
+                      Imported ({imported.length})
+                      <span className="text-[10px] font-normal text-muted-foreground">via Vibe Prospecting or Apollo</span>
+                    </>
+                  )}
                 </h3>
                 <div className="border border-border rounded-lg overflow-hidden">
                   {isLoading ? (
                     <div className="p-4 space-y-2">
                       {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
                     </div>
+                  ) : filteredImported.length === 0 && selectedTag ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">
+                      No contacts with tag <strong>{selectedTag}</strong> yet.
+                    </div>
                   ) : (
-                    imported.map((c) => {
+                    filteredImported.map((c) => {
                       const key = c.id;
                       const isChecked = selectionSet.has(key);
                       return (
@@ -460,6 +539,20 @@ export default function Contacts() {
                                 <span className="ml-2 text-[10px] text-muted-foreground font-normal">{c.title}</span>
                               </p>
                               <p className="text-xs text-sky-500 truncate">{c.company}</p>
+                              {/* Tag chips */}
+                              {(c.tags ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {(c.tags ?? []).map((t) => (
+                                    <span
+                                      key={t}
+                                      className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium text-white"
+                                      style={{ background: tagColorMap.get(t) ?? "#6366f1" }}
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -744,6 +837,8 @@ export default function Contacts() {
                 })}
               </div>
             </div>
+            </div>{/* end main content */}
+          </div>{/* end flex layout */}
           </TabsContent>
 
           {/* ── Research Queue ────────────────────────────────────── */}

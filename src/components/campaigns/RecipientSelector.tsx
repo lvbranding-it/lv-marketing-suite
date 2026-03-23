@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
-import { Search, Users, CheckCircle2, XCircle, AlertCircle, ChevronDown, Upload, UserPlus, X } from "lucide-react";
+import { Search, Users, CheckCircle2, AlertCircle, ChevronDown, Upload, UserPlus, X, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useImportedContacts } from "@/hooks/useContacts";
 import { useSuppressions, type SelectedRecipient } from "@/hooks/useCampaigns";
+import { useContactTagDefinitions } from "@/hooks/useContactTags";
 
 interface Props {
   selected: SelectedRecipient[];
@@ -65,8 +66,28 @@ export default function RecipientSelector({ selected, onChange }: Props) {
 
   const { data: contacts = [], isLoading } = useImportedContacts();
   const { data: suppressed = [] }          = useSuppressions();
+  const { data: tagDefs = [] }             = useContactTagDefinitions();
 
   const suppSet = new Set(suppressed);
+
+  // Add all contacts that have a given tag
+  const addByTag = (tagName: string) => {
+    const tagContacts = contacts.filter(
+      (c) => c.email && (c.tags ?? []).includes(tagName) && !suppSet.has(c.email.toLowerCase())
+    );
+    const existingEmails = new Set(selected.map((r) => r.email.toLowerCase()));
+    const toAdd = tagContacts.filter((c) => !existingEmails.has(c.email!.toLowerCase()));
+    if (toAdd.length === 0) return;
+    onChange([
+      ...selected,
+      ...toAdd.map((c) => ({
+        id: c.id, email: c.email!, first_name: c.first_name,
+        last_name: c.last_name, company: c.company, title: c.title,
+        contact_id: c.id, pipeline_stage: c.pipeline_stage,
+        tags: c.tags ?? [], suppressed: false,
+      })),
+    ]);
+  };
 
   // Gather all tags from contacts
   const allTags = useMemo(() => {
@@ -250,6 +271,34 @@ export default function RecipientSelector({ selected, onChange }: Props) {
             <UserPlus size={11} /> Add Contact
           </Button>
         </div>
+
+        {/* Tag group quick-add */}
+        {tagDefs.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Tag size={9} /> Add entire tag group:
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {tagDefs.map((def) => {
+                const count = contacts.filter(
+                  (c) => c.email && (c.tags ?? []).includes(def.name) && !suppSet.has(c.email.toLowerCase())
+                ).length;
+                return (
+                  <button
+                    key={def.id}
+                    onClick={() => addByTag(def.name)}
+                    disabled={count === 0}
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium text-white disabled:opacity-40 hover:opacity-80 transition-opacity"
+                    style={{ background: def.color }}
+                    title={`Add all ${count} contacts tagged "${def.name}"`}
+                  >
+                    {def.name} <span className="opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* CSV feedback */}
         {csvError && (
