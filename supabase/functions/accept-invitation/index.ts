@@ -75,30 +75,77 @@ serve(async (req) => {
     return json({ error: "This invitation has expired" }, 410);
   }
 
-  // If user_id is provided, the user has signed up/signed in — complete acceptance
-  if (user_id) {
-    // Mark invitation as accepted
-    const { error: updateInvErr } = await db
-      .from("invitations")
-      .update({ accepted_at: new Date().toISOString() })
-      .eq("id", invitation.id);
+  const orgName =
+    invitation.organizations && !Array.isArray(invitation.organizations)
+      ? (invitation.organizations as { name: string }).name
+      : Array.isArray(invitation.organizations) && invitation.organizations.length > 0
+      ? (invitation.organizations[0] as { name: string }).name
+      : "LV Branding's Workspace";
 
-    if (updateInvErr) {
-      console.error("Failed to mark invitation accepted:", updateInvErr);
-      return json({ error: "Failed to accept invitation" }, 500);
+  // ── SIGNUP via invite: create user server-side (no confirmation email) ────
+  // Body: { token, email, password, full_name }
+  const bodyRaw = body as { token?: string; user_id?: string; email?: string; password?: string; full_name?: string };
+  if (bodyRaw.email && bodyRaw.password && !user_id) {
+    // Create confirmed user via Admin API — bypasses email confirmation entirely
+    const { data: newUser, error: createErr } = await db.auth.admin.createUser({
+      email:            bodyRaw.email,
+      password:         bodyRaw.password,
+      email_confirm:    true,
+      user_metadata:    { full_name: bodyRaw.full_name ?? bodyRaw.email.split("@")[0] },
+    });
+
+    if (createErr || !newUser?.user) {
+      // If user already exists, try to look them up instead
+      if (createErr?.message?.includes("already been registered")) {
+        // Existing user accepting via signup form — just return error so frontend retries with signin
+        return json({ error: "An account with this email already exists. Please use Sign In instead." }, 409);
+      }
+      console.error("Failed to create user:", createErr);
+      return json({ error: createErr?.message ?? "Failed to create account" }, 500);
     }
 
-    // Upsert team_members row
+    const newUserId = newUser.user.id;
+
+    // Mark invitation accepted
+    await db.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id);
+
+    // Add to org
+    await db.from("team_members").upsert(
+      { org_id: invitation.org_id, user_id: newUserId, role: invitation.role,
+        invited_email: invitation.invited_email, invited_by: invitation.invited_by ?? null },
+      { onConflict: "org_id,user_id" }
+    );
+
+    // Delete the auto-created personal org the signup trigger just made (it's empty)
+    const thirtySecsAgo = new Date(Date.now() - 30_000).toISOString();
+    const { data: personalOrgs } = await db
+      .from("organizations")
+      .select("id")
+      .eq("owner_user_id", newUserId)
+      .neq("id", invitation.org_id)
+      .gte("created_at", thirtySecsAgo);
+
+    if (personalOrgs && personalOrgs.length > 0) {
+      const orgId = personalOrgs[0].id;
+      // Only delete if truly empty (no projects)
+      const { count } = await db.from("projects").select("id", { count: "exact", head: true }).eq("org_id", orgId);
+      if (!count || count === 0) {
+        await db.from("organizations").delete().eq("id", orgId);
+      }
+    }
+
+    return json({ ok: true, user_id: newUserId });
+  }
+
+  // ── EXISTING USER accepting invitation ────────────────────────────────────
+  if (user_id) {
+    await db.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id);
+
     const { error: upsertErr } = await db
       .from("team_members")
       .upsert(
-        {
-          org_id: invitation.org_id,
-          user_id,
-          role: invitation.role,
-          invited_email: invitation.invited_email,
-          invited_by: invitation.invited_by ?? null,
-        },
+        { org_id: invitation.org_id, user_id, role: invitation.role,
+          invited_email: invitation.invited_email, invited_by: invitation.invited_by ?? null },
         { onConflict: "org_id,user_id" }
       );
 
@@ -110,22 +157,12 @@ serve(async (req) => {
     return json({ ok: true });
   }
 
-  // Token validation only — return invitation details for the Accept Invite page
-  const orgName =
-    invitation.organizations && !Array.isArray(invitation.organizations)
-      ? (invitation.organizations as { name: string }).name
-      : Array.isArray(invitation.organizations) && invitation.organizations.length > 0
-      ? (invitation.organizations[0] as { name: string }).name
-      : "Unknown Organization";
-
+  // ── TOKEN VALIDATION ONLY — return invite details for the page ────────────
   return json({
     ok: true,
-    invitation: {
-      id: invitation.id,
-      org_id: invitation.org_id,
-      invited_email: invitation.invited_email,
-      role: invitation.role,
-      org_name: orgName,
-    },
+    invited_email: invitation.invited_email,
+    role:          invitation.role,
+    org_name:      orgName,
+    org_id:        invitation.org_id,
   });
 });

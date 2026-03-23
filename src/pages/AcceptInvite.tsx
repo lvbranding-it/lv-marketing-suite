@@ -47,13 +47,20 @@ export default function AcceptInvite() {
       });
       if (error || data?.error) {
         const msg = data?.error ?? error?.message ?? "";
-        if (msg.includes("expired"))  setState("expired");
+        if (msg.includes("expired"))          setState("expired");
         else if (msg.includes("already accepted")) setState("already_accepted");
         else setState("invalid");
         return;
       }
-      setInvite(data as InviteDetails);
-      setEmail(data.invited_email ?? "");
+      // Edge function returns flat fields: { ok, invited_email, role, org_name, org_id }
+      const inv: InviteDetails = {
+        invited_email: data.invited_email ?? data.invitation?.invited_email ?? "",
+        role:          data.role          ?? data.invitation?.role          ?? "member",
+        org_name:      data.org_name      ?? data.invitation?.org_name      ?? "LV Branding's Workspace",
+        org_id:        data.org_id        ?? data.invitation?.org_id        ?? "",
+      };
+      setInvite(inv);
+      setEmail(inv.invited_email);
       setState("ready");
     })();
   }, [token]);
@@ -86,13 +93,24 @@ export default function AcceptInvite() {
     setWorking(true);
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: fullName } },
+        // Create user server-side via Admin API — no confirmation email needed
+        const { data, error } = await supabase.functions.invoke("accept-invitation", {
+          body: { token, email, password, full_name: fullName },
         });
-        if (error) throw error;
-        if (data.user) await acceptWithUserId(data.user.id);
+        if (error) throw new Error(error.message ?? "Signup failed");
+        if (data?.error) {
+          // Account already exists — prompt to use sign in
+          if (data.error.includes("already exists")) {
+            setMode("signin");
+            throw new Error("An account with this email already exists. Please sign in below.");
+          }
+          throw new Error(data.error);
+        }
+        // Sign in to get the session (user is already confirmed)
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) throw signInErr;
+        setState("success");
+        setTimeout(() => navigate("/dashboard"), 1500);
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
