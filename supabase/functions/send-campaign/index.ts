@@ -18,8 +18,8 @@ function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
-// Official LV Branding logo (SVG hosted on Vercel public folder)
-const LV_LOGO_SVG = "https://lv-marketing-suite.vercel.app/lv-logo.svg";
+// Official LV Branding logo — PNG for Gmail/all clients, SVG for high-res fallback
+const LV_LOGO_URL = "https://lv-marketing-suite.vercel.app/lv-logo.png";
 
 function wrapHtml(bodyHtml: string, unsubUrl: string): string {
   return `<!DOCTYPE html>
@@ -38,10 +38,10 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
         <tr><td align="center" style="padding:0 0 28px;">
           <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:block;">
             <img
-              src="${LV_LOGO_SVG}"
+              src="${LV_LOGO_URL}"
               alt="LV Branding"
               width="80" height="80"
-              style="display:block;margin:0 auto;width:80px;height:80px;"
+              style="display:block;margin:0 auto;width:80px;height:80px;border:0;"
             />
           </a>
         </td></tr>
