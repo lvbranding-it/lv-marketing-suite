@@ -272,35 +272,50 @@ export default function RecipientSelector({ selected, onChange }: Props) {
           </Button>
         </div>
 
-        {/* Tag group quick-add — shows defined tags + any orphan tags on contacts */}
-        {allTags.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Tag size={9} /> Add by tag group:
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {allTags.map((tagName) => {
-                const def   = tagDefs.find((d) => d.name === tagName);
-                const color = def?.color ?? "#6366f1";
-                const count = contacts.filter(
-                  (c) => c.email && (c.tags ?? []).includes(tagName) && !suppSet.has(c.email.toLowerCase())
-                ).length;
-                return (
-                  <button
-                    key={tagName}
-                    onClick={() => addByTag(tagName)}
-                    disabled={count === 0}
-                    className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium text-white disabled:opacity-40 hover:opacity-80 transition-opacity"
-                    style={{ background: color }}
-                    title={`Add all ${count} contacts tagged "${tagName}"`}
-                  >
-                    {tagName} <span className="opacity-75">· {count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Tag group quick-add — always visible */}
+        <div className="space-y-1.5 pt-1 border-t border-border">
+          <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+            <Tag size={9} /> Add by tag group:
+          </p>
+          {(() => {
+            // Merge defined tags + tags that exist on contacts
+            const allTagNames = Array.from(
+              new Set([...tagDefs.map((d) => d.name), ...allTags])
+            ).sort();
+
+            if (allTagNames.length === 0) {
+              return (
+                <p className="text-[10px] text-muted-foreground/60 italic">
+                  No tags yet — go to <a href="/contacts" className="underline hover:text-primary">Contacts</a> to create and assign tags to your contacts.
+                </p>
+              );
+            }
+
+            return (
+              <div className="flex flex-wrap gap-1">
+                {allTagNames.map((tagName) => {
+                  const def   = tagDefs.find((d) => d.name === tagName);
+                  const color = def?.color ?? "#6366f1";
+                  const count = contacts.filter(
+                    (c) => c.email && (c.tags ?? []).includes(tagName) && !suppSet.has(c.email.toLowerCase())
+                  ).length;
+                  return (
+                    <button
+                      key={tagName}
+                      onClick={() => addByTag(tagName)}
+                      disabled={count === 0}
+                      className="inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium text-white disabled:opacity-40 hover:opacity-80 transition-opacity"
+                      style={{ background: color }}
+                      title={count > 0 ? `Add all ${count} contacts tagged "${tagName}"` : `No contacts tagged "${tagName}" yet`}
+                    >
+                      {tagName} <span className="opacity-75">· {count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
 
         {/* CSV feedback */}
         {csvError && (
