@@ -18,10 +18,8 @@ function mergeVars(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
-// Hosted PNG (upload a 160×160 PNG to this path in Supabase Storage for Gmail support)
-const LV_LOGO_PNG = `${Deno.env.get("SUPABASE_URL") ?? ""}/storage/v1/object/public/email-assets/brand/lv-logo.png`;
-// SVG fallback — shown in Outlook desktop, Apple Mail (Gmail blocks all SVG)
-const LV_LOGO_SVG = "https://lv-marketing-suite.vercel.app/favicon.svg";
+// Official LV Branding logo (SVG hosted on Vercel public folder)
+const LV_LOGO_SVG = "https://lv-marketing-suite.vercel.app/lv-logo.svg";
 
 function wrapHtml(bodyHtml: string, unsubUrl: string): string {
   return `<!DOCTYPE html>
@@ -36,20 +34,15 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
     <tr><td align="center" style="padding:32px 16px 0;">
       <table role="presentation" style="max-width:600px;width:100%;" cellpadding="0" cellspacing="0">
 
-        <!-- ── Logo: symbol centered above wordmark ── -->
+        <!-- ── Logo ── -->
         <tr><td align="center" style="padding:0 0 28px;">
           <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:block;">
-            <!-- Symbol -->
             <img
               src="${LV_LOGO_SVG}"
-              alt=""
-              width="56" height="56"
-              style="display:block;margin:0 auto 10px;width:56px;height:56px;"
+              alt="LV Branding"
+              width="80" height="80"
+              style="display:block;margin:0 auto;width:80px;height:80px;"
             />
-            <!-- Wordmark -->
-            <span style="display:block;font-size:22px;font-weight:800;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-              <span style="color:#CB2039;">LV</span><span style="color:#231F20;">Branding</span>
-            </span>
           </a>
         </td></tr>
 
