@@ -1,30 +1,82 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, Trash2, Copy, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle,
+} from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useSkillOutput, useUpdateSkillOutput, useDeleteSkillOutput } from "@/hooks/useSkillOutputs";
+import {
+  useSkillOutput,
+  useUpdateSkillOutput,
+  useDeleteSkillOutput,
+  useSaveSkillOutput,
+} from "@/hooks/useSkillOutputs";
 import { useProject } from "@/hooks/useProjects";
+import { useSkillRunner } from "@/hooks/useSkillRunner";
+import { useOrg } from "@/hooks/useOrg";
+import { useAuth } from "@/hooks/useAuth";
 import { getSkill, SKILL_CATEGORIES } from "@/data/skills";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import SaveOutputDialog from "@/components/skills/SaveOutputDialog";
 
 export default function OutputDetail() {
   const { outputId } = useParams<{ outputId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { org } = useOrg();
+  const { user } = useAuth();
 
   const { data: output, isLoading } = useSkillOutput(outputId);
   const { data: project } = useProject(output?.project_id ?? undefined);
   const updateOutput = useUpdateSkillOutput();
   const deleteOutput = useDeleteSkillOutput();
+  const saveOutputMutation = useSaveSkillOutput();
 
   const skill = output ? getSkill(output.skill_id) : null;
   const categoryMeta = skill ? SKILL_CATEGORIES[skill.category] : null;
+
+  const { streaming, streamedText, conversationHistory, error, run, init } =
+    useSkillRunner();
+
+  const [followUp, setFollowUp] = useState("");
+  const [initialized, setInitialized] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [outputToSave, setOutputToSave] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Seed the conversation history with the saved output on first load
+  useEffect(() => {
+    if (!output || initialized) return;
+
+    // Reconstruct the original user message from input_data + skill context fields
+    let userMessage = "Continue from previous context.";
+    if (output.input_data && skill) {
+      const lines: string[] = [];
+      for (const field of skill.contextFields) {
+        const val = (output.input_data as Record<string, string>)[field.key];
+        if (val) lines.push(`**${field.label}:** ${val}`);
+      }
+      if (lines.length > 0) userMessage = lines.join("\n");
+    }
+
+    init([
+      { role: "user", content: userMessage },
+      { role: "assistant", content: output.output_text },
+    ]);
+    setInitialized(true);
+  }, [output, skill, initialized, init]);
+
+  // Auto-scroll to bottom when new content arrives
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversationHistory, streamedText]);
 
   const handleCopy = () => {
     if (!output) return;
@@ -42,30 +94,56 @@ export default function OutputDetail() {
     if (confirm("Delete this output? This cannot be undone.")) {
       deleteOutput.mutate(output.id, {
         onSuccess: () => {
-          if (output.project_id) {
-            navigate(`/projects/${output.project_id}`);
-          } else {
-            navigate("/history");
-          }
+          navigate(output.project_id ? `/projects/${output.project_id}` : "/history");
         },
       });
     }
   };
 
-  const handleRunAgain = () => {
-    if (!output) return;
-    navigate(`/skills/${output.skill_id}`, {
-      state: { projectId: output.project_id },
+  const handleFollowUp = async () => {
+    if (!followUp.trim() || streaming || !skill) return;
+    const message = followUp.trim();
+    setFollowUp("");
+    const marketingContext =
+      project?.context_complete
+        ? (project.marketing_context as Record<string, unknown>)
+        : undefined;
+    await run(message, skill, marketingContext);
+  };
+
+  const handleSaveContinuation = () => {
+    const lastAssistant = [...conversationHistory]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (!lastAssistant) return;
+    setOutputToSave(lastAssistant.content);
+    setShowSaveDialog(true);
+  };
+
+  const handleSave = async (title: string) => {
+    if (!org || !user || !skill) return;
+    await saveOutputMutation.mutateAsync({
+      org_id: org.id,
+      project_id: output?.project_id ?? null,
+      user_id: user.id,
+      skill_id: skill.id,
+      skill_name: skill.name,
+      input_data: {},
+      output_text: outputToSave,
+      title: title || null,
+      is_starred: false,
     });
+    setShowSaveDialog(false);
+    toast({ description: "Continuation saved!" });
   };
 
   const handleBack = () => {
-    if (output?.project_id) {
-      navigate(`/projects/${output.project_id}`);
-    } else {
-      navigate("/history");
-    }
+    if (output?.project_id) navigate(`/projects/${output.project_id}`);
+    else navigate("/history");
   };
+
+  // Turns after the initial saved output (index 0+1 are the seeded pair)
+  const continuationTurns = conversationHistory.slice(2);
 
   if (isLoading) {
     return (
@@ -113,92 +191,155 @@ export default function OutputDetail() {
         </span>
       </div>
 
-      <div className="flex flex-col h-[calc(100vh-3.25rem)] md:h-[calc(100vh-2.5rem)]">
+      <div className="flex flex-col h-[calc(100vh-6.5rem)] md:h-[calc(100vh-5.75rem)]">
         {/* Header bar */}
-        <div className="px-4 sm:px-6 py-4 border-b bg-background shrink-0">
-          <div className="max-w-4xl mx-auto flex items-start justify-between gap-4 flex-wrap">
-            <div className="space-y-1.5 flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xl">{skill?.icon ?? "📄"}</span>
-                {categoryMeta && (
-                  <Badge
-                    variant="outline"
-                    className={cn("text-[10px]", categoryMeta.color)}
-                  >
-                    {skill?.name ?? output.skill_name}
-                  </Badge>
-                )}
-                {project && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {project.name}
-                  </Badge>
-                )}
-                <span className="text-xs text-muted-foreground">{timeAgo}</span>
-              </div>
-              {output.title && (
-                <h1 className="text-lg font-semibold text-foreground leading-snug">
-                  {output.title}
-                </h1>
+        <div className="px-4 sm:px-6 py-3 border-b bg-background shrink-0">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-lg">{skill?.icon ?? "📄"}</span>
+              {categoryMeta && (
+                <Badge variant="outline" className={cn("text-[10px]", categoryMeta.color)}>
+                  {skill?.name ?? output.skill_name}
+                </Badge>
               )}
+              {project && (
+                <Badge variant="secondary" className="text-[10px]">{project.name}</Badge>
+              )}
+              <span className="text-xs text-muted-foreground">{timeAgo}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleStar}>
+                <Star size={14} className={cn(output.is_starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground")} />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCopy}>
+                <Copy size={14} className="text-muted-foreground" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
+                <Trash2 size={14} />
+              </Button>
+            </div>
+          </div>
+          {output.title && (
+            <p className="max-w-4xl mx-auto text-base font-semibold mt-1">{output.title}</p>
+          )}
+        </div>
+
+        {/* Scrollable conversation */}
+        <ScrollArea className="flex-1">
+          <div className="px-4 sm:px-6 py-5 max-w-4xl mx-auto space-y-4">
+
+            {/* Original saved output */}
+            <div className="bg-card border border-border rounded-xl px-5 sm:px-8 py-5 shadow-sm">
+              <MarkdownContent>{output.output_text}</MarkdownContent>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Continuation turns (after the seeded pair) */}
+            {continuationTurns.map((msg, i) => (
+              <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
+                {msg.role === "user" ? (
+                  <div className="bg-primary text-primary-foreground rounded-xl px-4 py-3 max-w-[88%] text-sm whitespace-pre-wrap shadow-sm">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl px-5 py-4 max-w-[92%] shadow-sm w-full">
+                    <MarkdownContent>{msg.content}</MarkdownContent>
+                    <div className="flex justify-end mt-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground gap-1"
+                        onClick={() => {
+                          setOutputToSave(msg.content);
+                          setShowSaveDialog(true);
+                        }}
+                      >
+                        <Save size={11} /> Save this
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Streaming response */}
+            {streaming && streamedText && (
+              <div className="flex justify-start">
+                <div className="bg-card border border-border rounded-xl px-5 py-4 max-w-[92%] shadow-sm w-full">
+                  <MarkdownContent>{streamedText}</MarkdownContent>
+                  <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 align-middle mt-1" />
+                </div>
+              </div>
+            )}
+
+            {streaming && !streamedText && (
+              <div className="flex justify-start">
+                <div className="bg-muted rounded-lg px-4 py-3">
+                  <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-destructive/10 text-destructive rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+                <AlertCircle size={14} /> {error}
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+        </ScrollArea>
+
+        {/* Follow-up input */}
+        <div className="border-t bg-background px-4 sm:px-6 py-3 shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-2">
+            <Textarea
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+              placeholder={`Continue the conversation with ${skill?.name ?? "the AI"}… (⌘↵ to send)`}
+              rows={2}
+              className="text-sm resize-none flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleFollowUp();
+                }
+              }}
+            />
+            <div className="flex sm:flex-col gap-2 self-end">
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleStar}
-                title={output.is_starred ? "Unstar" : "Star"}
+                onClick={handleFollowUp}
+                disabled={!followUp.trim() || streaming || !initialized}
+                className="flex-1 sm:flex-none sm:w-10 h-9 gap-1.5 sm:gap-0"
               >
-                <Star
-                  size={15}
-                  className={cn(
-                    output.is_starred
-                      ? "fill-amber-400 text-amber-400"
-                      : "text-muted-foreground"
-                  )}
-                />
+                {streaming ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
+                <span className="sm:hidden">Send</span>
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleCopy}
-                title="Copy to clipboard"
-              >
-                <Copy size={15} className="text-muted-foreground" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={handleDelete}
-                title="Delete output"
-              >
-                <Trash2 size={15} />
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleRunAgain}
-                className="ml-1 gap-1.5"
-              >
-                <Zap size={13} />
-                Run Again
-              </Button>
+              {continuationTurns.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveContinuation}
+                  className="h-9 gap-1.5 text-xs"
+                >
+                  <Save size={13} /> Save latest
+                </Button>
+              )}
             </div>
           </div>
         </div>
-
-        {/* Content */}
-        <ScrollArea className="flex-1">
-          <div className="px-4 sm:px-6 py-6 max-w-4xl mx-auto">
-            <div className="bg-card border border-border rounded-xl p-5 sm:p-8">
-              <MarkdownContent>{output.output_text}</MarkdownContent>
-            </div>
-          </div>
-        </ScrollArea>
       </div>
+
+      <SaveOutputDialog
+        open={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        onSave={handleSave}
+        defaultTitle={`${skill?.name ?? "Output"} — continuation`}
+        saving={saveOutputMutation.isPending}
+      />
     </AppShell>
   );
 }

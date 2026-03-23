@@ -109,6 +109,16 @@ export function useSkillRunner() {
     });
   }, []);
 
+  /** Seed the conversation with an existing history (e.g. a saved output). */
+  const init = useCallback((messages: Message[]) => {
+    setState({
+      streaming: false,
+      streamedText: "",
+      conversationHistory: messages,
+      error: null,
+    });
+  }, []);
+
   // Full output = completed conversation turns + currently streaming text
   const currentOutput =
     state.conversationHistory.length > 0
@@ -124,5 +134,6 @@ export function useSkillRunner() {
     run,
     saveOutput,
     reset,
+    init,
   };
 }
