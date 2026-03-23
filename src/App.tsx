@@ -24,7 +24,8 @@ import OutputDetail from "@/pages/OutputDetail";
 const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const CampaignComposer = lazy(() => import("@/pages/CampaignComposer"));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail"));
-const Unsubscribe = lazy(() => import("@/pages/Unsubscribe"));
+const Unsubscribe   = lazy(() => import("@/pages/Unsubscribe"));
+const AcceptInvite  = lazy(() => import("@/pages/AcceptInvite"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,7 +48,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<Auth />} />
       <Route path="/intake/:orgId" element={<IntakeForm />} />
-      <Route path="/unsubscribe" element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />
+      <Route path="/unsubscribe"   element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />
+      <Route path="/accept-invite" element={<Suspense fallback={null}><AcceptInvite /></Suspense>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/dashboard"

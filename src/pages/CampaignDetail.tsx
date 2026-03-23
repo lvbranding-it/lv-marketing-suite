@@ -11,6 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useCampaign, useCampaignRecipients, useSendCampaign } from "@/hooks/useCampaigns";
+import { usePermissions } from "@/hooks/usePermissions";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import type { EmailCampaignRecipient } from "@/integrations/supabase/types";
 
@@ -33,6 +36,8 @@ export default function CampaignDetail() {
   const { data: campaign, isLoading: cLoading } = useCampaign(id ?? null);
   const { data: recipients = [], isLoading: rLoading } = useCampaignRecipients(id ?? null);
   const sendCampaign = useSendCampaign();
+  const { canApproveCampaigns } = usePermissions();
+  const qc = useQueryClient();
 
   const handleSend = async () => {
     if (!id) return;
@@ -86,9 +91,25 @@ export default function CampaignDetail() {
     );
   }
 
-  const isSent    = campaign.status === "sent";
-  const isDraft   = campaign.status === "draft";
-  const isSending = campaign.status === "sending";
+  const isSent           = campaign.status === "sent";
+  const isDraft          = campaign.status === "draft";
+  const isSending        = campaign.status === "sending";
+  const isPendingApproval = (campaign.status as string) === "pending_approval";
+
+  const handleApprove = async () => {
+    try {
+      const result = await sendCampaign.mutateAsync(campaign.id);
+      toast({ description: `✅ Approved & sent to ${result.sent} contacts.` });
+    } catch {
+      toast({ variant: "destructive", description: "Send failed." });
+    }
+  };
+
+  const handleReject = async () => {
+    await supabase.from("email_campaigns").update({ status: "draft" }).eq("id", campaign.id);
+    await qc.invalidateQueries({ queryKey: ["campaigns", campaign.id] });
+    toast({ description: "Campaign moved back to draft." });
+  };
 
   return (
     <AppShell>
@@ -104,12 +125,15 @@ export default function CampaignDetail() {
             <h1 className="text-lg sm:text-xl font-bold truncate">{campaign.name}</h1>
             <span className={cn(
               "text-[10px] border px-1.5 py-0.5 rounded-full font-medium",
-              { draft: "bg-slate-100 text-slate-600 border-slate-200",
-                sending: "bg-amber-100 text-amber-700 border-amber-200",
+              ({ draft: "bg-slate-100 text-slate-600 border-slate-200",
+                pending_approval: "bg-amber-100 text-amber-700 border-amber-200",
+                sending: "bg-blue-100 text-blue-700 border-blue-200",
                 sent: "bg-emerald-100 text-emerald-700 border-emerald-200",
-                failed: "bg-red-100 text-red-600 border-red-200" }[campaign.status]
+                failed: "bg-red-100 text-red-600 border-red-200" } as Record<string, string>)[campaign.status]
             )}>
-              {isSending ? <span className="flex items-center gap-1"><Loader2 size={9} className="animate-spin" />Sending…</span> : campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+              {isSending ? <span className="flex items-center gap-1"><Loader2 size={9} className="animate-spin" />Sending…</span>
+                : isPendingApproval ? <span className="flex items-center gap-1"><Clock size={9} />Pending Approval</span>
+                : campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{campaign.subject}</p>
@@ -132,6 +156,40 @@ export default function CampaignDetail() {
           </Button>
         )}
       </div>
+
+      {/* Pending approval banner */}
+      {isPendingApproval && canApproveCampaigns && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+              <Clock size={14} /> Awaiting your approval
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              This campaign was submitted by a team member and needs approval before sending.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={handleReject}>Reject</Button>
+            <Button size="sm" className="gap-1.5" onClick={handleApprove} disabled={sendCampaign.isPending}>
+              {sendCampaign.isPending
+                ? <><Loader2 size={12} className="animate-spin" />Sending…</>
+                : <><Send size={12} />Approve &amp; Send</>}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isPendingApproval && !canApproveCampaigns && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+          <Clock size={16} className="text-amber-600 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">Pending approval</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              This campaign is waiting for a manager or admin to approve and send it.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       {isSent && (

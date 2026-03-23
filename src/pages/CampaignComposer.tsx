@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import RecipientSelector from "@/components/campaigns/RecipientSelector";
 import EmailComposer     from "@/components/campaigns/EmailComposer";
 import { useCreateCampaign, useSendCampaign, type SelectedRecipient } from "@/hooks/useCampaigns";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
 
 type Step = 1 | 2 | 3;
@@ -33,6 +35,9 @@ export default function CampaignComposer() {
   const [bodyHtml,     setBodyHtml]     = useState(cloneData?.body_html ?? "");
   const [sending,      setSending]      = useState(false);
 
+  const { canSendCampaigns, isMember } = usePermissions();
+  const { log } = useActivityLog();
+
   const createCampaign = useCreateCampaign();
   const sendCampaign   = useSendCampaign();
 
@@ -59,6 +64,27 @@ export default function CampaignComposer() {
       navigate(`/campaigns/${campaign.id}`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Send failed";
+      toast({ variant: "destructive", description: msg });
+      setSending(false);
+    }
+  };
+
+  const handleSubmitForApproval = async () => {
+    setSending(true);
+    try {
+      const campaign = await createCampaign.mutateAsync({
+        name:         campaignName,
+        subject,
+        preview_text: previewText,
+        body_html:    bodyHtml,
+        recipients,
+        status:       "pending_approval",
+      });
+      log("submitted_campaign", "campaign", campaign.id, campaignName);
+      toast({ description: "Campaign submitted for approval. A manager will review it shortly." });
+      navigate("/campaigns");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Submission failed";
       toast({ variant: "destructive", description: msg });
       setSending(false);
     }
@@ -203,17 +229,30 @@ export default function CampaignComposer() {
                 </p>
               </div>
 
-              {/* Send button */}
-              <Button
-                size="lg"
-                onClick={handleSend}
-                disabled={sending}
-                className="w-full gap-2"
-              >
-                {sending
-                  ? <><Loader2 size={15} className="animate-spin" />Sending to {recipients.length} contacts…</>
-                  : <><Send size={15} />Send to {recipients.length} contacts</>}
-              </Button>
+              {/* Send / Submit button */}
+              {isMember && !canSendCampaigns ? (
+                <Button
+                  size="lg"
+                  onClick={handleSubmitForApproval}
+                  disabled={sending}
+                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {sending
+                    ? <><Loader2 size={15} className="animate-spin" />Submitting…</>
+                    : <><Send size={15} />Submit for Approval ({recipients.length} recipients)</>}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleSend}
+                  disabled={sending}
+                  className="w-full gap-2"
+                >
+                  {sending
+                    ? <><Loader2 size={15} className="animate-spin" />Sending to {recipients.length} contacts…</>
+                    : <><Send size={15} />Send to {recipients.length} contacts</>}
+                </Button>
+              )}
             </div>
           )}
         </div>

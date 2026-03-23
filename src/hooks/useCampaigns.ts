@@ -5,7 +5,7 @@ import type { EmailCampaign, EmailCampaignRecipient } from "@/integrations/supab
 
 export type { EmailCampaign, EmailCampaignRecipient };
 
-export type CampaignStatus = "draft" | "sending" | "sent" | "failed";
+export type CampaignStatus = "draft" | "pending_approval" | "sending" | "sent" | "failed";
 
 export interface SelectedRecipient {
   id: string;
@@ -109,6 +109,7 @@ export function useCreateCampaign() {
       preview_text: string;
       body_html: string;
       recipients: SelectedRecipient[];
+      status?: CampaignStatus;
     }) => {
       if (!org) throw new Error("No org");
 
@@ -122,6 +123,8 @@ export function useCreateCampaign() {
           preview_text:    payload.preview_text,
           body_html:       payload.body_html,
           recipient_count: payload.recipients.length,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...(payload.status && payload.status !== "draft" ? { status: payload.status as any } : {}),
         })
         .select()
         .single();

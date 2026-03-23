@@ -16,14 +16,18 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { useCampaigns, useDeleteCampaign, type EmailCampaign } from "@/hooks/useCampaigns";
+import { useCampaigns, useDeleteCampaign, useSendCampaign, type EmailCampaign } from "@/hooks/useCampaigns";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Clock } from "lucide-react";
 
 const STATUS_META: Record<string, { label: string; class: string }> = {
-  draft:   { label: "Draft",   class: "bg-slate-100 text-slate-600 border-slate-200" },
-  sending: { label: "Sending", class: "bg-amber-100 text-amber-700 border-amber-200" },
-  sent:    { label: "Sent",    class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  failed:  { label: "Failed",  class: "bg-red-100 text-red-600 border-red-200" },
+  draft:            { label: "Draft",            class: "bg-slate-100 text-slate-600 border-slate-200" },
+  pending_approval: { label: "Pending Approval", class: "bg-amber-100 text-amber-700 border-amber-200" },
+  sending:          { label: "Sending",          class: "bg-blue-100 text-blue-700 border-blue-200" },
+  sent:             { label: "Sent",             class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  failed:           { label: "Failed",           class: "bg-red-100 text-red-600 border-red-200" },
 };
 
 function rate(num: number, denom: number) {
@@ -116,8 +120,11 @@ export default function Campaigns() {
   const { data: campaigns = [], isLoading } = useCampaigns();
   const deleteCampaign = useDeleteCampaign();
   const [deleteTarget, setDeleteTarget] = useState<EmailCampaign | null>(null);
+  const sendCampaign = useSendCampaign();
+  const { canApproveCampaigns, canDeleteCampaigns } = usePermissions();
 
-  const sentCampaigns = campaigns.filter((c) => c.status === "sent");
+  const pendingCampaigns = campaigns.filter((c) => (c.status as string) === "pending_approval");
+  const sentCampaigns    = campaigns.filter((c) => c.status === "sent");
   const totalSent     = sentCampaigns.reduce((s, c) => s + c.sent_count, 0);
   const totalOpens    = sentCampaigns.reduce((s, c) => s + c.open_count, 0);
   const totalClicks   = sentCampaigns.reduce((s, c) => s + c.click_count, 0);
@@ -131,6 +138,20 @@ export default function Campaigns() {
     setDeleteTarget(null);
   };
 
+  const handleApprove = async (campaign: EmailCampaign) => {
+    try {
+      const result = await sendCampaign.mutateAsync(campaign.id);
+      toast({ description: `✅ Approved & sent to ${result.sent} contacts.` });
+    } catch {
+      toast({ variant: "destructive", description: "Send failed." });
+    }
+  };
+
+  const handleReject = async (campaign: EmailCampaign) => {
+    await supabase.from("email_campaigns").update({ status: "draft" }).eq("id", campaign.id);
+    toast({ description: `"${campaign.name}" moved back to draft.` });
+  };
+
   return (
     <AppShell>
       <Header title="Email Campaigns" subtitle="Compose, send and track email blasts" />
@@ -141,6 +162,33 @@ export default function Campaigns() {
           <Plus size={15} /> New Campaign
         </Button>
       </div>
+
+      {/* Pending approval banner */}
+      {canApproveCampaigns && pendingCampaigns.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+            <Clock size={14} /> Pending Approval ({pendingCampaigns.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingCampaigns.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-3 bg-white border border-amber-100 rounded-lg px-3 py-2.5 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{c.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{c.subject} · {c.recipient_count} recipients</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleReject(c)}>
+                    Reject
+                  </Button>
+                  <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => handleApprove(c)} disabled={sendCampaign.isPending}>
+                    <Send size={11} /> Approve &amp; Send
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Summary stats */}
       {sentCampaigns.length > 0 && (

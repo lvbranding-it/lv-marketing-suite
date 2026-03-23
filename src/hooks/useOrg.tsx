@@ -5,7 +5,7 @@ import type { Organization } from "@/integrations/supabase/types";
 
 interface OrgContextType {
   org: Organization | null;
-  role: "owner" | "admin" | "member" | null;
+  role: "owner" | "admin" | "manager" | "member" | null;
   loading: boolean;
 }
 
@@ -18,7 +18,7 @@ const OrgContext = createContext<OrgContextType>({
 export function OrgProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [org, setOrg] = useState<Organization | null>(null);
-  const [role, setRole] = useState<"owner" | "admin" | "member" | null>(null);
+  const [role, setRole] = useState<"owner" | "admin" | "manager" | "member" | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           .single();
 
         setOrg((orgData as Organization) ?? null);
-        setRole(membership.role as "owner" | "admin" | "member");
+        setRole(membership.role as "owner" | "admin" | "manager" | "member");
       } finally {
         setLoading(false);
       }

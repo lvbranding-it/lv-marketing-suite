@@ -29,6 +29,8 @@ import {
   type ImportedContact,
 } from "@/hooks/useContacts";
 import { useContactTagDefinitions } from "@/hooks/useContactTags";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,9 @@ const FILTER_TABS = [
 
 export default function Contacts() {
   const { toast } = useToast();
+  const { canAddContacts, canDeleteContacts, isMember, isManager } = usePermissions();
+  const { log } = useActivityLog();
+
   const { data: imported = [], isLoading } = useImportedContacts();
   const addContact    = useImportContact();
   const updateContact = useUpdateContact();
@@ -300,6 +305,10 @@ export default function Contacts() {
     if (editTarget && !editTarget.id.startsWith("static-")) {
       await updateContact.mutateAsync({ id: editTarget.id, ...values });
       toast({ description: "Contact updated." });
+      if (isMember || isManager) {
+        log("edited_contact", "contact", editTarget.id,
+          `${values.first_name ?? editTarget.first_name} ${values.last_name ?? editTarget.last_name}`.trim());
+      }
     } else {
       await addContact.mutateAsync({
         ...values,
@@ -382,10 +391,12 @@ export default function Contacts() {
               <TabsTrigger value="vibe">Find Prospects</TabsTrigger>
               <TabsTrigger value="apollo">Apollo CRM</TabsTrigger>
             </TabsList>
-            <Button size="sm" onClick={openAdd}>
-              <UserPlus size={14} className="mr-1.5" />
-              New Contact
-            </Button>
+            {canAddContacts && (
+              <Button size="sm" onClick={openAdd}>
+                <UserPlus size={14} className="mr-1.5" />
+                New Contact
+              </Button>
+            )}
           </div>
 
           {/* ── My Contacts ─────────────────────────────────────── */}
@@ -567,15 +578,17 @@ export default function Contacts() {
                             >
                               <Pencil size={12} />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={(e) => handleDeleteImported(c.id, e)}
-                              title="Delete contact"
-                            >
-                              <Trash2 size={12} />
-                            </Button>
+                            {canDeleteContacts && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => handleDeleteImported(c.id, e)}
+                                title="Delete contact"
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -630,16 +643,18 @@ export default function Contacts() {
                     <X size={12} className="mr-1" />
                     Clear
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={handleBulkDelete}
-                    disabled={deleteContact.isPending}
-                  >
-                    <Trash2 size={12} className="mr-1" />
-                    Delete {selectionSet.size} selected
-                  </Button>
+                  {canDeleteContacts && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleBulkDelete}
+                      disabled={deleteContact.isPending}
+                    >
+                      <Trash2 size={12} className="mr-1" />
+                      Delete {selectionSet.size} selected
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -777,16 +792,18 @@ export default function Contacts() {
 
                       {/* Actions */}
                       <div className="px-1.5 py-2.5 flex items-center justify-center gap-0.5 border-l border-border">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-emerald-600"
-                          onClick={(e) => handleAddToPipeline(c, e)}
-                          title="Add to pipeline"
-                          disabled={addContact.isPending}
-                        >
-                          <PlusCircle size={11} />
-                        </Button>
+                        {canAddContacts && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-emerald-600"
+                            onClick={(e) => handleAddToPipeline(c, e)}
+                            title="Add to pipeline"
+                            disabled={addContact.isPending}
+                          >
+                            <PlusCircle size={11} />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -796,15 +813,17 @@ export default function Contacts() {
                         >
                           <Pencil size={11} />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={(e) => handleDeleteStatic(c.id, e)}
-                          title="Remove contact"
-                        >
-                          <Trash2 size={11} />
-                        </Button>
+                        {canDeleteContacts && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={(e) => handleDeleteStatic(c.id, e)}
+                            title="Remove contact"
+                          >
+                            <Trash2 size={11} />
+                          </Button>
+                        )}
                       </div>
                     </div>
 
