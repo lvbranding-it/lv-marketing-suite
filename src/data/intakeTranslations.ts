@@ -12,7 +12,7 @@ export const OPTION_VALUES = {
 export const intakeTranslations = {
   en: {
     langToggle: "🇪🇸 Español",
-    footer: "Powered by LV Marketing Suite · Your information is kept strictly confidential.",
+    footer: "Developed with Love by LV Branding",
     stepIndicator: (n: number) => `Step ${n} of 4`,
 
     welcome: {
@@ -86,7 +86,7 @@ export const intakeTranslations = {
 
   es: {
     langToggle: "🇺🇸 English",
-    footer: "Desarrollado por LV Marketing Suite · Su información se mantiene estrictamente confidencial.",
+    footer: "Desarrollado con Amor por LV Branding",
     stepIndicator: (n: number) => `Paso ${n} de 4`,
 
     welcome: {
