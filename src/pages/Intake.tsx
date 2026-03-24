@@ -410,37 +410,37 @@ export default function Intake() {
                   {selected?.contact_name} · {selected?.contact_email}
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 mr-6">
                 {selected && !isConverting && (
                   <Badge className={cn("text-xs border", STATUS_META[selected.status]?.class)}>
                     {STATUS_META[selected.status]?.label}
                   </Badge>
-                )}
-                {!isConverting && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => selected && deleteSubmission.mutate(selected.id)}
-                  >
-                    <Trash2 size={13} />
-                  </Button>
                 )}
               </div>
             </div>
 
             {selected && !isConverting && (
               <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Calendar size={11} />
-                    {new Date(selected.created_at).toLocaleDateString("en-US", { dateStyle: "long" })}
-                  </span>
-                  {selected.contact_role && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Building2 size={11} />{selected.contact_role}
+                      <Calendar size={11} />
+                      {new Date(selected.created_at).toLocaleDateString("en-US", { dateStyle: "long" })}
                     </span>
-                  )}
+                    {selected.contact_role && (
+                      <span className="flex items-center gap-1">
+                        <Building2 size={11} />{selected.contact_role}
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => selected && deleteSubmission.mutate(selected.id)}
+                  >
+                    <Trash2 size={11} /> Delete
+                  </Button>
                 </div>
                 {selected.status !== "converted" && (
                   <Button
