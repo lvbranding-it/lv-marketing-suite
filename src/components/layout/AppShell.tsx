@@ -13,6 +13,12 @@ import {
   Menu,
   ClipboardList,
   Mail,
+  Camera,
+  PlaySquare,
+  ExternalLink,
+  LayoutGrid,
+  Crown,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -35,8 +41,9 @@ const NAV_ITEMS = [
   { to: "/projects", label: "Projects", icon: FolderOpen },
   { to: "/contacts",  label: "Contacts",  icon: Users },
   { to: "/intake",    label: "Intake",     icon: ClipboardList },
-  { to: "/campaigns", label: "Campaigns",  icon: Mail },
-  { to: "/history",   label: "History",    icon: History },
+  { to: "/campaigns",      label: "Campaigns",      icon: Mail },
+  { to: "/photo-sessions", label: "Photo Sessions", icon: Camera },
+  { to: "/history",        label: "History",        icon: History },
 ];
 
 interface SidebarContentProps {
@@ -119,6 +126,116 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             </NavLink>
           )
         )}
+        {/* External apps */}
+        <div className="pt-2 mt-1 border-t border-sidebar-border/40 space-y-0.5">
+          {collapsed ? (
+            <>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="https://reviewflow.lvbranding.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <PlaySquare size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">ReviewFlow</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="https://suite55.lvbranding.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <LayoutGrid size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Suite 55</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="https://boss.lvbranding.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <Crown size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">LV Branding's Boss</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="https://sync.lvbranding.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <RefreshCw size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">SYNC</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </>
+          ) : (
+            <>
+              <a
+                href="https://reviewflow.lvbranding.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <PlaySquare size={16} />
+                ReviewFlow
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+              <a
+                href="https://suite55.lvbranding.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <LayoutGrid size={16} />
+                Suite 55
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+              <a
+                href="https://boss.lvbranding.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <Crown size={16} />
+                LV Branding's Boss
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+              <a
+                href="https://sync.lvbranding.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <RefreshCw size={16} />
+                SYNC
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+            </>
+          )}
+        </div>
       </nav>
 
       <Separator className="bg-sidebar-border" />

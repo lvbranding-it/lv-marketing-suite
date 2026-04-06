@@ -26,6 +26,9 @@ const CampaignComposer = lazy(() => import("@/pages/CampaignComposer"));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail"));
 const Unsubscribe   = lazy(() => import("@/pages/Unsubscribe"));
 const AcceptInvite  = lazy(() => import("@/pages/AcceptInvite"));
+const PhotoSessions        = lazy(() => import("@/pages/PhotoSessions"));
+const PhotoSessionDetail   = lazy(() => import("@/pages/PhotoSessionDetail"));
+const ClientPhotoSelection = lazy(() => import("@/pages/ClientPhotoSelection"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -154,6 +157,28 @@ function AppRoutes() {
             <Intake />
           </ProtectedRoute>
         }
+      />
+      {/* PhotoSelector Pro — photographer (protected) */}
+      <Route
+        path="/photo-sessions"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><PhotoSessions /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/photo-sessions/:sessionId"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><PhotoSessionDetail /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      {/* PhotoSelector Pro — public client view (no auth) */}
+      <Route
+        path="/share/:shareToken"
+        element={<Suspense fallback={null}><ClientPhotoSelection /></Suspense>}
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
