@@ -171,7 +171,7 @@ export default function Settings() {
       if (!org) return [];
       const { data, error } = await supabase
         .from("team_members")
-        .select("*, profiles(full_name)")
+        .select("*")
         .eq("org_id", org.id);
       if (error) throw error;
       return (data ?? []) as TeamMemberRow[];
