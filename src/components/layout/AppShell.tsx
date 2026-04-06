@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -54,6 +55,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
   const { user, signOut } = useAuth();
   const { org } = useOrg();
   const navigate = useNavigate();
+  const perms = usePermissions();
 
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
 
@@ -86,7 +88,16 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-2 space-y-1">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) =>
+        {(() => {
+          const visibleNavItems = NAV_ITEMS.filter(({ to }) => {
+            if (to === "/campaigns")    return perms.canAccessCampaigns;
+            if (to === "/contacts")     return perms.canAccessContacts;
+            if (to === "/projects")     return perms.canAccessProjects;
+            if (to === "/skills")       return perms.canAccessSkills;
+            if (to === "/intake")       return perms.canAccessIntake;
+            return true;
+          });
+          return visibleNavItems.map(({ to, label, icon: Icon }) =>
           collapsed ? (
             <TooltipProvider key={to} delayDuration={0}>
               <Tooltip>
@@ -125,7 +136,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               {label}
             </NavLink>
           )
-        )}
+        ); })()}
         {/* External apps */}
         <div className="pt-2 mt-1 border-t border-sidebar-border/40 space-y-0.5">
           {collapsed ? (

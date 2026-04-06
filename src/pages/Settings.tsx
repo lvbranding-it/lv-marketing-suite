@@ -14,6 +14,7 @@ import {
   UserPlus,
   Loader2,
   ChevronDown,
+  Settings2,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -38,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -149,8 +151,10 @@ export default function Settings() {
   const queryClient = useQueryClient();
 
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteeName, setInviteeName] = useState("");
   const [inviteRole, setInviteRole] = useState<"manager" | "member">("member");
   const [activityPage, setActivityPage] = useState(0);
+  const [featurePanelUserId, setFeaturePanelUserId] = useState<string | null>(null);
 
   const initials = (
     (user?.user_metadata?.full_name as string | undefined) ??
@@ -167,7 +171,7 @@ export default function Settings() {
       if (!org) return [];
       const { data, error } = await supabase
         .from("team_members")
-        .select("*")
+        .select("*, profiles(full_name)")
         .eq("org_id", org.id);
       if (error) throw error;
       return (data ?? []) as TeamMemberRow[];
@@ -242,6 +246,50 @@ export default function Settings() {
     },
   });
 
+  // ── Update role mutation ────────────────────────────────────────────────────
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ userId, newRole }: { userId: string; newRole: string }) => {
+      if (!org) throw new Error("No org");
+      const { error } = await supabase
+        .from("team_members")
+        .update({ role: newRole } as never)
+        .eq("org_id", org.id)
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team_members", org?.id] });
+      toast({ description: "Role updated successfully." });
+    },
+    onError: (err) => toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed to update role" }),
+  });
+
+  // ── Update feature access mutation ─────────────────────────────────────────
+  const updateFeatureAccessMutation = useMutation({
+    mutationFn: async ({ userId, feature, value }: { userId: string; feature: string; value: boolean }) => {
+      if (!org) throw new Error("No org");
+      // First fetch current feature_access
+      const { data: current } = await supabase
+        .from("team_members")
+        .select("feature_access")
+        .eq("org_id", org.id)
+        .eq("user_id", userId)
+        .single();
+      const existing = ((current as any)?.feature_access as Record<string, boolean>) ??
+        { campaigns: true, contacts: true, projects: true, skills: true, intake: true };
+      const updated = { ...existing, [feature]: value };
+      const { error } = await supabase
+        .from("team_members")
+        .update({ feature_access: updated } as never)
+        .eq("org_id", org.id)
+        .eq("user_id", userId);
+      if (error) throw error;
+      return updated;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["team_members", org?.id] }),
+    onError: () => toast({ variant: "destructive", description: "Failed to update access" }),
+  });
+
   // ── Cancel invitation mutation ──────────────────────────────────────────────
   const cancelInviteMutation = useMutation({
     mutationFn: async (inviteId: string) => {
@@ -303,6 +351,7 @@ export default function Settings() {
           email: inviteEmail,
           role: inviteRole,
           inviter_name: inviterName,
+          invitee_name: inviteeName || undefined,
         },
       });
       if (error) throw error;
@@ -311,6 +360,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["invitations"] });
       toast({ description: `Invitation sent to ${inviteEmail}` });
       setInviteEmail("");
+      setInviteeName("");
       setInviteRole("member");
     },
     onError: (err) => {
@@ -415,47 +465,127 @@ export default function Settings() {
               ) : (
                 <div className="space-y-2">
                   {members.map((member) => {
-                    const displayEmail =
-                      member.user_id === user?.id
-                        ? user.email ?? member.invited_email ?? member.user_id.slice(0, 8) + "..."
-                        : member.invited_email ?? member.user_id.slice(0, 8) + "...";
-                    const avatarInitials = displayEmail.slice(0, 2).toUpperCase();
+                    const displayName =
+                      (member as any).profiles?.full_name ??
+                      member.invited_email ??
+                      member.user_id.slice(0, 8) + "...";
+                    const avatarInitials = displayName.slice(0, 2).toUpperCase();
                     const memberRole = member.role as MemberRole;
 
                     return (
-                      <div
-                        key={`${member.org_id}-${member.user_id}`}
-                        className="bg-card border border-border rounded-lg px-3 py-2.5 flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <Avatar className="h-8 w-8 shrink-0">
-                            <AvatarFallback className="bg-primary/10 text-primary text-[11px] font-semibold">
-                              {avatarInitials}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-xs font-medium truncate">
-                                {displayEmail}
-                              </p>
-                              {member.user_id === user?.id && (
-                                <span className="text-[10px] text-muted-foreground">(You)</span>
+                      <div key={`${member.org_id}-${member.user_id}`}>
+                        <div className="bg-card border border-border rounded-lg px-3 py-2.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Avatar className="h-8 w-8 shrink-0">
+                              <AvatarFallback className="bg-primary/10 text-primary text-[11px] font-semibold">
+                                {avatarInitials}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs font-medium truncate">
+                                  {displayName}
+                                </p>
+                                {member.user_id === user?.id && (
+                                  <span className="text-[10px] text-muted-foreground">(You)</span>
+                                )}
+                              </div>
+                              {perms.isAdmin && member.user_id !== user?.id && member.role !== "owner" ? (
+                                <Select
+                                  value={member.role}
+                                  onValueChange={(r) => updateRoleMutation.mutate({ userId: member.user_id, newRole: r })}
+                                >
+                                  <SelectTrigger className="h-7 text-xs w-28 border-border mt-0.5">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="manager">Manager</SelectItem>
+                                    <SelectItem value="member">Member</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <RoleBadge role={memberRole} />
                               )}
                             </div>
-                            <RoleBadge role={memberRole} />
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {perms.isAdmin && member.user_id !== user?.id && member.role !== "owner" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-7 w-7",
+                                  featurePanelUserId === member.user_id
+                                    ? "text-primary"
+                                    : "text-muted-foreground hover:text-foreground"
+                                )}
+                                onClick={() =>
+                                  setFeaturePanelUserId((prev) =>
+                                    prev === member.user_id ? null : member.user_id
+                                  )
+                                }
+                              >
+                                <Settings2 size={13} />
+                              </Button>
+                            )}
+
+                            {canRemoveMember(member) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                disabled={removeMemberMutation.isPending}
+                                onClick={() => removeMemberMutation.mutate(member.user_id)}
+                              >
+                                <Trash2 size={13} />
+                              </Button>
+                            )}
                           </div>
                         </div>
 
-                        {canRemoveMember(member) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                            disabled={removeMemberMutation.isPending}
-                            onClick={() => removeMemberMutation.mutate(member.user_id)}
-                          >
-                            <Trash2 size={13} />
-                          </Button>
+                        {featurePanelUserId === member.user_id && (
+                          <div className="mt-2 ml-9 p-3 bg-muted/40 rounded-lg border border-border space-y-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                              Feature Access
+                            </p>
+                            {[
+                              { key: "campaigns", label: "Campaigns", icon: "📧" },
+                              { key: "contacts",  label: "Contacts",  icon: "👥" },
+                              { key: "projects",  label: "Projects",  icon: "📁" },
+                              { key: "skills",    label: "Skills",    icon: "⚡" },
+                              { key: "intake",    label: "Intake",    icon: "📋" },
+                            ].map(({ key, label, icon }) => {
+                              const fa = ((member as any).feature_access as Record<string, boolean>) ?? {};
+                              const enabled = fa[key] !== false; // default true
+                              return (
+                                <div key={key} className="flex items-center justify-between">
+                                  <span className="text-xs text-foreground">{icon} {label}</span>
+                                  <button
+                                    onClick={() =>
+                                      updateFeatureAccessMutation.mutate({
+                                        userId: member.user_id,
+                                        feature: key,
+                                        value: !enabled,
+                                      })
+                                    }
+                                    className={cn(
+                                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                                      enabled ? "bg-primary" : "bg-muted-foreground/30"
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                                        enabled ? "translate-x-4" : "translate-x-0.5"
+                                      )}
+                                    />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     );
@@ -540,6 +670,19 @@ export default function Settings() {
 
                   <div className="space-y-3">
                     <div className="space-y-1.5">
+                      <Label htmlFor="invite-name">
+                        Name <span className="text-muted-foreground text-xs">(optional)</span>
+                      </Label>
+                      <Input
+                        id="invite-name"
+                        type="text"
+                        placeholder="e.g. Maria Garcia"
+                        value={inviteeName}
+                        onChange={(e) => setInviteeName(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
                       <Label htmlFor="invite-email" className="text-xs">
                         Email address
                       </Label>
@@ -577,6 +720,16 @@ export default function Settings() {
                             <SelectItem value="member">Member</SelectItem>
                           </SelectContent>
                         </Select>
+                      )}
+                      {inviteRole === "manager" && (
+                        <p className="text-xs text-muted-foreground">
+                          Can invite Members, approve campaigns, view all contacts and projects.
+                        </p>
+                      )}
+                      {inviteRole === "member" && (
+                        <p className="text-xs text-muted-foreground">
+                          Can draft campaigns, view contacts, collaborate on projects. Activity is tracked.
+                        </p>
                       )}
                     </div>
 

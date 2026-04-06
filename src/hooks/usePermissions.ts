@@ -1,13 +1,18 @@
 import { useOrg } from "./useOrg";
 
 export function usePermissions() {
-  const { role } = useOrg();
+  const { role, featureAccess } = useOrg();
 
   const isOwner   = role === "owner";
   const isAdmin   = role === "owner" || role === "admin";
   const isManager = role === "manager";
   const isMember  = role === "member";
   const isManagerOrAbove = isAdmin || isManager;
+
+  // Admins always have full feature access regardless of feature_access column
+  const features = isAdmin
+    ? { campaigns: true, contacts: true, projects: true, skills: true, intake: true }
+    : featureAccess;
 
   return {
     role,
@@ -16,6 +21,12 @@ export function usePermissions() {
     isManager,
     isMember,
     isManagerOrAbove,
+    // Feature access (used to show/hide nav items)
+    canAccessCampaigns: features.campaigns !== false,
+    canAccessContacts:  features.contacts  !== false,
+    canAccessProjects:  features.projects  !== false,
+    canAccessSkills:    features.skills    !== false,
+    canAccessIntake:    features.intake    !== false,
     // Contacts
     canAddContacts:      isAdmin,
     canDeleteContacts:   isAdmin,

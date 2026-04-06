@@ -17,19 +17,60 @@ const cors = {
 
 function buildInviteEmail(opts: {
   inviteeEmail: string;
+  inviteeName?: string;
   inviterName: string;
   orgName: string;
   role: string;
   inviteLink: string;
 }): string {
   const roleLabel = opts.role.charAt(0).toUpperCase() + opts.role.slice(1);
+  const greeting = opts.inviteeName ?? opts.inviteeEmail.split("@")[0];
+
+  // Role-specific How To Use steps
+  type StepList = { label: string; desc: string }[];
+  const stepsByRole: Record<string, StepList> = {
+    manager: [
+      { label: "1. 📊 Dashboard", desc: "See your team's activity and recent work at a glance" },
+      { label: "2. 📧 Campaigns", desc: "Compose AI-powered email blasts and approve Member drafts before they send" },
+      { label: "3. 👥 Contacts", desc: "Browse, research, and enrich your prospect list with AI insights" },
+      { label: "4. 📁 Projects", desc: "Manage client projects from kickoff to delivery" },
+      { label: "5. ⚡ Skills", desc: "Run 33 AI marketing tools for copy, SEO, ads, strategy, and more" },
+      { label: "6. 👤 As a Manager", desc: "You can invite new Members and approve campaigns before they go out" },
+    ],
+    member: [
+      { label: "1. 📊 Dashboard", desc: "Your home base; see recent activity and jump back into your work" },
+      { label: "2. 📧 Campaigns", desc: "Draft email campaigns; a Manager or Admin will review before sending" },
+      { label: "3. 👥 Contacts", desc: "View and research contacts; run AI enrichment on any prospect" },
+      { label: "4. 📁 Projects", desc: "Collaborate on client projects assigned to you" },
+      { label: "5. ⚡ Skills", desc: "Use 33 AI marketing tools for copy, strategy, SEO, and more" },
+      { label: "6. 👤 As a Member", desc: "Your edits and actions are visible to your Manager; reach out with questions" },
+    ],
+    admin: [
+      { label: "1. 📊 Dashboard", desc: "Full visibility into all team activity and workspace stats" },
+      { label: "2. 📧 Campaigns", desc: "Create, send, and track email blasts across your contact lists" },
+      { label: "3. 👥 Contacts", desc: "Full CRM access — import, research, tag, and manage all prospects" },
+      { label: "4. 📁 Projects", desc: "Create and manage all client projects and AI-generated outputs" },
+      { label: "5. ⚡ Skills", desc: "Access all 33 AI marketing tools for the full team" },
+      { label: "6. ⚙️ Settings", desc: "Manage team members, roles, and feature access for your workspace" },
+    ],
+  };
+
+  const stepList: StepList = stepsByRole[opts.role] ?? stepsByRole["member"];
+
+  const steps = stepList.map((s) => `
+            <tr>
+              <td style="padding:6px 0;font-size:14px;color:#374151;line-height:1.6;">
+                <span style="font-weight:600;color:#231F20;">${s.label}</span>
+                — ${s.desc}
+              </td>
+            </tr>`).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>You've been invited to join LV Branding's Workspace</title>
+  <title>You've been invited to LV Branding's Workspace</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
@@ -37,67 +78,93 @@ function buildInviteEmail(opts: {
       <table role="presentation" style="max-width:600px;width:100%;" cellpadding="0" cellspacing="0">
 
         <!-- Logo -->
-        <tr><td align="center" style="padding:0 0 28px;">
-          <a href="https://www.lvbranding.com" target="_blank" style="text-decoration:none;display:block;">
-            <img
-              src="${LV_LOGO_URL}"
-              alt="LV Branding"
-              width="80" height="80"
-              style="display:block;margin:0 auto;width:80px;height:80px;border:0;"
-            />
+        <tr><td align="center" style="padding:0 0 24px;">
+          <a href="https://www.lvbranding.com" target="_blank">
+            <img src="${LV_LOGO_URL}" alt="LV Branding" width="80" height="80"
+              style="display:block;margin:0 auto;width:80px;height:80px;border:0;" />
           </a>
         </td></tr>
 
-        <!-- Body card -->
-        <tr><td style="background:#ffffff;border-radius:12px;padding:36px 32px;border:1px solid #e4e4e7;line-height:1.75;color:#231F20;font-size:15px;">
-          <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#231F20;">
-            You've been invited to join LV Branding's Workspace
+        <!-- Card -->
+        <tr><td style="background:#ffffff;border-radius:12px;padding:36px 32px;border:1px solid #e4e4e7;color:#231F20;">
+
+          <!-- Greeting -->
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#231F20;">
+            👋 You're invited!
           </h2>
-          <p style="margin:0 0 16px;color:#374151;">
-            The admin has invited you to join
-            <strong>LV Branding's Workspace</strong> on LV Branding as a
-            <strong>${roleLabel}</strong>.
+          <p style="margin:0 0 6px;font-size:15px;color:#374151;line-height:1.7;">
+            Hi <strong>${greeting}</strong>,
           </p>
-          <p style="margin:0 0 28px;color:#374151;">
-            Click the button below to accept your invitation and get started.
-            This invitation expires in 7 days.
+          <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.7;">
+            <strong>${opts.inviterName}</strong> has invited you to join
+            <strong>LV Branding's Marketing Suite</strong> as a
+            <strong style="color:#CB2039;">${roleLabel}</strong>.
+            You're just one click away from getting started!
           </p>
 
           <!-- CTA Button -->
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
             <tr>
-              <td align="center" style="border-radius:8px;background:#CB2039;">
-                <a
-                  href="${opts.inviteLink}"
-                  target="_blank"
-                  style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;background:#CB2039;"
-                >
-                  Accept Invitation
+              <td style="border-radius:8px;background:#CB2039;">
+                <a href="${opts.inviteLink}" target="_blank"
+                  style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">
+                  Get Started →
                 </a>
               </td>
             </tr>
           </table>
 
-          <p style="margin:0 0 8px;color:#6B7280;font-size:13px;">
-            Or copy and paste this link into your browser:
+          <!-- Divider -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+            <tr><td style="border-top:1px solid #e4e4e7;"></td></tr>
+          </table>
+
+          <!-- How To Use section -->
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:#231F20;">
+            🗺️ Your Quick Start Guide
+          </h3>
+          <p style="margin:0 0 16px;font-size:14px;color:#4B5563;line-height:1.7;">
+            LV Branding's Marketing Suite is an AI-powered workspace for crafting campaigns,
+            managing contacts, and running marketing strategies — all in one place.
+            Here's what you'll have access to:
+          </p>
+
+          <!-- Numbered steps -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${steps}
+          </table>
+
+          <!-- Divider -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 16px;">
+            <tr><td style="border-top:1px solid #e4e4e7;"></td></tr>
+          </table>
+
+          <!-- Fallback link -->
+          <p style="margin:0 0 4px;font-size:12px;color:#6B7280;">
+            Button not working? Copy and paste this link:
           </p>
           <p style="margin:0;word-break:break-all;font-size:12px;">
             <a href="${opts.inviteLink}" style="color:#CB2039;text-decoration:none;">${opts.inviteLink}</a>
           </p>
+          <p style="margin:12px 0 0;font-size:12px;color:#9CA3AF;">
+            ⏰ This invitation expires in 7 days.
+          </p>
+
         </td></tr>
 
         <!-- Footer -->
         <tr><td align="center" style="padding:24px 0 32px;font-size:12px;line-height:2;">
-          <p style="margin:0 0 4px;color:#374151;">
-            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:700;">LV Branding</a>
-            &nbsp;&middot;&nbsp;Houston, TX
+          <p style="margin:0 0 4px;">
+            <a href="https://www.lvbranding.com" target="_blank"
+              style="color:#CB2039;text-decoration:none;font-weight:700;">LV Branding</a>
+            &nbsp;·&nbsp; Houston, TX
           </p>
-          <p style="margin:0 0 6px;color:#4B5563;">
-            You received this email because ${opts.inviterName} invited ${opts.inviteeEmail}.
+          <p style="margin:0 0 4px;color:#6B7280;">
+            You received this because ${opts.inviterName} invited ${opts.inviteeEmail} to join the workspace.
           </p>
-          <p style="margin:0;font-size:11px;color:#6B7280;">
-            Made with ❤️ by
-            <a href="https://www.lvbranding.com" target="_blank" style="color:#CB2039;text-decoration:none;font-weight:600;">LV Branding (www.lvbranding.com)</a>
+          <p style="margin:0;font-size:11px;color:#9CA3AF;">
+            Made with ❤️ by <a href="https://www.lvbranding.com" target="_blank"
+              style="color:#CB2039;text-decoration:none;font-weight:600;">LV Branding (www.lvbranding.com)</a>
           </p>
         </td></tr>
 
@@ -132,7 +199,7 @@ serve(async (req) => {
 
   const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-  let body: { org_id: string; email: string; role: string; inviter_name?: string };
+  let body: { org_id: string; email: string; role: string; inviter_name?: string; invitee_name?: string };
   try {
     body = await req.json();
   } catch {
@@ -243,6 +310,7 @@ serve(async (req) => {
   // Send email via SendGrid
   const emailHtml = buildInviteEmail({
     inviteeEmail: email.toLowerCase(),
+    inviteeName: body.invitee_name,
     inviterName: displayInviterName,
     orgName: org.name,
     role,
