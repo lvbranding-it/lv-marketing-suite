@@ -97,18 +97,24 @@ export default function AcceptInvite() {
         const { data, error } = await supabase.functions.invoke("accept-invitation", {
           body: { token, email, password, full_name: fullName },
         });
-        if (error) throw new Error(error.message ?? "Signup failed");
-        if (data?.error) {
-          // Account already exists — prompt to use sign in
-          if (data.error.includes("already exists")) {
+
+        // Check both error object AND data.error (non-2xx lands in error, 200 errors in data)
+        const errMsg = data?.error ?? error?.message ?? "";
+        if (errMsg && !data?.ok) {
+          if (errMsg.toLowerCase().includes("already exists") || errMsg.toLowerCase().includes("already been registered")) {
             setMode("signin");
-            throw new Error("An account with this email already exists. Please sign in below.");
+            throw new Error("An account with this email already exists — please sign in below.");
           }
-          throw new Error(data.error);
+          throw new Error(errMsg);
         }
+
         // Sign in to get the session (user is already confirmed)
         const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInErr) throw signInErr;
+        if (signInErr) {
+          // If sign-in fails after creation, the account exists but password may differ
+          setMode("signin");
+          throw new Error("Account created — please sign in with your password below.");
+        }
         setState("success");
         setTimeout(() => navigate("/dashboard"), 1500);
       } else {

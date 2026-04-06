@@ -94,17 +94,30 @@ serve(async (req) => {
       user_metadata:    { full_name: bodyRaw.full_name ?? bodyRaw.email.split("@")[0] },
     });
 
+    let resolvedUserId: string;
+
     if (createErr || !newUser?.user) {
-      // If user already exists, try to look them up instead
       if (createErr?.message?.includes("already been registered")) {
-        // Existing user accepting via signup form — just return error so frontend retries with signin
-        return json({ error: "An account with this email already exists. Please use Sign In instead." }, 409);
+        // User already exists — look them up and accept the invitation for them
+        const { data: { users }, error: listErr } = await db.auth.admin.listUsers({ perPage: 1000 });
+        if (listErr) {
+          return json({ error: "Failed to look up existing account" }, 500);
+        }
+        const existing = users.find((u) => u.email?.toLowerCase() === bodyRaw.email!.toLowerCase());
+        if (!existing) {
+          return json({ error: "Account not found. Please contact your admin." }, 404);
+        }
+        resolvedUserId = existing.id;
+        // Fall through to accept the invitation with the existing user
+      } else {
+        console.error("Failed to create user:", createErr);
+        return json({ error: createErr?.message ?? "Failed to create account" }, 500);
       }
-      console.error("Failed to create user:", createErr);
-      return json({ error: createErr?.message ?? "Failed to create account" }, 500);
+    } else {
+      resolvedUserId = newUser.user.id;
     }
 
-    const newUserId = newUser.user.id;
+    const newUserId = resolvedUserId;
 
     // Mark invitation accepted
     await db.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id);
