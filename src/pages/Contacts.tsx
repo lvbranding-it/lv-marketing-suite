@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight, Tag } from "lucide-react";
+import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight, Tag, Plus } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import ContactDetailModal from "@/components/contacts/ContactDetailModal";
@@ -13,6 +13,7 @@ import TagSidebar from "@/components/contacts/TagSidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,7 +29,7 @@ import {
   useDeleteContact,
   type ImportedContact,
 } from "@/hooks/useContacts";
-import { useContactTagDefinitions } from "@/hooks/useContactTags";
+import { useContactTagDefinitions, useCreateTagDefinition, pickTagColor } from "@/hooks/useContactTags";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +65,21 @@ export default function Contacts() {
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
   const { data: tagDefs = [] } = useContactTagDefinitions();
+  const createTagDef  = useCreateTagDefinition();
+
+  // Quick-tag popover state: contactId → search query
+  const [quickTagOpen, setQuickTagOpen]   = useState<string | null>(null);
+  const [quickTagQuery, setQuickTagQuery] = useState("");
+
+  const quickAddTag = async (contact: ImportedContact, tagName: string) => {
+    const existing = contact.tags ?? [];
+    if (existing.includes(tagName)) return;
+    const newTags = [...existing, tagName];
+    await updateContact.mutateAsync({ id: contact.id, tags: newTags });
+    if (!tagDefs.some((d) => d.name === tagName)) {
+      createTagDef.mutate({ name: tagName, color: pickTagColor(tagDefs.map((d) => d.color)) });
+    }
+  };
 
   // Tag color lookup
   const tagColorMap = useMemo(() => {
@@ -569,6 +585,76 @@ export default function Contacts() {
                           <div className="flex items-center gap-1.5 shrink-0">
                             <Badge variant="outline" className="text-[9px]">{c.source}</Badge>
                             {c.email && <span className="text-[10px] text-primary hidden sm:block">{c.email}</span>}
+                            {/* Quick tag button */}
+                            <Popover
+                              open={quickTagOpen === c.id}
+                              onOpenChange={(o) => {
+                                setQuickTagOpen(o ? c.id : null);
+                                if (!o) setQuickTagQuery("");
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="Add tag"
+                                >
+                                  <Tag size={12} />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-48 p-2 space-y-1.5" align="end" side="bottom">
+                                <input
+                                  autoFocus
+                                  value={quickTagQuery}
+                                  onChange={(e) => setQuickTagQuery(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => {
+                                    e.stopPropagation();
+                                    const filtered = tagDefs.filter(
+                                      (d) => !(c.tags ?? []).includes(d.name) &&
+                                        (!quickTagQuery || d.name.toLowerCase().includes(quickTagQuery.toLowerCase()))
+                                    );
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      if (filtered[0]) { quickAddTag(c, filtered[0].name); setQuickTagOpen(null); setQuickTagQuery(""); }
+                                      else if (quickTagQuery.trim()) { quickAddTag(c, quickTagQuery.trim()); setQuickTagOpen(null); setQuickTagQuery(""); }
+                                    }
+                                    if (e.key === "Escape") { setQuickTagOpen(null); setQuickTagQuery(""); }
+                                  }}
+                                  placeholder="Search or create…"
+                                  className="w-full h-7 text-xs bg-muted/50 border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                                />
+                                <div className="max-h-40 overflow-y-auto space-y-0.5">
+                                  {tagDefs
+                                    .filter((d) => !(c.tags ?? []).includes(d.name) && (!quickTagQuery || d.name.toLowerCase().includes(quickTagQuery.toLowerCase())))
+                                    .map((d) => (
+                                      <button
+                                        key={d.id}
+                                        onClick={(e) => { e.stopPropagation(); quickAddTag(c, d.name); setQuickTagOpen(null); setQuickTagQuery(""); }}
+                                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted transition-colors text-left"
+                                      >
+                                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                                        {d.name}
+                                      </button>
+                                    ))
+                                  }
+                                  {quickTagQuery.trim() && !tagDefs.some((d) => d.name.toLowerCase() === quickTagQuery.toLowerCase()) && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); quickAddTag(c, quickTagQuery.trim()); setQuickTagOpen(null); setQuickTagQuery(""); }}
+                                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted transition-colors text-left text-primary"
+                                    >
+                                      <Plus size={10} className="shrink-0" />
+                                      Create <strong className="ml-0.5">"{quickTagQuery.trim()}"</strong>
+                                    </button>
+                                  )}
+                                  {tagDefs.filter((d) => !(c.tags ?? []).includes(d.name)).length === 0 && !quickTagQuery && (
+                                    <p className="text-[11px] text-muted-foreground text-center py-2">All tags already applied</p>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                             <Button
                               variant="ghost"
                               size="icon"

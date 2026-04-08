@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2, Sparkles, Loader2, CheckCircle2, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
+import { X, ExternalLink, Mail, Phone, Linkedin, Globe, Trash2, Sparkles, Loader2, CheckCircle2, XCircle, AlertCircle, ShieldCheck, Tag, Plus } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import {
   Select,
@@ -69,6 +70,97 @@ function FitBadge({ score }: { score: number | null }) {
     <span className={cn("text-[10px] border px-1.5 py-0.5 rounded-full font-medium", cls)}>
       {score}% fit
     </span>
+  );
+}
+
+interface TagPickerProps {
+  tagDefs: { id: string; name: string; color: string }[];
+  currentTags: string[];
+  tagColorMap: Map<string, string>;
+  onAdd: (name: string) => void;
+  onCreateAndAdd: (name: string, color: string) => void;
+  tagInput: string;
+  setTagInput: (v: string) => void;
+  pickColor: () => string;
+}
+
+function TagPickerPopover({ tagDefs, currentTags, tagColorMap, onAdd, onCreateAndAdd, tagInput, setTagInput, pickColor }: TagPickerProps) {
+  const [open, setOpen] = useState(false);
+  const query = tagInput.trim().toLowerCase();
+
+  const available = tagDefs.filter(
+    (d) => !currentTags.includes(d.name) && (!query || d.name.toLowerCase().includes(query))
+  );
+  const exactMatch = tagDefs.some((d) => d.name.toLowerCase() === query);
+  const canCreate = query.length > 0 && !exactMatch;
+
+  const handleSelect = (name: string) => {
+    onAdd(name);
+    setTagInput("");
+    setOpen(false);
+  };
+
+  const handleCreate = () => {
+    if (!query) return;
+    const name = tagInput.trim();
+    onCreateAndAdd(name, pickColor());
+    setTagInput("");
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+        >
+          <Plus size={9} /> Add tag
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-2 space-y-1.5" align="start" side="bottom">
+        <input
+          autoFocus
+          value={tagInput}
+          onChange={(e) => setTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (available[0]) handleSelect(available[0].name);
+              else if (canCreate) handleCreate();
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
+          placeholder="Search or create…"
+          className="w-full h-7 text-xs bg-muted/50 border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <div className="max-h-44 overflow-y-auto space-y-0.5">
+          {available.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => handleSelect(d.name)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted transition-colors text-left"
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+              {d.name}
+            </button>
+          ))}
+          {available.length === 0 && !canCreate && (
+            <p className="text-[11px] text-muted-foreground text-center py-2">
+              {currentTags.length === tagDefs.length ? "All tags already applied" : "No tags found"}
+            </p>
+          )}
+          {canCreate && (
+            <button
+              onClick={handleCreate}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted transition-colors text-left text-primary"
+            >
+              <Tag size={10} className="shrink-0" />
+              Create <strong className="ml-0.5">"{tagInput.trim()}"</strong>
+            </button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -210,14 +302,6 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     setTags(newTags);
     updateCRM.mutate({ id: contact.id, tags: newTags });
     onUpdate?.();
-  };
-
-  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      addTag(tagInput);
-      setTagInput("");
-    }
   };
 
   const saveFollowup = (date: string | null) => {
@@ -450,7 +534,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
 
               {/* Tags */}
               <Section title="Tags">
-                <div className="flex flex-wrap gap-1.5 mb-2">
+                <div className="flex flex-wrap gap-1.5">
                   {tags.map((t) => {
                     const color = tagColorMap.get(t) ?? "#6366f1";
                     return (
@@ -469,39 +553,21 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                       </span>
                     );
                   })}
-                </div>
-                {/* Suggestions from defined tags */}
-                {tagSuggestions.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {tagSuggestions.map((name) => {
-                      const color = tagColorMap.get(name) ?? "#6366f1";
-                      return (
-                        <button
-                          key={name}
-                          onClick={() => addTag(name)}
-                          className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border-2 font-medium transition-opacity hover:opacity-80"
-                          style={{ borderColor: color, color }}
-                          title={`Add tag: ${name}`}
-                        >
-                          + {name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                <Input
-                  className="h-7 text-xs"
-                  placeholder="Type a tag, press Enter or comma…"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  onBlur={() => {
-                    if (tagInput.trim()) {
-                      addTag(tagInput);
+                  <TagPickerPopover
+                    tagDefs={tagDefs}
+                    currentTags={tags}
+                    tagColorMap={tagColorMap}
+                    onAdd={(name) => { addTag(name); setTagInput(""); }}
+                    onCreateAndAdd={(name, color) => {
+                      createTagDef.mutate({ name, color });
+                      addTag(name);
                       setTagInput("");
-                    }
-                  }}
-                />
+                    }}
+                    tagInput={tagInput}
+                    setTagInput={setTagInput}
+                    pickColor={() => pickTagColor(tagDefs.map((d) => d.color))}
+                  />
+                </div>
               </Section>
 
               {/* Notes */}
