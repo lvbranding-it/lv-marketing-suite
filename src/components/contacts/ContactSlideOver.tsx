@@ -534,6 +534,11 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
 
               {/* Tags */}
               <Section title="Tags">
+                {tags.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground mb-1.5">
+                    No tags yet — click <strong>Add tag</strong> below to assign one.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map((t) => {
                     const color = tagColorMap.get(t) ?? "#6366f1";

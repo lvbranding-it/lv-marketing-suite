@@ -599,12 +599,12 @@ export default function Contacts() {
                               <PopoverTrigger asChild>
                                 <Button
                                   variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                  size="sm"
+                                  className="h-7 px-2 text-muted-foreground hover:text-primary text-[11px] gap-1"
                                   onClick={(e) => e.stopPropagation()}
-                                  title="Add tag"
                                 >
-                                  <Tag size={12} />
+                                  <Tag size={11} />
+                                  <span className="hidden md:inline">Tag</span>
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-48 p-2 space-y-1.5" align="end" side="bottom">
