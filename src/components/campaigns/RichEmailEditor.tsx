@@ -85,7 +85,13 @@ const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEm
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({
+        heading:   { levels: [1, 2, 3] },
+        // Disable built-ins that StarterKit v3 now bundles so we can
+        // supply our own configured versions below without duplicates.
+        link:      false,
+        underline: false,
+      }),
       Underline,
       TextStyle,
       Color,
