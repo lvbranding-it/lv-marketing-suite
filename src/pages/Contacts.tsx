@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight, Tag, Plus } from "lucide-react";
+import { Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle, ChevronRight, Tag, Plus, Upload, Loader2 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import ContactDetailModal from "@/components/contacts/ContactDetailModal";
@@ -34,6 +34,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { parseContactsCSV } from "@/lib/csvImport";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "@/hooks/useOrg";
 
 type SortKey = "score" | "name" | "company";
 type SortDir = 1 | -1;
@@ -59,6 +62,7 @@ export default function Contacts() {
   const { toast } = useToast();
   const { canAddContacts, canDeleteContacts, isMember, isManager } = usePermissions();
   const { log } = useActivityLog();
+  const { org } = useOrg();
 
   const { data: imported = [], isLoading } = useImportedContacts();
   const addContact    = useImportContact();
@@ -66,6 +70,63 @@ export default function Contacts() {
   const deleteContact = useDeleteContact();
   const { data: tagDefs = [] } = useContactTagDefinitions();
   const createTagDef  = useCreateTagDefinition();
+
+  // ── CSV Import ──────────────────────────────────────────────────────────
+  const [importing, setImporting] = useState(false);
+
+  const handleCSVImport = async (file: File) => {
+    if (!org) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const contacts = parseContactsCSV(text);
+      if (contacts.length === 0) {
+        toast({ variant: "destructive", description: "No valid contacts found. Make sure the file has an Email column." });
+        return;
+      }
+
+      // Auto-create any new tag definitions
+      const allNewTags = Array.from(new Set(contacts.flatMap((c) => c.tags)));
+      for (const tagName of allNewTags) {
+        if (!tagDefs.some((d) => d.name === tagName)) {
+          await supabase.from("contact_tag_definitions").insert({
+            org_id: org.id, name: tagName,
+            color: pickTagColor(tagDefs.map((d) => d.color)),
+          });
+        }
+      }
+
+      const rows = contacts.map((c) => ({
+        org_id:     org.id,
+        first_name: c.first_name || null,
+        last_name:  c.last_name  || null,
+        email:      c.email,
+        phone:      c.phone      || null,
+        company:    c.company    || null,
+        title:      c.title      || null,
+        city:       c.city       || null,
+        state:      c.state      || null,
+        country:    c.country    || null,
+        tags:       c.tags,
+        source:     "manual" as const,
+        source_id:  null,
+        apollo_id:  null,
+        signals:    [],
+        raw_data:   {},
+      }));
+
+      const { error } = await supabase
+        .from("contacts")
+        .upsert(rows, { onConflict: "org_id,email" });
+
+      if (error) throw error;
+      toast({ description: `✓ ${contacts.length} contacts imported successfully.` });
+    } catch (err) {
+      toast({ variant: "destructive", description: (err as Error).message });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Quick-tag popover state: contactId → search query
   const [quickTagOpen, setQuickTagOpen]   = useState<string | null>(null);
@@ -409,12 +470,35 @@ export default function Contacts() {
                 <TabsTrigger value="apollo" className="hidden sm:flex">Apollo CRM</TabsTrigger>
               </TabsList>
             </div>
-            {canAddContacts && (
-              <Button size="sm" onClick={openAdd} className="shrink-0">
-                <UserPlus size={14} className="sm:mr-1.5" />
-                <span className="hidden sm:inline">New Contact</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {canAddContacts && (
+                <>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) { handleCSVImport(f); e.target.value = ""; }
+                      }}
+                    />
+                    <Button size="sm" variant="outline" asChild disabled={importing}>
+                      <span>
+                        {importing
+                          ? <Loader2 size={14} className="sm:mr-1.5 animate-spin" />
+                          : <Upload size={14} className="sm:mr-1.5" />}
+                        <span className="hidden sm:inline">{importing ? "Importing…" : "Import CSV"}</span>
+                      </span>
+                    </Button>
+                  </label>
+                  <Button size="sm" onClick={openAdd}>
+                    <UserPlus size={14} className="sm:mr-1.5" />
+                    <span className="hidden sm:inline">New Contact</span>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* ── My Contacts ─────────────────────────────────────── */}

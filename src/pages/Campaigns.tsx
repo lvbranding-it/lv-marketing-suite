@@ -16,6 +16,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { parseContactsCSV } from "@/lib/csvImport";
 import { useCampaigns, useDeleteCampaign, useSendCampaign, type EmailCampaign } from "@/hooks/useCampaigns";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
@@ -36,37 +37,6 @@ function rate(num: number, denom: number) {
   return `${Math.min(Math.round((num / denom) * 100), 100)}%`;
 }
 
-interface ParsedContact {
-  email: string;
-  first_name: string;
-  last_name: string;
-  company: string;
-}
-
-function parseContactsCSV(text: string): ParsedContact[] {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/[^a-z_]/g, ""));
-
-  const get = (row: string[], key: string) => {
-    const idx = headers.indexOf(key);
-    return idx >= 0 ? (row[idx] ?? "").trim().replace(/^"|"$/g, "") : "";
-  };
-
-  return lines.slice(1)
-    .map((line) => {
-      const cols = line.split(",");
-      const email = get(cols, "email");
-      if (!email || !/\S+@\S+\.\S+/.test(email)) return null;
-      return {
-        email: email.toLowerCase(),
-        first_name: get(cols, "first_name") || get(cols, "firstname") || get(cols, "first"),
-        last_name:  get(cols, "last_name")  || get(cols, "lastname")  || get(cols, "last"),
-        company:    get(cols, "company")    || get(cols, "organization") || get(cols, "company_name"),
-      };
-    })
-    .filter((r): r is ParsedContact => r !== null);
-}
 
 function CampaignCard({
   campaign,
