@@ -22,8 +22,8 @@ import { useToast } from "@/hooks/use-toast";
 type Step = 1 | 2 | 3;
 
 const STEPS = [
-  { n: 1 as Step, label: "Recipients", icon: Users },
-  { n: 2 as Step, label: "Compose",    icon: Mail  },
+  { n: 1 as Step, label: "Compose",    icon: Mail  },
+  { n: 2 as Step, label: "Recipients", icon: Users },
   { n: 3 as Step, label: "Send",       icon: Send  },
 ];
 
@@ -91,8 +91,8 @@ export default function CampaignComposer() {
   const upsertRecipients = useUpsertCampaignRecipients();
 
   const canGoNext = (): boolean => {
-    if (step === 1) return recipients.length > 0;
-    if (step === 2) return !!campaignName.trim() && !!subject.trim() && !!bodyHtml.trim();
+    if (step === 1) return !!campaignName.trim() && !!subject.trim() && !!bodyHtml.trim();
+    if (step === 2) return recipients.length > 0;
     return true;
   };
 
@@ -268,23 +268,10 @@ export default function CampaignComposer() {
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-        <div className={cn(step === 2 ? "w-full" : "max-w-3xl mx-auto")}>
+        <div className={cn(step === 1 ? "w-full" : "max-w-3xl mx-auto")}>
 
-          {/* Step 1 — Recipients */}
+          {/* Step 1 — Compose */}
           {step === 1 && (
-            <div className="space-y-3">
-              <div>
-                <h2 className="text-lg font-bold">Select Recipients</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Choose who receives this campaign. Suppressed contacts (unsubscribed or bounced) are automatically excluded.
-                </p>
-              </div>
-              <RecipientSelector selected={recipients} onChange={setRecipients} />
-            </div>
-          )}
-
-          {/* Step 2 — Compose */}
-          {step === 2 && (
             <div className="space-y-3">
               <div>
                 <h2 className="text-lg font-bold">Compose Email</h2>
@@ -299,6 +286,19 @@ export default function CampaignComposer() {
                 bodyHtml={bodyHtml}              onBodyHtmlChange={setBodyHtml}
                 recipientCount={recipients.length}
               />
+            </div>
+          )}
+
+          {/* Step 2 — Recipients */}
+          {step === 2 && (
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-lg font-bold">Select Recipients</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Choose who receives this campaign. Suppressed contacts (unsubscribed or bounced) are automatically excluded.
+                </p>
+              </div>
+              <RecipientSelector selected={recipients} onChange={setRecipients} />
             </div>
           )}
 

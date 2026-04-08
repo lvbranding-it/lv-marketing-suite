@@ -113,28 +113,69 @@ function buildPreviewDoc(bodyHtml: string, previewWidth: "desktop" | "mobile") {
 </html>`;
 }
 
-// Full-size isolated block renderer (uses iframe so Tailwind doesn't stomp table widths)
-function BlockRenderer({ html, name, onRemove }: { html: string; name: string; onRemove: () => void }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+// Editable block — renders HTML in a designMode iframe so columns/tables stay intact
+function BlockEditor({
+  html, name, onChange, onRemove,
+}: {
+  html: string;
+  name: string;
+  onChange: (html: string) => void;
+  onRemove: () => void;
+}) {
+  const iframeRef  = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(80);
+  const initialHtml = useRef(html); // only used on mount
 
-  const doc = `<!DOCTYPE html><html><head><style>
-    *{box-sizing:border-box;}
-    body{margin:0;padding:12px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
-      font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;}
-    img{max-width:100%;height:auto;display:block;}
-    a{color:#CB2039;}
-    table{border-collapse:collapse;}
-    p{margin:0 0 10px;}
-    h1{font-size:22px;font-weight:700;margin:0 0 12px;}
-    h2{font-size:18px;font-weight:600;margin:0 0 10px;}
-    h3{font-size:15px;font-weight:600;margin:0 0 8px;}
-  </style></head><body>${html}</body></html>`;
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const CSS = `
+      *{box-sizing:border-box;}
+      body{margin:0;padding:12px 16px;
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+        font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;outline:none;}
+      img{max-width:100%;height:auto;display:block;}
+      a{color:#CB2039;}
+      table{border-collapse:collapse;}
+      p{margin:0 0 10px;}
+      h1{font-size:22px;font-weight:700;margin:0 0 12px;}
+      h2{font-size:18px;font-weight:600;margin:0 0 10px;}
+      h3{font-size:15px;font-weight:600;margin:0 0 8px;}
+      [contenteditable]:focus{outline:2px solid rgba(203,32,57,.35);outline-offset:2px;border-radius:3px;}
+    `;
+
+    const init = () => {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head><style>${CSS}</style></head><body>${initialHtml.current}</body></html>`);
+      doc.close();
+      doc.designMode = "on";
+
+      const updateHeight = () => setHeight((doc.body?.scrollHeight ?? 60) + 24);
+      doc.addEventListener("input", () => {
+        onChange(doc.body?.innerHTML ?? "");
+        updateHeight();
+      });
+      updateHeight();
+    };
+
+    if (iframe.contentDocument?.readyState === "complete") {
+      init();
+    } else {
+      iframe.onload = init;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only run once on mount
 
   return (
-    <div className="border border-dashed border-border rounded-lg overflow-hidden bg-white relative group">
+    <div className="border border-dashed border-primary/30 rounded-lg overflow-hidden bg-white relative group hover:border-primary/60 transition-colors">
       <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
-        <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
+          <span className="text-[9px] text-primary/50 italic hidden group-hover:inline">click to edit</span>
+        </div>
         <button
           type="button"
           onClick={onRemove}
@@ -145,15 +186,7 @@ function BlockRenderer({ html, name, onRemove }: { html: string; name: string; o
       </div>
       <iframe
         ref={iframeRef}
-        srcDoc={doc}
-        sandbox="allow-same-origin"
         scrolling="no"
-        onLoad={() => {
-          const iframe = iframeRef.current;
-          if (iframe?.contentDocument?.body) {
-            setHeight(iframe.contentDocument.body.scrollHeight + 24);
-          }
-        }}
         style={{ width: "100%", height, border: "none", display: "block" }}
         title={name}
       />
@@ -246,6 +279,10 @@ export default function EmailComposer({
 
   const removeBlock = useCallback((id: string) => {
     setInsertedBlocks(prev => prev.filter(b => b.id !== id));
+  }, []);
+
+  const updateBlock = useCallback((id: string, html: string) => {
+    setInsertedBlocks(prev => prev.map(b => b.id === id ? { ...b, html } : b));
   }, []);
 
   // Assets Library
@@ -389,10 +426,11 @@ export default function EmailComposer({
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Inserted Blocks</p>
             {insertedBlocks.map((block) => (
-              <BlockRenderer
+              <BlockEditor
                 key={block.id}
                 html={block.html}
                 name={block.name}
+                onChange={(html) => updateBlock(block.id, html)}
                 onRemove={() => removeBlock(block.id)}
               />
             ))}
