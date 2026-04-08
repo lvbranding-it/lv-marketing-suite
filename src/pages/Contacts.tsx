@@ -382,56 +382,46 @@ export default function Contacts() {
 
       <div className="p-3 sm:p-6 pb-16">
         <Tabs defaultValue="my-contacts">
-          <div className="flex items-center justify-between mb-6 overflow-x-auto">
-            <TabsList>
-              <TabsTrigger value="my-contacts">
-                My Contacts
-                <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                  {visibleStatic.length + imported.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="research">
-                Research
-                {imported.filter((c) => c.verification_status === "unverified").length > 0 && (
-                  <span className="ml-1.5 text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full">
-                    {imported.filter((c) => c.verification_status === "unverified").length}
+          <div className="flex items-center gap-2 mb-4 sm:mb-6">
+            <div className="overflow-x-auto flex-1 min-w-0">
+              <TabsList className="w-max">
+                <TabsTrigger value="my-contacts">
+                  <span className="hidden xs:inline">My </span>Contacts
+                  <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                    {visibleStatic.length + imported.length}
                   </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="pipeline">
-                Pipeline
-                <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                  {imported.filter((c) => c.verification_status === "verified").length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="vibe">Find Prospects</TabsTrigger>
-              <TabsTrigger value="apollo">Apollo CRM</TabsTrigger>
-            </TabsList>
+                </TabsTrigger>
+                <TabsTrigger value="research">
+                  Research
+                  {imported.filter((c) => c.verification_status === "unverified").length > 0 && (
+                    <span className="ml-1.5 text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full">
+                      {imported.filter((c) => c.verification_status === "unverified").length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="pipeline">
+                  Pipeline
+                  <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                    {imported.filter((c) => c.verification_status === "verified").length}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value="vibe" className="hidden sm:flex">Find Prospects</TabsTrigger>
+                <TabsTrigger value="apollo" className="hidden sm:flex">Apollo CRM</TabsTrigger>
+              </TabsList>
+            </div>
             {canAddContacts && (
-              <Button size="sm" onClick={openAdd}>
-                <UserPlus size={14} className="mr-1.5" />
-                New Contact
+              <Button size="sm" onClick={openAdd} className="shrink-0">
+                <UserPlus size={14} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">New Contact</span>
               </Button>
             )}
           </div>
 
           {/* ── My Contacts ─────────────────────────────────────── */}
           <TabsContent value="my-contacts">
-          <div className="flex gap-4 items-start">
 
-            {/* Tag sidebar */}
-            <div className="hidden lg:block w-48 shrink-0 sticky top-4">
-              <div className="bg-card border border-border rounded-lg p-3 max-h-[80vh] overflow-y-auto">
-                <TagSidebar
-                  contacts={imported}
-                  selectedTag={selectedTag}
-                  onSelectTag={setSelectedTag}
-                />
-              </div>
-            </div>
-
-            {/* Mobile tag strip */}
-            <div className="lg:hidden w-full overflow-x-auto flex gap-1.5 pb-1 mb-2">
+            {/* Mobile tag strip — full-width row above content */}
+            <div className="lg:hidden overflow-x-auto flex gap-1.5 pb-2 mb-3">
               <button
                 onClick={() => setSelectedTag(null)}
                 className={cn(
@@ -453,6 +443,19 @@ export default function Contacts() {
                   {d.name}
                 </button>
               ))}
+            </div>
+
+          <div className="flex gap-4 items-start">
+
+            {/* Desktop tag sidebar */}
+            <div className="hidden lg:block w-48 shrink-0 sticky top-4">
+              <div className="bg-card border border-border rounded-lg p-3 max-h-[80vh] overflow-y-auto">
+                <TagSidebar
+                  contacts={imported}
+                  selectedTag={selectedTag}
+                  onSelectTag={setSelectedTag}
+                />
+              </div>
             </div>
 
             {/* Main content */}
@@ -547,7 +550,7 @@ export default function Contacts() {
                       return (
                         <div
                           key={c.id}
-                          className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/30 cursor-pointer"
+                          className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border last:border-b-0 hover:bg-muted/30 cursor-pointer"
                           onClick={() => setSlideOverContact(c)}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -582,8 +585,8 @@ export default function Contacts() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <Badge variant="outline" className="text-[9px]">{c.source}</Badge>
+                          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                            <Badge variant="outline" className="text-[9px] hidden sm:inline-flex">{c.source}</Badge>
                             {c.email && <span className="text-[10px] text-primary hidden sm:block">{c.email}</span>}
                             {/* Quick tag button */}
                             <Popover
@@ -668,7 +671,7 @@ export default function Contacts() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive hidden sm:inline-flex"
                                 onClick={(e) => handleDeleteImported(c.id, e)}
                                 title="Delete contact"
                               >
