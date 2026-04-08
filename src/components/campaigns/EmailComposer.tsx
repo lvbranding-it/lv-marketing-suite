@@ -113,6 +113,54 @@ function buildPreviewDoc(bodyHtml: string, previewWidth: "desktop" | "mobile") {
 </html>`;
 }
 
+// Full-size isolated block renderer (uses iframe so Tailwind doesn't stomp table widths)
+function BlockRenderer({ html, name, onRemove }: { html: string; name: string; onRemove: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(80);
+
+  const doc = `<!DOCTYPE html><html><head><style>
+    *{box-sizing:border-box;}
+    body{margin:0;padding:12px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+      font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;}
+    img{max-width:100%;height:auto;display:block;}
+    a{color:#CB2039;}
+    table{border-collapse:collapse;}
+    p{margin:0 0 10px;}
+    h1{font-size:22px;font-weight:700;margin:0 0 12px;}
+    h2{font-size:18px;font-weight:600;margin:0 0 10px;}
+    h3{font-size:15px;font-weight:600;margin:0 0 8px;}
+  </style></head><body>${html}</body></html>`;
+
+  return (
+    <div className="border border-dashed border-border rounded-lg overflow-hidden bg-white relative group">
+      <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
+        <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          Remove
+        </button>
+      </div>
+      <iframe
+        ref={iframeRef}
+        srcDoc={doc}
+        sandbox="allow-same-origin"
+        scrolling="no"
+        onLoad={() => {
+          const iframe = iframeRef.current;
+          if (iframe?.contentDocument?.body) {
+            setHeight(iframe.contentDocument.body.scrollHeight + 24);
+          }
+        }}
+        style={{ width: "100%", height, border: "none", display: "block" }}
+        title={name}
+      />
+    </div>
+  );
+}
+
 // Small scaled HTML thumbnail for asset cards
 function BlockThumbnail({ html }: { html: string }) {
   const doc = `<html><head><style>
@@ -341,23 +389,12 @@ export default function EmailComposer({
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Inserted Blocks</p>
             {insertedBlocks.map((block) => (
-              <div key={block.id} className="border border-dashed border-border rounded-lg overflow-hidden bg-white relative group">
-                <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
-                  <span className="text-[10px] font-medium text-muted-foreground">{block.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeBlock(block.id)}
-                    className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Remove
-                  </button>
-                </div>
-                <div
-                  className="p-3 text-sm pointer-events-none overflow-hidden"
-                  style={{ maxHeight: 160, overflow: "hidden" }}
-                  dangerouslySetInnerHTML={{ __html: block.html }}
-                />
-              </div>
+              <BlockRenderer
+                key={block.id}
+                html={block.html}
+                name={block.name}
+                onRemove={() => removeBlock(block.id)}
+              />
             ))}
           </div>
         )}
