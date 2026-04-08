@@ -205,16 +205,26 @@ export default function Campaigns() {
       }
       // Insert into contacts table (upsert by email + org_id to avoid duplicates)
       const rows = contacts.map((c) => ({
-        org_id: org.id,
-        email: c.email,
+        org_id:     org.id,
+        email:      c.email,
         first_name: c.first_name || null,
-        last_name: c.last_name || null,
-        company: c.company || null,
-        source: "csv_import",
+        last_name:  c.last_name  || null,
+        company:    c.company    || null,
+        title:      c.title      || null,
+        phone:      c.phone      || null,
+        city:       c.city       || null,
+        state:      c.state      || null,
+        country:    c.country    || null,
+        tags:       c.tags,
+        source:     "manual" as const,
+        source_id:  null,
+        apollo_id:  null,
+        signals:    [],
+        raw_data:   {},
       }));
       const { error } = await supabase
         .from("contacts")
-        .upsert(rows as any, { onConflict: "org_id,email", ignoreDuplicates: true });
+        .upsert(rows, { onConflict: "org_id,email" });
       if (error) throw error;
       toast({ description: `✅ ${contacts.length} contact${contacts.length !== 1 ? "s" : ""} imported successfully.` });
     } catch (err) {
