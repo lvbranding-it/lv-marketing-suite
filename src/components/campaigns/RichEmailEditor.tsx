@@ -26,6 +26,7 @@ interface Props {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  onInsertBlock?: (name: string, html: string) => void;
 }
 
 function ToolbarBtn({
@@ -73,7 +74,7 @@ const LAYOUT_3COL = `<table width="100%" cellpadding="0" cellspacing="0" border=
 const LAYOUT_1_3_2_3 = `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;"><tr><td width="33%" style="padding:0 16px 0 0;vertical-align:top;"><p>Sidebar content...</p></td><td width="67%" style="padding:0 0 0 16px;vertical-align:top;"><p>Main content here...</p></td></tr></table>`;
 
 const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEmailEditor(
-  { value, onChange, placeholder },
+  { value, onChange, placeholder, onInsertBlock },
   ref
 ) {
   const { org } = useOrg();
@@ -293,19 +294,19 @@ const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEm
             <LayoutList size={13} />
           </ToolbarBtn>
           <ToolbarBtn
-            onClick={() => editor.chain().focus().insertContent(LAYOUT_2COL).run()}
+            onClick={() => onInsertBlock?.("2-Column (50/50)", LAYOUT_2COL)}
             title="2 columns equal (50/50)"
           >
             <Columns2 size={13} />
           </ToolbarBtn>
           <ToolbarBtn
-            onClick={() => editor.chain().focus().insertContent(LAYOUT_3COL).run()}
+            onClick={() => onInsertBlock?.("3-Column (33/33/33)", LAYOUT_3COL)}
             title="3 columns equal (33/33/33)"
           >
             <Columns3 size={13} />
           </ToolbarBtn>
           <ToolbarBtn
-            onClick={() => editor.chain().focus().insertContent(LAYOUT_1_3_2_3).run()}
+            onClick={() => onInsertBlock?.("Asymmetric (1/3 + 2/3)", LAYOUT_1_3_2_3)}
             title="Asymmetric (1/3 + 2/3)"
           >
             <span className="flex items-center text-[9px] font-mono leading-none gap-px">

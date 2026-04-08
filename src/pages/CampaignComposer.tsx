@@ -268,7 +268,7 @@ export default function CampaignComposer() {
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-        <div className="max-w-3xl mx-auto">
+        <div className={cn(step === 2 ? "w-full" : "max-w-3xl mx-auto")}>
 
           {/* Step 1 — Recipients */}
           {step === 1 && (

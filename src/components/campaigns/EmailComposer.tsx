@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Sparkles, Loader2, Copy, Check, RefreshCw,
   BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone,
@@ -26,6 +26,8 @@ Max 180 words. Direct, confident, not salesy. No <html>/<head>/<body>/<style> ta
 // ── Built-in block definitions ────────────────────────────────────────────────
 interface BuiltinBlock { name: string; html: string; }
 
+const IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'%3E%3Crect width='400' height='260' fill='%23f1f5f9' rx='6'/%3E%3Ctext x='200' y='135' text-anchor='middle' fill='%2394a3b8' font-size='15' font-family='Arial,sans-serif'%3EYour Image%3C/text%3E%3C/svg%3E";
+
 const BUILTIN_BLOCKS: BuiltinBlock[] = [
   {
     name: "LV Header",
@@ -36,16 +38,28 @@ const BUILTIN_BLOCKS: BuiltinBlock[] = [
     html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:24px 0;"><tr><td style="text-align:center;"><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;font-size:14px;letter-spacing:0.5px;">Schedule a Free Call →</a></td></tr></table>`,
   },
   {
+    name: "Image + Text",
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td width="42%" style="padding:0 20px 0 0;vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td><td style="vertical-align:middle;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your value proposition here. Be direct and focus on how you help the reader achieve their goal.</p><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Learn More →</a></td></tr></table>`,
+  },
+  {
+    name: "Text + Image",
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="vertical-align:middle;padding:0 20px 0 0;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your service or offer. Keep it concise — 2-3 sentences is ideal for email.</p><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Get Started →</a></td><td width="42%" style="vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td></tr></table>`,
+  },
+  {
+    name: "3-Feature Columns",
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td width="33%" style="padding:0 12px 0 0;vertical-align:top;text-align:center;"><table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;"><tr><td width="48" height="48" style="background:#fef2f2;border-radius:24px;text-align:center;vertical-align:middle;font-size:22px;">🚀</td></tr></table><p style="margin:0 0 6px;font-weight:700;font-size:15px;color:#111827;">Feature One</p><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Short description of benefit or feature.</p></td><td width="34%" style="padding:0 6px;vertical-align:top;text-align:center;"><table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;"><tr><td width="48" height="48" style="background:#fef2f2;border-radius:24px;text-align:center;vertical-align:middle;font-size:22px;">📊</td></tr></table><p style="margin:0 0 6px;font-weight:700;font-size:15px;color:#111827;">Feature Two</p><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Short description of benefit or feature.</p></td><td width="33%" style="padding:0 0 0 12px;vertical-align:top;text-align:center;"><table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 12px;"><tr><td width="48" height="48" style="background:#fef2f2;border-radius:24px;text-align:center;vertical-align:middle;font-size:22px;">💼</td></tr></table><p style="margin:0 0 6px;font-weight:700;font-size:15px;color:#111827;">Feature Three</p><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Short description of benefit or feature.</p></td></tr></table>`,
+  },
+  {
+    name: "Testimonial",
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="background:#f9fafb;border-left:4px solid #CB2039;border-radius:0 8px 8px 0;padding:20px 24px;"><p style="margin:0 0 12px;font-size:16px;color:#374151;line-height:1.6;font-style:italic;">"Working with LV Branding transformed how we attract patients online. Our new website and targeted campaigns have driven a 40% increase in bookings within 3 months."</p><p style="margin:0;font-size:13px;color:#6b7280;"><strong style="color:#111827;">Dr. Maria Gonzalez</strong> · Houston Medical Group</p></td></tr></table>`,
+  },
+  {
     name: "Signature",
     html: `<p style="margin:24px 0 4px;">Warm regards,</p><p style="margin:0;font-weight:600;">The LV Branding Team</p><p style="margin:2px 0;font-size:12px;color:#666;">LV Branding · Houston, TX · <a href="https://lvbranding.com" style="color:#CB2039;">lvbranding.com</a></p>`,
   },
   {
     name: "Divider",
     html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="border-top:1px solid #e5e7eb;font-size:0;line-height:0;">&nbsp;</td></tr></table>`,
-  },
-  {
-    name: "Feature Block",
-    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;"><tr><td width="64" style="padding:0 16px 0 0;vertical-align:top;"><table width="48" height="48" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background:#CB2039;border-radius:8px;"><tr><td style="text-align:center;vertical-align:middle;color:#fff;font-size:20px;">★</td></tr></table></td><td style="vertical-align:top;"><p style="margin:0 0 4px;font-weight:600;font-size:15px;">Feature Headline</p><p style="margin:0;font-size:13px;color:#666;">Describe the benefit or feature clearly. Keep it to 1–2 sentences.</p></td></tr></table>`,
   },
 ];
 
@@ -122,6 +136,9 @@ function BlockThumbnail({ html }: { html: string }) {
   );
 }
 
+// ── Block type ────────────────────────────────────────────────────────────────
+type Block = { id: string; name: string; html: string };
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface Props {
   campaignName: string;
@@ -147,6 +164,42 @@ export default function EmailComposer({
   const [copied,        setCopied]        = useState(false);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
 
+  // Block-based body state
+  const [initialized,    setInitialized]    = useState(false);
+  const [tiptapHtml,     setTiptapHtml]     = useState("");
+  const [insertedBlocks, setInsertedBlocks] = useState<Block[]>([]);
+
+  // The combined HTML (what preview shows and what gets saved)
+  const combinedHtml = useMemo(
+    () => tiptapHtml + insertedBlocks.map(b => b.html).join("\n"),
+    [tiptapHtml, insertedBlocks]
+  );
+
+  // Initialize tiptapHtml from bodyHtml prop ONCE on mount
+  useEffect(() => {
+    if (!initialized) {
+      // Strip table HTML since Tiptap can't handle it
+      const textOnly = (bodyHtml || "").replace(/<table[\s\S]*?<\/table>/gi, "").trim();
+      setTiptapHtml(textOnly);
+      setInitialized(true);
+    }
+  }, [bodyHtml, initialized]);
+
+  // Notify parent whenever combined changes
+  useEffect(() => {
+    if (initialized) {
+      onBodyHtmlChange(combinedHtml);
+    }
+  }, [combinedHtml, initialized, onBodyHtmlChange]);
+
+  const addBlock = useCallback((name: string, html: string) => {
+    setInsertedBlocks(prev => [...prev, { id: crypto.randomUUID(), name, html }]);
+  }, []);
+
+  const removeBlock = useCallback((id: string) => {
+    setInsertedBlocks(prev => prev.filter(b => b.id !== id));
+  }, []);
+
   // Assets Library
   const [assetsOpen,    setAssetsOpen]    = useState(false);
   const [assetsTab,     setAssetsTab]     = useState<"builtin" | "saved">("builtin");
@@ -158,14 +211,14 @@ export default function EmailComposer({
   const saveBlock   = useSaveEmailBlock();
   const deleteBlock = useDeleteEmailBlock();
 
-  const insertBlock = (html: string) => editorRef.current?.insertHtml(html);
+  const insertBlock = (name: string, html: string) => addBlock(name, html);
 
   const handleSaveCurrentBody = async () => {
     const name = saveBlockName.trim();
-    if (!name || !bodyHtml) return;
+    if (!name || !combinedHtml) return;
     setSavingBlock(true);
     try {
-      await saveBlock.mutateAsync({ name, html: bodyHtml });
+      await saveBlock.mutateAsync({ name, html: combinedHtml });
       setSaveBlockName("");
     } finally {
       setSavingBlock(false);
@@ -175,7 +228,8 @@ export default function EmailComposer({
   const generate = async () => {
     if (!intent.trim()) return;
     setStreaming(true);
-    onSubjectChange(""); onPreviewTextChange(""); onBodyHtmlChange("");
+    setTiptapHtml(""); setInsertedBlocks([]);
+    onSubjectChange(""); onPreviewTextChange("");
     let full = "";
     await runSkillStream(
       { skillSystemPrompt: SYSTEM_PROMPT, userMessage: intent.trim(), conversationHistory: [], marketingContext: {} },
@@ -187,7 +241,7 @@ export default function EmailComposer({
           const bodyStart    = full.indexOf("---\n");
           if (subjectMatch) onSubjectChange(subjectMatch[1].trim());
           if (previewMatch) onPreviewTextChange(previewMatch[1].trim());
-          if (bodyStart !== -1) onBodyHtmlChange(full.slice(bodyStart + 4).trimStart());
+          if (bodyStart !== -1) setTiptapHtml(full.slice(bodyStart + 4).trimStart());
         },
         onComplete: (text) => {
           const lines     = text.split("\n");
@@ -196,7 +250,7 @@ export default function EmailComposer({
           const bodyStart = text.indexOf("---\n");
           if (subLine)    onSubjectChange(subLine.replace("SUBJECT:", "").trim());
           if (prevLine)   onPreviewTextChange(prevLine.replace("PREVIEW:", "").trim());
-          if (bodyStart !== -1) onBodyHtmlChange(text.slice(bodyStart + 4).trimStart());
+          if (bodyStart !== -1) setTiptapHtml(text.slice(bodyStart + 4).trimStart());
           setStreaming(false);
         },
         onError: () => setStreaming(false),
@@ -205,14 +259,14 @@ export default function EmailComposer({
   };
 
   const copyBody = async () => {
-    await navigator.clipboard.writeText(bodyHtml);
+    await navigator.clipboard.writeText(combinedHtml);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const previewDoc = useMemo(
-    () => buildPreviewDoc(bodyHtml, previewDevice),
-    [bodyHtml, previewDevice]
+    () => buildPreviewDoc(combinedHtml, previewDevice),
+    [combinedHtml, previewDevice]
   );
 
   return (
@@ -243,7 +297,7 @@ export default function EmailComposer({
           <Button onClick={generate} disabled={streaming || !intent.trim()} className="gap-2 w-full sm:w-auto" size="sm">
             {streaming
               ? <><Loader2 size={13} className="animate-spin" />Writing…</>
-              : bodyHtml
+              : combinedHtml
               ? <><RefreshCw size={13} />Re-generate</>
               : <><Sparkles size={13} />Generate Email</>}
           </Button>
@@ -275,11 +329,38 @@ export default function EmailComposer({
           </div>
           <RichEmailEditor
             ref={editorRef}
-            value={bodyHtml}
-            onChange={onBodyHtmlChange}
+            value={tiptapHtml}
+            onChange={setTiptapHtml}
+            onInsertBlock={addBlock}
             placeholder="Start writing your email — or use the AI writer above to generate it."
           />
         </div>
+
+        {/* Inserted layout/asset blocks */}
+        {insertedBlocks.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Inserted Blocks</p>
+            {insertedBlocks.map((block) => (
+              <div key={block.id} className="border border-dashed border-border rounded-lg overflow-hidden bg-white relative group">
+                <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-muted-foreground">{block.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeBlock(block.id)}
+                    className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div
+                  className="p-3 text-sm pointer-events-none overflow-hidden"
+                  style={{ maxHeight: 160, overflow: "hidden" }}
+                  dangerouslySetInnerHTML={{ __html: block.html }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Assets Library */}
         <div className="border border-border rounded-xl overflow-hidden">
@@ -320,7 +401,7 @@ export default function EmailComposer({
                         <span className="text-[10px] font-medium truncate">{block.name}</span>
                         <button
                           type="button"
-                          onClick={() => insertBlock(block.html)}
+                          onClick={() => insertBlock(block.name, block.html)}
                           className="shrink-0 text-[9px] px-2 py-0.5 bg-primary text-primary-foreground rounded font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           Insert
@@ -346,7 +427,7 @@ export default function EmailComposer({
                     <button
                       type="button"
                       onClick={handleSaveCurrentBody}
-                      disabled={!saveBlockName.trim() || !bodyHtml || savingBlock}
+                      disabled={!saveBlockName.trim() || !combinedHtml || savingBlock}
                       className="text-[10px] px-3 py-1.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 whitespace-nowrap"
                     >
                       {savingBlock ? "Saving…" : "Save Current Body"}
@@ -367,7 +448,7 @@ export default function EmailComposer({
                           <div className="px-2 py-1.5 flex items-center justify-between gap-1">
                             <span className="text-[10px] font-medium truncate">{block.name}</span>
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                              <button type="button" onClick={() => insertBlock(block.html)}
+                              <button type="button" onClick={() => insertBlock(block.name, block.html)}
                                 className="text-[9px] px-2 py-0.5 bg-primary text-primary-foreground rounded font-medium">Insert</button>
                               <button type="button" onClick={() => deleteBlock.mutate(block.id)} disabled={deleteBlock.isPending}
                                 className="p-0.5 text-destructive hover:bg-destructive/10 rounded transition-colors"><Trash2 size={10} /></button>
@@ -385,7 +466,7 @@ export default function EmailComposer({
       </div>
 
       {/* ── RIGHT: Live email preview panel ────────────────────────────── */}
-      <div className="hidden xl:flex w-[380px] shrink-0 flex-col sticky top-4" style={{ height: "calc(100vh - 120px)" }}>
+      <div className="hidden xl:flex w-[480px] shrink-0 flex-col sticky top-4" style={{ height: "calc(100vh - 120px)" }}>
         {/* Preview header */}
         <div className="flex items-center justify-between mb-2 px-1">
           <div>
