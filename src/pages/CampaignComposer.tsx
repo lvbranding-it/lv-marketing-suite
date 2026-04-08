@@ -131,9 +131,11 @@ export default function CampaignComposer() {
     }
   };
 
-  // Auto-save with 2-second debounce
+  // Auto-save with 2-second debounce.
+  // Skip until campaign data has been loaded (edit mode) to avoid writing
+  // stale/empty state back to the DB before the form is populated.
   useEffect(() => {
-    // Only auto-save if there's meaningful content
+    if (editId && !initialized) return;          // still loading — don't auto-save yet
     if (!campaignName && !subject && !bodyHtml && recipients.length === 0) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
@@ -143,7 +145,7 @@ export default function CampaignComposer() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignName, subject, previewText, bodyHtml, recipients]);
+  }, [campaignName, subject, previewText, bodyHtml, recipients, initialized]);
 
   const handleSend = async () => {
     setSending(true);
@@ -270,7 +272,14 @@ export default function CampaignComposer() {
       <div className="flex-1 overflow-y-auto p-3 sm:p-6">
         <div className={cn(step === 1 ? "w-full" : "max-w-3xl mx-auto")}>
 
-          {/* Step 1 — Compose */}
+          {/* Step 1 — Compose
+              IMPORTANT: for edit mode we must NOT mount EmailComposer until the
+              campaign data has loaded from the DB.  EmailComposer initialises its
+              internal tiptapHtml on first mount; if it mounts with bodyHtml=""
+              and later receives the real content as a prop change, the guard
+              `if (!initialized)` prevents the re-sync and the editor stays empty.
+              Solution: delay rendering until `initialized` is true (or there is
+              no editId, meaning it's a brand-new campaign).              */}
           {step === 1 && (
             <div className="space-y-3">
               <div>
@@ -279,13 +288,23 @@ export default function CampaignComposer() {
                   Describe your campaign and let AI draft it, then edit as needed.
                 </p>
               </div>
-              <EmailComposer
-                campaignName={campaignName}      onCampaignNameChange={setCampaignName}
-                subject={subject}                onSubjectChange={setSubject}
-                previewText={previewText}        onPreviewTextChange={setPreviewText}
-                bodyHtml={bodyHtml}              onBodyHtmlChange={setBodyHtml}
-                recipientCount={recipients.length}
-              />
+
+              {/* Wait for existing campaign data before mounting the composer */}
+              {editId && !initialized ? (
+                <div className="flex items-center justify-center py-20 text-muted-foreground">
+                  <Loader2 size={22} className="animate-spin mr-2" />
+                  <span className="text-sm">Loading draft…</span>
+                </div>
+              ) : (
+                <EmailComposer
+                  key={draftId ?? "new"}
+                  campaignName={campaignName}      onCampaignNameChange={setCampaignName}
+                  subject={subject}                onSubjectChange={setSubject}
+                  previewText={previewText}        onPreviewTextChange={setPreviewText}
+                  bodyHtml={bodyHtml}              onBodyHtmlChange={setBodyHtml}
+                  recipientCount={recipients.length}
+                />
+              )}
             </div>
           )}
 
