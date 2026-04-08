@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Sparkles, Loader2, Copy, Check, RefreshCw,
-  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone,
+  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone, Upload, Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { runSkillStream } from "@/lib/claude";
 import RichEmailEditor, { type RichEmailEditorHandle } from "@/components/campaigns/RichEmailEditor";
 import { useEmailBlocks, useSaveEmailBlock, useDeleteEmailBlock } from "@/hooks/useEmailBlocks";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "@/hooks/useOrg";
 
 const SYSTEM_PROMPT = `You are an expert B2B email marketing copywriter for LV Branding, a Houston-based full-service marketing agency.
 
@@ -113,77 +115,197 @@ function buildPreviewDoc(bodyHtml: string, previewWidth: "desktop" | "mobile") {
 </html>`;
 }
 
-// Editable block — renders HTML in a designMode iframe so columns/tables stay intact
+// Editable block — designMode iframe + contextual toolbars for images and links
+type ActiveEdit =
+  | { type: "img";  el: HTMLImageElement;   urlDraft: string }
+  | { type: "link"; el: HTMLAnchorElement;  hrefDraft: string };
+
+const BLOCK_CSS = `
+  *{box-sizing:border-box;}
+  body{margin:0;padding:12px 16px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+    font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;outline:none;}
+  img{max-width:100%;height:auto;display:block;cursor:pointer;}
+  img:hover{outline:2px dashed #CB2039;outline-offset:2px;}
+  a{color:#CB2039;cursor:pointer;}
+  a:hover{text-decoration:underline;}
+  table{border-collapse:collapse;}
+  p{margin:0 0 10px;}
+  h1{font-size:22px;font-weight:700;margin:0 0 12px;}
+  h2{font-size:18px;font-weight:600;margin:0 0 10px;}
+  h3{font-size:15px;font-weight:600;margin:0 0 8px;}
+`;
+
 function BlockEditor({
-  html, name, onChange, onRemove,
+  html, name, orgId, onChange, onRemove,
 }: {
   html: string;
   name: string;
+  orgId: string | undefined;
   onChange: (html: string) => void;
   onRemove: () => void;
 }) {
-  const iframeRef  = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(80);
-  const initialHtml = useRef(html); // only used on mount
+  const iframeRef    = useRef<HTMLIFrameElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialHtml  = useRef(html);
+  const [height,     setHeight]     = useState(80);
+  const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
+  const [uploading,  setUploading]  = useState(false);
 
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const CSS = `
-      *{box-sizing:border-box;}
-      body{margin:0;padding:12px 16px;
-        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
-        font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;outline:none;}
-      img{max-width:100%;height:auto;display:block;}
-      a{color:#CB2039;}
-      table{border-collapse:collapse;}
-      p{margin:0 0 10px;}
-      h1{font-size:22px;font-weight:700;margin:0 0 12px;}
-      h2{font-size:18px;font-weight:600;margin:0 0 10px;}
-      h3{font-size:15px;font-weight:600;margin:0 0 8px;}
-      [contenteditable]:focus{outline:2px solid rgba(203,32,57,.35);outline-offset:2px;border-radius:3px;}
-    `;
-
     const init = () => {
       const doc = iframe.contentDocument;
       if (!doc) return;
       doc.open();
-      doc.write(`<!DOCTYPE html><html><head><style>${CSS}</style></head><body>${initialHtml.current}</body></html>`);
+      doc.write(`<!DOCTYPE html><html><head><style>${BLOCK_CSS}</style></head><body>${initialHtml.current}</body></html>`);
       doc.close();
       doc.designMode = "on";
 
       const updateHeight = () => setHeight((doc.body?.scrollHeight ?? 60) + 24);
+
       doc.addEventListener("input", () => {
         onChange(doc.body?.innerHTML ?? "");
         updateHeight();
       });
+
+      doc.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        // Image click → show replace toolbar
+        if (target.tagName === "IMG") {
+          e.preventDefault();
+          const img = target as HTMLImageElement;
+          setActiveEdit({ type: "img", el: img, urlDraft: img.getAttribute("src") ?? "" });
+          return;
+        }
+        // Link / button click → show URL editor
+        const link = target.closest("a") as HTMLAnchorElement | null;
+        if (link) {
+          e.preventDefault();
+          setActiveEdit({ type: "link", el: link, hrefDraft: link.getAttribute("href") ?? "" });
+          return;
+        }
+        setActiveEdit(null);
+      });
+
       updateHeight();
     };
 
-    if (iframe.contentDocument?.readyState === "complete") {
-      init();
-    } else {
-      iframe.onload = init;
-    }
+    if (iframe.contentDocument?.readyState === "complete") init();
+    else iframe.onload = init;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // only run once on mount
+  }, []);
+
+  const readBody = () => iframeRef.current?.contentDocument?.body?.innerHTML ?? "";
+
+  const applyImgUrl = () => {
+    if (activeEdit?.type !== "img") return;
+    activeEdit.el.src = activeEdit.urlDraft;
+    onChange(readBody());
+    setActiveEdit(null);
+  };
+
+  const applyLinkHref = () => {
+    if (activeEdit?.type !== "link") return;
+    activeEdit.el.setAttribute("href", activeEdit.hrefDraft);
+    onChange(readBody());
+    setActiveEdit(null);
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!orgId) return;
+    setUploading(true);
+    try {
+      const ext  = file.name.split(".").pop() ?? "jpg";
+      const path = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage
+        .from("email-assets")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("email-assets").getPublicUrl(path);
+      if (activeEdit?.type === "img") {
+        activeEdit.el.src = publicUrl;
+        onChange(readBody());
+        setActiveEdit(null);
+      }
+    } catch (err) {
+      console.error("Image upload failed:", err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
-    <div className="border border-dashed border-primary/30 rounded-lg overflow-hidden bg-white relative group hover:border-primary/60 transition-colors">
+    <div className="border border-dashed border-primary/30 rounded-lg overflow-hidden bg-white group hover:border-primary/60 transition-colors">
+      {/* Title bar */}
       <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
-          <span className="text-[9px] text-primary/50 italic hidden group-hover:inline">click to edit</span>
+          <span className="text-[9px] text-primary/60 italic hidden group-hover:inline">
+            click text to edit · click image or button to replace
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-        >
+        <button type="button" onClick={onRemove}
+          className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity">
           Remove
         </button>
       </div>
+
+      {/* Image replace toolbar */}
+      {activeEdit?.type === "img" && (
+        <div className="px-3 py-2 border-b border-border bg-sky-50 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold text-sky-700 flex items-center gap-1">
+            <Upload size={11}/> Replace Image
+          </span>
+          <label className={cn(
+            "flex items-center gap-1 text-[11px] px-2 py-1 bg-primary text-primary-foreground rounded cursor-pointer font-medium",
+            uploading && "opacity-50 pointer-events-none"
+          )}>
+            {uploading ? <><Loader2 size={10} className="animate-spin"/>Uploading…</> : "Upload file"}
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
+          </label>
+          <span className="text-[10px] text-muted-foreground">or paste URL:</span>
+          <input
+            type="url"
+            value={activeEdit.urlDraft}
+            onChange={(e) => setActiveEdit({ ...activeEdit, urlDraft: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && applyImgUrl()}
+            placeholder="https://example.com/image.jpg"
+            className="flex-1 min-w-40 text-[11px] border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button onClick={applyImgUrl}
+            className="text-[11px] px-2 py-1 bg-primary text-primary-foreground rounded font-medium">Apply</button>
+          <button onClick={() => setActiveEdit(null)}
+            className="text-[11px] text-muted-foreground hover:text-foreground px-1">✕</button>
+        </div>
+      )}
+
+      {/* Link / button URL toolbar */}
+      {activeEdit?.type === "link" && (
+        <div className="px-3 py-2 border-b border-border bg-sky-50 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold text-sky-700 flex items-center gap-1">
+            <Link2 size={11}/> Button / Link URL
+          </span>
+          <input
+            type="url"
+            value={activeEdit.hrefDraft}
+            onChange={(e) => setActiveEdit({ ...activeEdit, hrefDraft: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && applyLinkHref()}
+            placeholder="https://lvbranding.com"
+            className="flex-1 min-w-52 text-[11px] border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button onClick={applyLinkHref}
+            className="text-[11px] px-2 py-1 bg-primary text-primary-foreground rounded font-medium">Apply</button>
+          <button onClick={() => setActiveEdit(null)}
+            className="text-[11px] text-muted-foreground hover:text-foreground px-1">✕</button>
+        </div>
+      )}
+
+      {/* The editable email block */}
       <iframe
         ref={iframeRef}
         scrolling="no"
@@ -291,6 +413,7 @@ export default function EmailComposer({
   const [saveBlockName, setSaveBlockName] = useState("");
   const [savingBlock,   setSavingBlock]   = useState(false);
 
+  const { org } = useOrg();
   const editorRef = useRef<RichEmailEditorHandle>(null);
   const { data: savedBlocks = [], isLoading: blocksLoading } = useEmailBlocks();
   const saveBlock   = useSaveEmailBlock();
@@ -430,6 +553,7 @@ export default function EmailComposer({
                 key={block.id}
                 html={block.html}
                 name={block.name}
+                orgId={org?.id}
                 onChange={(html) => updateBlock(block.id, html)}
                 onRemove={() => removeBlock(block.id)}
               />
