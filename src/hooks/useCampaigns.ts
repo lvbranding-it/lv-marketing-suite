@@ -49,9 +49,9 @@ export function useCampaign(id: string | null) {
         .from("email_campaigns")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
-      return data as EmailCampaign;
+      return data as EmailCampaign | null;
     },
     enabled: !!id,
     refetchInterval: (query) => {
