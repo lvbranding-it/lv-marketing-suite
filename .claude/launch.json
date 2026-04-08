@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "lv-marketing-suite",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "name": "LV Marketing Suite",
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["node_modules/.bin/vite", "--port", "8080"],
       "port": 8080
     }
   ]

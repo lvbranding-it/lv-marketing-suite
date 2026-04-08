@@ -384,6 +384,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      email_blocks: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          html: string;
+          category: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          html: string;
+          category?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          html?: string;
+          category?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       email_campaigns: {
         Row: {
           id: string;
@@ -782,6 +812,7 @@ export type SkillOutputRow = Tables<"skill_outputs">;
 export type TeamMember = Tables<"team_members">;
 export type Profile = Tables<"profiles">;
 export type Invitation = Tables<"invitations">;
+export type EmailBlock = Tables<"email_blocks">;
 export type EmailCampaign = Tables<"email_campaigns">;
 export type EmailCampaignRecipient = Tables<"email_campaign_recipients">;
 export type EmailSuppression = Tables<"email_suppressions">;

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -12,11 +12,15 @@ import {
   Bold, Italic, UnderlineIcon, Link2, Image as ImageIcon,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, Minus, Undo, Redo,
-  Palette, Link2Off, Loader2,
+  Palette, Link2Off, Loader2, LayoutList, Columns2, Columns3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+
+export interface RichEmailEditorHandle {
+  insertHtml: (html: string) => void;
+}
 
 interface Props {
   value: string;
@@ -59,7 +63,19 @@ function Divider() {
   return <div className="w-px h-5 bg-border mx-0.5 shrink-0" />;
 }
 
-export default function RichEmailEditor({ value, onChange, placeholder }: Props) {
+// Layout HTML templates (email-safe tables)
+const LAYOUT_1COL = `<p>Content here...</p>`;
+
+const LAYOUT_2COL = `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;"><tr><td width="50%" style="padding:0 16px 0 0;vertical-align:top;"><p>Left content here...</p></td><td width="50%" style="padding:0 0 0 16px;vertical-align:top;"><p>Right content here...</p></td></tr></table>`;
+
+const LAYOUT_3COL = `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;"><tr><td width="33%" style="padding:0 10px 0 0;vertical-align:top;"><p>Column 1...</p></td><td width="33%" style="padding:0 10px;vertical-align:top;"><p>Column 2...</p></td><td width="34%" style="padding:0 0 0 10px;vertical-align:top;"><p>Column 3...</p></td></tr></table>`;
+
+const LAYOUT_1_3_2_3 = `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;"><tr><td width="33%" style="padding:0 16px 0 0;vertical-align:top;"><p>Sidebar content...</p></td><td width="67%" style="padding:0 0 0 16px;vertical-align:top;"><p>Main content here...</p></td></tr></table>`;
+
+const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEmailEditor(
+  { value, onChange, placeholder },
+  ref
+) {
   const { org } = useOrg();
   const [linkUrl,        setLinkUrl]        = useState("");
   const [showLinkBox,    setShowLinkBox]    = useState(false);
@@ -94,6 +110,14 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
       },
     },
   });
+
+  // Expose insertHtml via ref
+  useImperativeHandle(ref, () => ({
+    insertHtml: (html: string) => {
+      if (!editor) return;
+      editor.chain().focus().insertContent(html).run();
+    },
+  }), [editor]);
 
   // Sync external value changes (e.g. AI generation)
   useEffect(() => {
@@ -256,6 +280,40 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
             />
           </label>
         </div>
+
+        <Divider />
+
+        {/* Layout section */}
+        <div className="flex items-center gap-0.5">
+          <span className="text-[9px] uppercase tracking-widest text-muted-foreground mr-0.5 select-none">Layout</span>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().insertContent(LAYOUT_1COL).run()}
+            title="1 column (paragraph)"
+          >
+            <LayoutList size={13} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().insertContent(LAYOUT_2COL).run()}
+            title="2 columns equal (50/50)"
+          >
+            <Columns2 size={13} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().insertContent(LAYOUT_3COL).run()}
+            title="3 columns equal (33/33/33)"
+          >
+            <Columns3 size={13} />
+          </ToolbarBtn>
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().insertContent(LAYOUT_1_3_2_3).run()}
+            title="Asymmetric (1/3 + 2/3)"
+          >
+            <span className="flex items-center text-[9px] font-mono leading-none gap-px">
+              <span className="inline-block w-2 h-3 border border-current rounded-sm" />
+              <span className="inline-block w-3.5 h-3 border border-current rounded-sm" />
+            </span>
+          </ToolbarBtn>
+        </div>
       </div>
 
       {/* Link input row */}
@@ -297,4 +355,6 @@ export default function RichEmailEditor({ value, onChange, placeholder }: Props)
       </div>
     </div>
   );
-}
+});
+
+export default RichEmailEditor;
