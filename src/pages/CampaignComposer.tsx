@@ -1,11 +1,20 @@
-import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Send, Users, Mail, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Send, Users, Mail, CheckCircle2, Loader2, AlertCircle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import RecipientSelector from "@/components/campaigns/RecipientSelector";
 import EmailComposer     from "@/components/campaigns/EmailComposer";
-import { useCreateCampaign, useSendCampaign, type SelectedRecipient } from "@/hooks/useCampaigns";
+import {
+  useCreateCampaign,
+  useSendCampaign,
+  useUpdateCampaign,
+  useUpsertCampaignRecipients,
+  useCampaign,
+  useCampaignRecipients,
+  type SelectedRecipient,
+  type EmailCampaign,
+} from "@/hooks/useCampaigns";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
@@ -21,7 +30,10 @@ const STEPS = [
 export default function CampaignComposer() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+
+  const editId = searchParams.get("edit");
 
   const cloneData = location.state?.cloneFrom as {
     name: string; subject: string; preview_text: string; body_html: string;
@@ -35,11 +47,48 @@ export default function CampaignComposer() {
   const [bodyHtml,     setBodyHtml]     = useState(cloneData?.body_html ?? "");
   const [sending,      setSending]      = useState(false);
 
+  // Edit mode: load existing campaign
+  const { data: existingCampaign } = useCampaign(editId);
+  const { data: existingRecipients = [] } = useCampaignRecipients(editId);
+
+  // Populate form when editing
+  const [initialized, setInitialized] = useState(false);
+  useEffect(() => {
+    if (existingCampaign && !initialized && !cloneData) {
+      setCampaignName(existingCampaign.name ?? "");
+      setSubject(existingCampaign.subject ?? "");
+      setPreviewText(existingCampaign.preview_text ?? "");
+      setBodyHtml(existingCampaign.body_html ?? "");
+      setInitialized(true);
+    }
+  }, [existingCampaign, initialized, cloneData]);
+
+  useEffect(() => {
+    if (existingRecipients.length > 0 && !initialized) {
+      setRecipients(existingRecipients.map((r) => ({
+        id: r.id,
+        email: r.email ?? "",
+        first_name: r.first_name ?? null,
+        last_name: r.last_name ?? null,
+        company: r.company ?? null,
+        title: r.title ?? null,
+        contact_id: r.contact_id ?? null,
+      })));
+    }
+  }, [existingRecipients, initialized]);
+
+  // Draft ID tracking + save state
+  const [draftId, setDraftId] = useState<string | null>(editId);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { canSendCampaigns, isMember } = usePermissions();
   const { log } = useActivityLog();
 
-  const createCampaign = useCreateCampaign();
-  const sendCampaign   = useSendCampaign();
+  const createCampaign   = useCreateCampaign();
+  const sendCampaign     = useSendCampaign();
+  const updateCampaign   = useUpdateCampaign();
+  const upsertRecipients = useUpsertCampaignRecipients();
 
   const canGoNext = (): boolean => {
     if (step === 1) return recipients.length > 0;
@@ -47,21 +96,83 @@ export default function CampaignComposer() {
     return true;
   };
 
+  const saveDraft = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setSaveStatus("saving");
+    try {
+      if (draftId) {
+        // Update existing draft
+        await updateCampaign.mutateAsync({
+          id: draftId,
+          name: campaignName || "Untitled Draft",
+          subject,
+          preview_text: previewText,
+          body_html: bodyHtml,
+          recipient_count: recipients.length,
+        });
+        if (recipients.length > 0) {
+          await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
+        }
+      } else {
+        // Create new draft
+        const campaign = await createCampaign.mutateAsync({
+          name: campaignName || "Untitled Draft",
+          subject,
+          preview_text: previewText,
+          body_html: bodyHtml,
+          recipients,
+        });
+        setDraftId(campaign.id);
+      }
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      setSaveStatus("idle");
+      if (!opts?.silent) toast({ variant: "destructive", description: "Failed to save draft." });
+    }
+  };
+
+  // Auto-save with 2-second debounce
+  useEffect(() => {
+    // Only auto-save if there's meaningful content
+    if (!campaignName && !subject && !bodyHtml && recipients.length === 0) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      saveDraft({ silent: true });
+    }, 2000);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignName, subject, previewText, bodyHtml, recipients]);
+
   const handleSend = async () => {
     setSending(true);
     try {
-      // 1. Create campaign + insert recipients
-      const campaign = await createCampaign.mutateAsync({
-        name:        campaignName,
-        subject,
-        preview_text: previewText,
-        body_html:   bodyHtml,
-        recipients,
-      });
-      // 2. Trigger send
-      const result = await sendCampaign.mutateAsync(campaign.id);
+      let campaignToSend: EmailCampaign;
+      if (draftId) {
+        // Update the existing draft first
+        await updateCampaign.mutateAsync({
+          id: draftId,
+          name: campaignName,
+          subject,
+          preview_text: previewText,
+          body_html: bodyHtml,
+          recipient_count: recipients.length,
+        });
+        await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
+        campaignToSend = { id: draftId } as EmailCampaign;
+      } else {
+        campaignToSend = await createCampaign.mutateAsync({
+          name: campaignName,
+          subject,
+          preview_text: previewText,
+          body_html: bodyHtml,
+          recipients,
+        });
+      }
+      const result = await sendCampaign.mutateAsync(campaignToSend.id);
       toast({ description: `✅ Campaign sent to ${result.sent} contacts!` });
-      navigate(`/campaigns/${campaign.id}`);
+      navigate(`/campaigns/${campaignToSend.id}`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Send failed";
       toast({ variant: "destructive", description: msg });
@@ -72,15 +183,29 @@ export default function CampaignComposer() {
   const handleSubmitForApproval = async () => {
     setSending(true);
     try {
-      const campaign = await createCampaign.mutateAsync({
-        name:         campaignName,
-        subject,
-        preview_text: previewText,
-        body_html:    bodyHtml,
-        recipients,
-        status:       "pending_approval",
-      });
-      log("submitted_campaign", "campaign", campaign.id, campaignName);
+      let campaignToSubmit: EmailCampaign;
+      if (draftId) {
+        await updateCampaign.mutateAsync({
+          id: draftId,
+          name: campaignName,
+          subject,
+          preview_text: previewText,
+          body_html: bodyHtml,
+          recipient_count: recipients.length,
+        });
+        await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
+        campaignToSubmit = { id: draftId } as EmailCampaign;
+      } else {
+        campaignToSubmit = await createCampaign.mutateAsync({
+          name:         campaignName,
+          subject,
+          preview_text: previewText,
+          body_html:    bodyHtml,
+          recipients,
+          status:       "pending_approval",
+        });
+      }
+      log("submitted_campaign", "campaign", campaignToSubmit.id, campaignName);
       toast({ description: "Campaign submitted for approval. A manager will review it shortly." });
       navigate("/campaigns");
     } catch (e: unknown) {
@@ -97,7 +222,20 @@ export default function CampaignComposer() {
         <Button variant="ghost" size="sm" onClick={() => navigate("/campaigns")} className="gap-1.5 -ml-2">
           <ArrowLeft size={14} /> Campaigns
         </Button>
-        <h1 className="text-sm font-semibold hidden sm:block">New Campaign</h1>
+        <h1 className="text-sm font-semibold hidden sm:block">
+          {editId && existingCampaign?.status !== "draft" ? "Edit Campaign (New Draft)" : editId ? "Edit Draft" : "New Campaign"}
+        </h1>
+        {/* Save status indicator */}
+        {saveStatus === "saving" && (
+          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <Loader2 size={10} className="animate-spin" /> Saving…
+          </span>
+        )}
+        {saveStatus === "saved" && (
+          <span className="text-[10px] text-emerald-600 flex items-center gap-1">
+            <Save size={10} /> Saved
+          </span>
+        )}
         {/* Step indicator */}
         <div className="flex items-center gap-1 ml-auto">
           {STEPS.map((s, idx) => {
@@ -229,6 +367,16 @@ export default function CampaignComposer() {
                 </p>
               </div>
 
+              {/* Save Draft button on Step 3 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => saveDraft()}
+                className="gap-1.5 mb-3 w-full sm:w-auto"
+              >
+                <Save size={13} /> Save Draft
+              </Button>
+
               {/* Send / Submit button */}
               {isMember && !canSendCampaigns ? (
                 <Button
@@ -269,6 +417,16 @@ export default function CampaignComposer() {
             className="gap-1.5"
           >
             <ArrowLeft size={14} /> Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => saveDraft()}
+            disabled={updateCampaign.isPending || createCampaign.isPending}
+            className="gap-1.5"
+          >
+            <Save size={13} />
+            <span className="hidden sm:inline">Save Draft</span>
           </Button>
           <Button
             size="sm"

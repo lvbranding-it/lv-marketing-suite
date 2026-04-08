@@ -5,7 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import {
   Mail, Plus, Send, BarChart2, Users, MousePointerClick,
-  AlertTriangle, Trash2, Loader2, TrendingUp,
+  AlertTriangle, Trash2, Loader2, TrendingUp, Pencil, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Clock } from "lucide-react";
+import { useOrg } from "@/hooks/useOrg";
 
 const STATUS_META: Record<string, { label: string; class: string }> = {
   draft:            { label: "Draft",            class: "bg-slate-100 text-slate-600 border-slate-200" },
@@ -35,12 +36,48 @@ function rate(num: number, denom: number) {
   return `${Math.min(Math.round((num / denom) * 100), 100)}%`;
 }
 
+interface ParsedContact {
+  email: string;
+  first_name: string;
+  last_name: string;
+  company: string;
+}
+
+function parseContactsCSV(text: string): ParsedContact[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/[^a-z_]/g, ""));
+
+  const get = (row: string[], key: string) => {
+    const idx = headers.indexOf(key);
+    return idx >= 0 ? (row[idx] ?? "").trim().replace(/^"|"$/g, "") : "";
+  };
+
+  return lines.slice(1)
+    .map((line) => {
+      const cols = line.split(",");
+      const email = get(cols, "email");
+      if (!email || !/\S+@\S+\.\S+/.test(email)) return null;
+      return {
+        email: email.toLowerCase(),
+        first_name: get(cols, "first_name") || get(cols, "firstname") || get(cols, "first"),
+        last_name:  get(cols, "last_name")  || get(cols, "lastname")  || get(cols, "last"),
+        company:    get(cols, "company")    || get(cols, "organization") || get(cols, "company_name"),
+      };
+    })
+    .filter((r): r is ParsedContact => r !== null);
+}
+
 function CampaignCard({
   campaign,
   onDelete,
+  onEdit,
+  canDelete,
 }: {
   campaign: EmailCampaign;
   onDelete: (c: EmailCampaign) => void;
+  onEdit: (c: EmailCampaign) => void;
+  canDelete: boolean;
 }) {
   const navigate = useNavigate();
   const status = STATUS_META[campaign.status] ?? STATUS_META.draft;
@@ -68,12 +105,24 @@ function CampaignCard({
             <p className="text-xs text-muted-foreground truncate mt-0.5">{campaign.subject}</p>
           )}
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(campaign); }}
-          className="shrink-0 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-all"
-        >
-          <Trash2 size={13} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(campaign); }}
+            className="p-1 rounded text-muted-foreground hover:text-primary transition-colors"
+            title="Edit campaign"
+          >
+            <Pencil size={13} />
+          </button>
+          {canDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(campaign); }}
+              className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete campaign"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats row */}
@@ -122,6 +171,8 @@ export default function Campaigns() {
   const [deleteTarget, setDeleteTarget] = useState<EmailCampaign | null>(null);
   const sendCampaign = useSendCampaign();
   const { canApproveCampaigns, canDeleteCampaigns } = usePermissions();
+  const [csvImporting, setCsvImporting] = useState(false);
+  const { org } = useOrg();
 
   const pendingCampaigns = campaigns.filter((c) => (c.status as string) === "pending_approval");
   const sentCampaigns    = campaigns.filter((c) => c.status === "sent");
@@ -152,12 +203,81 @@ export default function Campaigns() {
     toast({ description: `"${campaign.name}" moved back to draft.` });
   };
 
+  const handleEdit = (campaign: EmailCampaign) => {
+    if (campaign.status === "draft" || (campaign.status as string) === "pending_approval") {
+      // Edit the draft directly
+      navigate(`/campaigns/new?edit=${campaign.id}`);
+    } else {
+      // Sent/failed — clone as new draft
+      navigate("/campaigns/new", {
+        state: {
+          cloneFrom: {
+            name: campaign.name + " (Copy)",
+            subject: campaign.subject,
+            preview_text: campaign.preview_text,
+            body_html: campaign.body_html,
+          },
+        },
+      });
+    }
+  };
+
+  const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !org) return;
+    setCsvImporting(true);
+    try {
+      const text = await file.text();
+      const contacts = parseContactsCSV(text);
+      if (contacts.length === 0) {
+        toast({ variant: "destructive", description: "No valid contacts found. Make sure your CSV has an 'email' column." });
+        return;
+      }
+      // Insert into contacts table (upsert by email + org_id to avoid duplicates)
+      const rows = contacts.map((c) => ({
+        org_id: org.id,
+        email: c.email,
+        first_name: c.first_name || null,
+        last_name: c.last_name || null,
+        company: c.company || null,
+        source: "csv_import",
+      }));
+      const { error } = await supabase
+        .from("contacts")
+        .upsert(rows as any, { onConflict: "org_id,email", ignoreDuplicates: true });
+      if (error) throw error;
+      toast({ description: `✅ ${contacts.length} contact${contacts.length !== 1 ? "s" : ""} imported successfully.` });
+    } catch (err) {
+      toast({ variant: "destructive", description: err instanceof Error ? err.message : "Import failed." });
+    } finally {
+      setCsvImporting(false);
+      e.target.value = ""; // reset file input
+    }
+  };
+
   return (
     <AppShell>
       <Header title="Email Campaigns" subtitle="Compose, send and track email blasts" />
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
-      {/* New Campaign button */}
-      <div className="flex items-center justify-end">
+      {/* Header actions */}
+      <div className="flex items-center justify-end gap-2">
+        {/* CSV import */}
+        <label className={cn(
+          "flex items-center gap-1.5 h-9 px-3 text-sm border border-border rounded-md cursor-pointer",
+          "hover:border-primary hover:text-primary transition-colors font-medium text-muted-foreground bg-background",
+          csvImporting && "opacity-50 pointer-events-none"
+        )}>
+          {csvImporting
+            ? <><Loader2 size={14} className="animate-spin" /> Importing…</>
+            : <><Upload size={14} /> Import Contacts</>}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleCSVImport}
+            disabled={csvImporting}
+          />
+        </label>
         <Button onClick={() => navigate("/campaigns/new")} className="gap-2">
           <Plus size={15} /> New Campaign
         </Button>
@@ -235,7 +355,13 @@ export default function Campaigns() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {campaigns.map((c) => (
-            <CampaignCard key={c.id} campaign={c} onDelete={setDeleteTarget} />
+            <CampaignCard
+              key={c.id}
+              campaign={c}
+              onDelete={setDeleteTarget}
+              onEdit={handleEdit}
+              canDelete={canDeleteCampaigns}
+            />
           ))}
         </div>
       )}

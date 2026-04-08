@@ -155,6 +155,63 @@ export function useCreateCampaign() {
   });
 }
 
+// ── Update existing campaign fields ──────────────────────────────────────────
+export function useUpdateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      name?: string;
+      subject?: string;
+      preview_text?: string;
+      body_html?: string;
+      recipient_count?: number;
+    }) => {
+      const { id, ...fields } = payload;
+      const { data, error } = await supabase
+        .from("email_campaigns")
+        .update(fields)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmailCampaign;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
+      qc.invalidateQueries({ queryKey: ["campaigns", data.id] });
+    },
+  });
+}
+
+// ── Upsert campaign recipients (delete + re-insert) ───────────────────────────
+export function useUpsertCampaignRecipients() {
+  const { org } = useOrg();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ campaignId, recipients }: { campaignId: string; recipients: SelectedRecipient[] }) => {
+      if (!org) throw new Error("No org");
+      // Delete existing recipients then re-insert
+      await supabase.from("email_campaign_recipients").delete().eq("campaign_id", campaignId);
+      if (recipients.length === 0) return;
+      const rows = recipients.map((r) => ({
+        campaign_id: campaignId,
+        org_id: org.id,
+        contact_id: r.contact_id,
+        email: r.email,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        company: r.company,
+        title: r.title,
+        status: "pending" as const,
+      }));
+      const { error } = await supabase.from("email_campaign_recipients").insert(rows);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["campaign-recipients", campaignId] });
+    },
+  });
+}
+
 // ── Send a campaign (calls edge function) ─────────────────────────────────────
 export function useSendCampaign() {
   const qc = useQueryClient();
