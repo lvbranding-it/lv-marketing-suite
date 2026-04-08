@@ -63,6 +63,10 @@ const BUILTIN_BLOCKS: BuiltinBlock[] = [
     name: "Divider",
     html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="border-top:1px solid #e5e7eb;font-size:0;line-height:0;">&nbsp;</td></tr></table>`,
   },
+  {
+    name: "LV Footer",
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:24px 0 0;"><tr><td style="background:#f4f5f8;border-radius:8px;padding:28px 32px;text-align:center;"><p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Copyright &copy; 2026 <strong style="color:#111827;">LV Branding</strong>. All rights reserved.</p><p style="margin:0 0 16px;font-size:13px;color:#4b5563;line-height:1.7;text-align:left;">Welcome to the <strong style="color:#111827;">LV Branding</strong> family! As a valued member of our community, you&rsquo;re now part of an exclusive group that receives the latest news, unique insights, and special invitations to our best client activities and events produced by us. We&rsquo;re excited to share our journey with you, offering exclusive discounts and first-hand updates.</p><p style="margin:0;font-size:13px;color:#4b5563;line-height:1.7;text-align:left;">If you ever have questions or suggestions or want to share your thoughts, feel free to hit reply &ndash; we&rsquo;d love to hear from you!</p></td></tr></table>`,
+  },
 ];
 
 // ── Email preview iframe ──────────────────────────────────────────────────────
