@@ -83,7 +83,6 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   const createTagDef = useCreateTagDefinition();
 
   const tagColorMap = new Map(tagDefs.map((d) => [d.name, d.color]));
-  const tagSuggestions = tagDefs.map((d) => d.name).filter((n) => !tags.includes(n));
 
   const { data: activities = [], isLoading: activitiesLoading } = useContactActivities(contact?.id ?? null);
 
@@ -93,6 +92,9 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   const [crmNotes, setCrmNotes] = useState<string>("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+
+  // Must be declared after `tags` state to avoid Rolldown TDZ ordering issue
+  const tagSuggestions = tagDefs.map((d) => d.name).filter((n) => !tags.includes(n));
   const [followupDate, setFollowupDate] = useState<string>("");
 
   // Activity form state
