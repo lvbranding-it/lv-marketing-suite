@@ -131,23 +131,24 @@ export function useCreateCampaign() {
       if (cErr || !campaign) throw cErr ?? new Error("Failed to create campaign");
       const newCampaign = campaign as EmailCampaign;
 
-      // 2. Insert recipients (batch)
-      const rows = payload.recipients.map((r) => ({
-        campaign_id: newCampaign.id,
-        org_id:      org.id,
-        contact_id:  r.contact_id,
-        email:       r.email,
-        first_name:  r.first_name,
-        last_name:   r.last_name,
-        company:     r.company,
-        title:       r.title,
-        status:      "pending" as const,
-      }));
-
-      const { error: rErr } = await supabase
-        .from("email_campaign_recipients")
-        .insert(rows);
-      if (rErr) throw rErr;
+      // 2. Insert recipients (batch) — only when there are any
+      if (payload.recipients.length > 0) {
+        const rows = payload.recipients.map((r) => ({
+          campaign_id: newCampaign.id,
+          org_id:      org.id,
+          contact_id:  r.contact_id,
+          email:       r.email,
+          first_name:  r.first_name,
+          last_name:   r.last_name,
+          company:     r.company,
+          title:       r.title,
+          status:      "pending" as const,
+        }));
+        const { error: rErr } = await supabase
+          .from("email_campaign_recipients")
+          .insert(rows);
+        if (rErr) throw rErr;
+      }
 
       return newCampaign;
     },

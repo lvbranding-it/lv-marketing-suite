@@ -334,7 +334,7 @@ function BlockThumbnail({ html }: { html: string }) {
     <div className="relative overflow-hidden rounded bg-white border border-border" style={{ height: 72 }}>
       <iframe
         srcDoc={doc}
-        sandbox="allow-same-origin"
+        sandbox="allow-same-origin allow-scripts"
         scrolling="no"
         style={{ width: "200%", height: "200%", border: "none", transform: "scale(0.5)", transformOrigin: "top left", pointerEvents: "none" }}
         title="block preview"
@@ -698,7 +698,7 @@ export default function EmailComposer({
         <div className="flex-1 rounded-xl overflow-hidden border border-border bg-[#f4f4f5]">
           <iframe
             srcDoc={previewDoc}
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-scripts"
             className="w-full h-full"
             style={{ border: "none" }}
             title="Email preview"
