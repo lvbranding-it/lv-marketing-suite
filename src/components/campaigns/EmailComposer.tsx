@@ -194,7 +194,15 @@ function BlockEditor({
         setActiveEdit(null);
       });
 
-      updateHeight();
+      // Defer initial height measurement until after browser layout is complete
+      requestAnimationFrame(() => {
+        updateHeight();
+        // Watch for content-driven size changes (e.g. images loading, text wrapping)
+        if (typeof ResizeObserver !== "undefined" && doc.body) {
+          const ro = new ResizeObserver(() => updateHeight());
+          ro.observe(doc.body);
+        }
+      });
     };
 
     if (iframe.contentDocument?.readyState === "complete") init();

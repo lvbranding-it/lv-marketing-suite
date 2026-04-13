@@ -297,7 +297,7 @@ export default function CampaignComposer() {
                 </div>
               ) : (
                 <EmailComposer
-                  key={draftId ?? "new"}
+                  key={editId ?? "new"}
                   campaignName={campaignName}      onCampaignNameChange={setCampaignName}
                   subject={subject}                onSubjectChange={setSubject}
                   previewText={previewText}        onPreviewTextChange={setPreviewText}
