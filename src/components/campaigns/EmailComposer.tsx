@@ -141,13 +141,14 @@ const BLOCK_CSS = `
 `;
 
 function BlockEditor({
-  html, name, orgId, onChange, onRemove,
+  html, name, orgId, onChange, onRemove, onSave,
 }: {
   html: string;
   name: string;
   orgId: string | undefined;
   onChange: (html: string) => void;
   onRemove: () => void;
+  onSave: (name: string, html: string) => Promise<void>;
 }) {
   const iframeRef    = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +156,9 @@ function BlockEditor({
   const [height,     setHeight]     = useState(80);
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [uploading,  setUploading]  = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [saveName,   setSaveName]   = useState(name);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -226,6 +230,17 @@ function BlockEditor({
     setActiveEdit(null);
   };
 
+  const handleSave = async () => {
+    const n = saveName.trim() || name;
+    setSaving(true);
+    try {
+      await onSave(n, readBody());
+      setShowSaveInput(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleImageUpload = async (file: File) => {
     if (!orgId) return;
     setUploading(true);
@@ -253,17 +268,42 @@ function BlockEditor({
   return (
     <div className="border border-dashed border-primary/30 rounded-lg overflow-hidden bg-white group hover:border-primary/60 transition-colors">
       {/* Title bar */}
-      <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
-          <span className="text-[9px] text-primary/60 italic hidden group-hover:inline">
+      <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-medium text-muted-foreground shrink-0">{name}</span>
+          <span className="text-[9px] text-primary/60 italic hidden group-hover:inline truncate">
             click text to edit · click image or button to replace
           </span>
         </div>
-        <button type="button" onClick={onRemove}
-          className="text-[10px] text-destructive hover:underline opacity-0 group-hover:opacity-100 transition-opacity">
-          Remove
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {showSaveInput ? (
+            <>
+              <input
+                autoFocus
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setShowSaveInput(false); }}
+                placeholder="Block name…"
+                className="text-[10px] border border-border rounded px-1.5 py-0.5 w-28 focus:outline-none focus:ring-1 focus:ring-ring bg-white"
+              />
+              <button type="button" onClick={handleSave} disabled={saving}
+                className="text-[10px] px-2 py-0.5 bg-primary text-primary-foreground rounded font-medium disabled:opacity-50">
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button type="button" onClick={() => setShowSaveInput(false)}
+                className="text-[10px] text-muted-foreground hover:text-foreground px-1">✕</button>
+            </>
+          ) : (
+            <button type="button" onClick={() => { setSaveName(name); setShowSaveInput(true); }}
+              className="text-[10px] text-primary hover:underline">
+              Save to Library
+            </button>
+          )}
+          <button type="button" onClick={onRemove}
+            className="text-[10px] text-destructive hover:underline ml-1">
+            Remove
+          </button>
+        </div>
       </div>
 
       {/* Image replace toolbar */}
@@ -567,6 +607,7 @@ export default function EmailComposer({
                 orgId={org?.id}
                 onChange={(html) => updateBlock(block.id, html)}
                 onRemove={() => removeBlock(block.id)}
+                onSave={async (n, h) => { await saveBlock.mutateAsync({ name: n, html: h }); }}
               />
             ))}
           </div>
