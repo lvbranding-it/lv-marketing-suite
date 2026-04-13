@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Sparkles, Loader2, Copy, Check, RefreshCw,
-  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone, Upload, Link2,
+  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone, Upload, Link2, GripVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,7 +141,7 @@ const BLOCK_CSS = `
 `;
 
 function BlockEditor({
-  html, name, orgId, onChange, onRemove, onSave,
+  html, name, orgId, onChange, onRemove, onSave, onDragStart, isDragOver,
 }: {
   html: string;
   name: string;
@@ -149,6 +149,8 @@ function BlockEditor({
   onChange: (html: string) => void;
   onRemove: () => void;
   onSave: (name: string, html: string) => Promise<void>;
+  onDragStart: () => void;
+  isDragOver: boolean;
 }) {
   const iframeRef    = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -266,10 +268,24 @@ function BlockEditor({
   };
 
   return (
-    <div className="border border-dashed border-primary/30 rounded-lg overflow-hidden bg-white group hover:border-primary/60 transition-colors">
+    <div
+      className={cn(
+        "border border-dashed rounded-lg overflow-hidden bg-white group transition-colors",
+        isDragOver ? "border-primary border-solid bg-primary/5" : "border-primary/30 hover:border-primary/60"
+      )}
+    >
       {/* Title bar */}
-      <div className="px-3 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="px-2 py-1.5 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {/* Drag handle */}
+          <div
+            draggable
+            onDragStart={(e) => { e.stopPropagation(); onDragStart(); }}
+            className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-muted text-muted-foreground/50 hover:text-muted-foreground shrink-0"
+            title="Drag to reorder"
+          >
+            <GripVertical size={13} />
+          </div>
           <span className="text-[10px] font-medium text-muted-foreground shrink-0">{name}</span>
           <span className="text-[9px] text-primary/60 italic hidden group-hover:inline truncate">
             click text to edit · click image or button to replace
@@ -458,6 +474,25 @@ export default function EmailComposer({
     setInsertedBlocks(prev => prev.map(b => b.id === id ? { ...b, html } : b));
   }, []);
 
+  // Drag-to-reorder state
+  const [draggedId,  setDraggedId]  = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const handleDrop = useCallback((targetId: string) => {
+    if (!draggedId || draggedId === targetId) return;
+    setInsertedBlocks(prev => {
+      const from = prev.findIndex(b => b.id === draggedId);
+      const to   = prev.findIndex(b => b.id === targetId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setDraggedId(null);
+    setDragOverId(null);
+  }, [draggedId]);
+
   // Assets Library
   const [assetsOpen,    setAssetsOpen]    = useState(false);
   const [assetsTab,     setAssetsTab]     = useState<"builtin" | "saved">("builtin");
@@ -600,15 +635,23 @@ export default function EmailComposer({
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Inserted Blocks</p>
             {insertedBlocks.map((block) => (
-              <BlockEditor
+              <div
                 key={block.id}
-                html={block.html}
-                name={block.name}
-                orgId={org?.id}
-                onChange={(html) => updateBlock(block.id, html)}
-                onRemove={() => removeBlock(block.id)}
-                onSave={async (n, h) => { await saveBlock.mutateAsync({ name: n, html: h }); }}
-              />
+                onDragOver={(e) => { e.preventDefault(); setDragOverId(block.id); }}
+                onDragLeave={() => setDragOverId(null)}
+                onDrop={() => handleDrop(block.id)}
+              >
+                <BlockEditor
+                  html={block.html}
+                  name={block.name}
+                  orgId={org?.id}
+                  onChange={(html) => updateBlock(block.id, html)}
+                  onRemove={() => removeBlock(block.id)}
+                  onSave={async (n, h) => { await saveBlock.mutateAsync({ name: n, html: h }); }}
+                  onDragStart={() => setDraggedId(block.id)}
+                  isDragOver={dragOverId === block.id && draggedId !== block.id}
+                />
+              </div>
             ))}
           </div>
         )}
