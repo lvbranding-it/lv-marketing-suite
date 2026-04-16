@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-// LV Logo SVG component
-function LVLogo({ className, style }: { className?: string; style?: React.CSSProperties }) {
+// LV Logo SVG component (circular badge logo)
+function LVLogo({ size = 96 }: { size?: number }) {
   return (
-    <svg className={className} style={style} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 852.5 852.5" fill="currentColor">
-      <path d="M426.25,0c-107.68,0-206.03,39.93-281.06,105.79v245.11c0,10.75,8.71,19.46,19.46,19.46h141.11c14.56.14,18.03,10.07,19.26,21.98,1.29,12.59,2.25,23.88,4.15,40.14,2.18,18.51-7.76,23.75-23,23.75H80.08c-10.75,0-19.46-8.71-19.46-19.46v-229.72C22.14,271.09,0,346.08,0,426.25c0,235.41,190.84,426.25,426.25,426.25,1.52,0,3.03-.01,4.55-.03-15.1-121.41-43.29-348.8-57.67-464.56-1.16-9.39,4.22-18.17,13.68-18.17h43.55c6.6,0,12.32,4.56,13.81,10.95,0,0,26.67,253.65,35.72,338.97,1.56,15.04,29.8,13.4,36.4-.2,43-88.66,119.48-250.59,161.25-338.57,2.86-6.06,9.46-10.68,16.13-10.61,20.14.27,47.49,0,61.85,0,13.27,0,17.96,9.05,13.68,17.49-60.51,118.86-167.77,325.41-232.37,450.24,181.81-48.7,315.68-214.59,315.68-411.76C852.5,190.84,661.66,0,426.25,0z"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250.1 250.1" width={size} height={size}>
+      <circle cx="125.05" cy="125.05" r="125.05" fill="#fff"/>
+      <path fill="#cb2039" d="M125.05,16.67c-27.38,0-52.38,10.15-71.46,26.9v75.86c0,2.73,2.21,4.95,4.95,4.95h35.88c3.7.03,4.58,2.56,4.9,5.59.33,3.2.57,6.07,1.06,10.21.55,4.71-1.97,6.04-5.85,6.04h-57.49c-2.73,0-4.95-2.21-4.95-4.95v-71.95c-9.79,16.29-15.41,35.35-15.41,55.74,0,59.86,48.52,108.38,108.38,108.38.39,0,.77,0,1.16,0-3.84-30.87-11.01-75.15-14.66-104.58-.29-2.39,1.07-4.62,3.48-4.62h11.07c1.68,0,3.13,1.16,3.51,2.79,0,0,6.42,51,9.08,72.65.52,4.22,4.49,8.51,9.26-.05,12.67-22.75,28.78-51.64,41-72.55.86-1.47,2.4-2.72,4.1-2.7,5.12.07,12.08,0,15.73,0,3.37,0,4.57,2.3,3.48,4.45-15.39,30.22-42.66,69.2-59.08,100.94,46.23-12.38,80.27-54.56,80.27-104.7,0-59.86-48.52-108.38-108.38-108.38z"/>
     </svg>
   );
 }
@@ -47,14 +48,8 @@ function PageShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Logo header */}
-      <div style={{ position: "relative", zIndex: 1, textAlign: "center", paddingTop: "2.5rem", paddingBottom: "0.5rem" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: "12px" }}>
-          <LVLogo style={{ width: 44, height: 44, color: "#CB2039" }} />
-          <span style={{
-            fontSize: "1.5rem", fontWeight: 900, letterSpacing: "0.15em",
-            color: "#ffffff", fontFamily: "system-ui, -apple-system, sans-serif",
-          }}>LV BRANDING</span>
-        </div>
+      <div style={{ position: "relative", zIndex: 1, textAlign: "center", paddingTop: "4rem", paddingBottom: "2rem" }}>
+        <LVLogo size={88} />
       </div>
 
       {/* Content */}
