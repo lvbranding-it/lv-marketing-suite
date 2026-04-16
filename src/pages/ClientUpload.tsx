@@ -48,7 +48,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Logo header */}
-      <div style={{ position: "relative", zIndex: 1, textAlign: "center", paddingTop: "4rem", paddingBottom: "2rem" }}>
+      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", paddingTop: "4rem", paddingBottom: "2rem" }}>
         <LVLogo size={88} />
       </div>
 
@@ -250,6 +250,27 @@ export default function ClientUpload() {
             {request.description && (
               <p className="text-sm" style={{ color: "rgba(255,255,255,0.55)" }}>{request.description}</p>
             )}
+          </div>
+
+          {/* File format instructions */}
+          <div className="rounded-xl p-5 text-center space-y-3" style={{ background: "rgba(203,32,57,0.1)", border: "1px solid rgba(203,32,57,0.25)" }}>
+            <p className="text-sm font-medium text-white">
+              To ensure your brand looks its best, please send your logo in one of the following formats:
+            </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 text-sm">
+              <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>PREFERRED (VECTOR)</p>
+                <p className="font-mono font-bold text-white">.AI · .EPS · .PDF</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>ALTERNATIVE (HIGH-RES)</p>
+                <p className="font-mono font-bold text-white">.PNG · .JPG <span className="text-xs font-normal" style={{ color: "rgba(255,255,255,0.5)" }}>min 300 dpi</span></p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Help us make you look good! Since we're printing on a large scale, we can only use high-quality formats. Low-res files won't make the final cut — please send the best version you have!
+            </p>
+            <p className="text-xs font-semibold" style={{ color: "rgba(203,32,57,0.9)" }}>Thank you for your support!</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

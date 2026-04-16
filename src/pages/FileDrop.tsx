@@ -77,9 +77,18 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
         .from("client-uploads")
         .createSignedUrl(submission.file_path, 3600);
       if (error) throw error;
-      window.open(data.signedUrl, "_blank");
+      const res = await fetch(data.signedUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = submission.file_name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", description: "Failed to generate download link." });
+      toast({ variant: "destructive", description: "Failed to download file." });
     }
   };
 
