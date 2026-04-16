@@ -19,6 +19,7 @@ import {
   LayoutGrid,
   Crown,
   RefreshCw,
+  FolderDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { to: "/intake",    label: "Intake",     icon: ClipboardList },
   { to: "/campaigns",      label: "Campaigns",      icon: Mail },
   { to: "/photo-sessions", label: "Photo Sessions", icon: Camera },
+  { to: "/files",          label: "File Drop",      icon: FolderDown },
   { to: "/history",        label: "History",        icon: History },
 ];
 

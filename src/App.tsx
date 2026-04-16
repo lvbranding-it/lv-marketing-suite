@@ -29,6 +29,8 @@ const AcceptInvite  = lazy(() => import("@/pages/AcceptInvite"));
 const PhotoSessions        = lazy(() => import("@/pages/PhotoSessions"));
 const PhotoSessionDetail   = lazy(() => import("@/pages/PhotoSessionDetail"));
 const ClientPhotoSelection = lazy(() => import("@/pages/ClientPhotoSelection"));
+const FileDrop             = lazy(() => import("@/pages/FileDrop"));
+const ClientUpload         = lazy(() => import("@/pages/ClientUpload"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -179,6 +181,20 @@ function AppRoutes() {
       <Route
         path="/share/:shareToken"
         element={<Suspense fallback={null}><ClientPhotoSelection /></Suspense>}
+      />
+      {/* File Drop — agency (protected) */}
+      <Route
+        path="/files"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><FileDrop /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      {/* File Drop — public client upload (no auth) */}
+      <Route
+        path="/upload/:token"
+        element={<Suspense fallback={null}><ClientUpload /></Suspense>}
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
