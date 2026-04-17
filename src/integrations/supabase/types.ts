@@ -792,6 +792,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      design_outputs: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          design_type_id: string;
+          design_type_name: string;
+          title: string | null;
+          prompt: string;
+          html_output: string;
+          is_starred: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          user_id: string;
+          design_type_id: string;
+          design_type_name: string;
+          title?: string | null;
+          prompt: string;
+          html_output: string;
+          is_starred?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          user_id?: string;
+          design_type_id?: string;
+          design_type_name?: string;
+          title?: string | null;
+          prompt?: string;
+          html_output?: string;
+          is_starred?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -823,4 +865,5 @@ export type PhotoComment = Tables<"photo_comments">;
 export type PhotoStatus = SessionPhoto["status"];
 export type SessionDeliverable = Tables<"session_deliverables">;
 export type DeliverableQuality = SessionDeliverable["quality"];
+export type DesignOutputRow = Tables<"design_outputs">;
 export type SessionStatus = PhotoSession["status"];
