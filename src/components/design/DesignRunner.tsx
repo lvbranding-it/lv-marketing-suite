@@ -13,12 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDesignRunner } from "@/hooks/useDesignRunner";
+import { useBrandKit } from "@/hooks/useBrandKit";
 import { type DesignType, DESIGN_CATEGORIES, STYLE_ICONS, extractHtml } from "@/data/designTypes";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import DesignPreview from "./DesignPreview";
 import DesignColorPicker from "./DesignColorPicker";
 import DesignProperties from "./DesignProperties";
+import DesignLogoUploader from "./DesignLogoUploader";
 import SaveDesignDialog from "./SaveDesignDialog";
 
 interface DesignRunnerProps {
@@ -27,6 +29,7 @@ interface DesignRunnerProps {
 
 export default function DesignRunner({ designType }: DesignRunnerProps) {
   const { toast } = useToast();
+  const { logoDataUrl, logoFileName, setLogo, clearLogo } = useBrandKit();
   const { streaming, streamedText, generatedHtml, currentHtml, error, generate, saveOutput, reset } =
     useDesignRunner();
 
@@ -54,6 +57,10 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
 
   const buildPrompt = (values: Record<string, unknown>): string => {
     const lines: string[] = [];
+    if (logoDataUrl) {
+      lines.push(`**Brand Logo:** Use this exact data URL as the <img src="..."> for the brand logo: ${logoDataUrl}`);
+      lines.push(`Display the logo at an appropriate size for this design type (typically 40–80px tall). Preserve its aspect ratio.`);
+    }
     for (const field of designType.contextFields) {
       const value = values[field.key];
       if (value) lines.push(`**${field.label}:** ${String(value)}`);
@@ -132,6 +139,19 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
             <p className="text-xs text-muted-foreground leading-relaxed -mt-1">
               {designType.description}
             </p>
+
+            <div className="h-px bg-border" />
+
+            {/* Brand logo */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium">Brand Logo</p>
+              <DesignLogoUploader
+                logoDataUrl={logoDataUrl}
+                logoFileName={logoFileName}
+                onUpload={setLogo}
+                onClear={clearLogo}
+              />
+            </div>
 
             <div className="h-px bg-border" />
 

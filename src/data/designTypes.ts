@@ -63,6 +63,8 @@ OUTPUT RULES — CRITICAL:
 • No markdown, no triple backticks, no explanation — pure HTML only
 • Embed ALL styles inside a <style> block (Google Fonts <link> tags are allowed)
 • No external image URLs — use CSS gradients, geometric shapes, emoji, or inline SVG
+• EXCEPTION: If a Brand Logo data URL is provided in the user message (starting with "data:image/"), use it directly as the src of an <img> tag for the brand logo — do NOT create a CSS/SVG placeholder when a real logo is given
+• Display the logo at a natural size appropriate to the design (typically 40–80px tall); preserve its aspect ratio with object-fit: contain
 • Use modern CSS: flexbox, grid, gradients, box-shadow, border-radius, transitions
 • Typography: load 1–2 Google Fonts matching the style (e.g. Inter, Playfair Display, DM Sans)
 • The result must look polished, professional, and client-ready
