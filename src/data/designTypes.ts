@@ -1,7 +1,7 @@
 export interface DesignContextField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'color';
+  type: 'text' | 'textarea' | 'select' | 'color' | 'style-select';
   placeholder?: string;
   required: boolean;
   options?: string[];
@@ -13,25 +13,80 @@ export interface DesignType {
   description: string;
   icon: string;
   category: 'social' | 'web' | 'print' | 'email' | 'brand';
-  previewAspect: string; // CSS aspect-ratio value e.g. "1/1", "16/9"
+  previewAspect: string;
   contextFields: DesignContextField[];
   systemPrompt: string;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export function extractHtml(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) return trimmed;
+  const match = trimmed.match(/```(?:html)?\s*\n?([\s\S]*?)```/);
+  if (match) return match[1].trim();
+  return trimmed;
+}
+
+/** Extract CSS custom property values from generated HTML */
+export function extractCssVars(html: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  const rootMatch = html.match(/:root\s*\{([^}]+)\}/);
+  if (!rootMatch) return vars;
+  const lines = rootMatch[1].split(';');
+  for (const line of lines) {
+    const m = line.trim().match(/^(--[\w-]+)\s*:\s*(.+)$/);
+    if (m) vars[m[1].trim()] = m[2].trim();
+  }
+  return vars;
+}
+
+/** Replace CSS custom property values in HTML string for live editing */
+export function injectCssVars(html: string, overrides: Record<string, string>): string {
+  let result = html;
+  for (const [prop, value] of Object.entries(overrides)) {
+    // Replace --prop: <anything>; inside :root block
+    result = result.replace(
+      new RegExp(`(${prop.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}\\s*:\\s*)[^;]+`),
+      `$1${value}`
+    );
+  }
+  return result;
+}
+
+// ─── System prompt base ────────────────────────────────────────────────────────
+
 const BASE_HTML_RULES = `
 OUTPUT RULES — CRITICAL:
 • Output ONLY a raw, complete HTML document starting with <!DOCTYPE html>
-• No markdown, no triple backticks, no explanation text — pure HTML only
-• Embed ALL styles inside a <style> block — no external CSS files (Google Fonts <link> tags are allowed)
-• No external image URLs — use CSS gradients, geometric shapes, emoji, or inline SVG for visuals
-• Use modern CSS: custom properties, flexbox, grid, gradients, box-shadow, border-radius, animations
-• Typography: load 1–2 Google Fonts that match the requested style (e.g. Inter, Playfair Display, DM Sans)
-• The result must be visually polished, professional, and ready to present to a client
-• Match the brand colors and style instructions exactly; if none given, choose a cohesive palette
+• No markdown, no triple backticks, no explanation — pure HTML only
+• Embed ALL styles inside a <style> block (Google Fonts <link> tags are allowed)
+• No external image URLs — use CSS gradients, geometric shapes, emoji, or inline SVG
+• Use modern CSS: flexbox, grid, gradients, box-shadow, border-radius, transitions
+• Typography: load 1–2 Google Fonts matching the style (e.g. Inter, Playfair Display, DM Sans)
+• The result must look polished, professional, and client-ready
+
+CSS VARIABLES — REQUIRED:
+Define ALL key design tokens as CSS custom properties in :root so the design can be live-edited:
+  :root {
+    --color-primary: #...;
+    --color-secondary: #...;
+    --color-accent: #...;
+    --color-bg: #...;
+    --color-text: #...;
+    --color-text-muted: #...;
+    --font-heading: 'Font Name', sans-serif;
+    --font-body: 'Font Name', sans-serif;
+    --radius: 12px;
+  }
+Use these variables everywhere in your CSS — never hardcode color hex values outside :root.
+Match brand colors and style instructions exactly; if none given, choose a beautiful cohesive palette.
 `.trim();
 
+// ─── Design Types ──────────────────────────────────────────────────────────────
+
 export const DESIGN_TYPES: DesignType[] = [
-  // ── Social ────────────────────────────────────────────────────────────────
+  // ── Social ──────────────────────────────────────────────────────────────────
   {
     id: 'social-post',
     name: 'Social Post',
@@ -43,8 +98,8 @@ export const DESIGN_TYPES: DesignType[] = [
       { key: 'brand_name', label: 'Brand / Account name', type: 'text', required: true, placeholder: 'e.g. LV Branding' },
       { key: 'message', label: 'Main message or headline', type: 'textarea', required: true, placeholder: 'What should the post say?' },
       { key: 'subtext', label: 'Supporting text or CTA', type: 'text', required: false, placeholder: 'e.g. Link in bio · Shop now' },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false, placeholder: 'e.g. #1a1a2e, #e94560' },
-      { key: 'style', label: 'Visual style', type: 'select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Gradient & Vibrant'] },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
+      { key: 'style', label: 'Visual style', type: 'style-select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Gradient & Vibrant'] },
     ],
     systemPrompt: `You are an elite social media designer creating a stunning Instagram/Facebook post graphic.
 
@@ -54,7 +109,7 @@ DESIGN SPECS:
 • Viewport: 1080×1080px — set <html> and <body> to exactly width:1080px; height:1080px; overflow:hidden
 • The entire canvas must be filled — no white gaps
 • Use large, impactful typography as the hero element
-• Include decorative shapes, geometric accents, or subtle textures
+• Include decorative shapes, geometric accents, or subtle textures via CSS
 • Place brand name as a small but legible label
 • Include any CTA text provided
 • The design must work as a static image (no scroll needed)`,
@@ -70,8 +125,8 @@ DESIGN SPECS:
       { key: 'brand_name', label: 'Brand / Account name', type: 'text', required: true },
       { key: 'headline', label: 'Headline or topic', type: 'text', required: true, placeholder: 'e.g. 5 Tips for Better Branding' },
       { key: 'subtext', label: 'Subtext or swipe-up CTA', type: 'text', required: false },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false, placeholder: 'e.g. #6c63ff, #f5f5f5' },
-      { key: 'style', label: 'Visual style', type: 'select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Gradient & Vibrant'] },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
+      { key: 'style', label: 'Visual style', type: 'style-select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Gradient & Vibrant'] },
     ],
     systemPrompt: `You are an elite social media designer creating a vertical Instagram/TikTok story or reel cover.
 
@@ -81,12 +136,12 @@ DESIGN SPECS:
 • Viewport: 1080×1920px — set <html> and <body> to exactly width:1080px; height:1920px; overflow:hidden
 • Full-bleed background — the canvas must be completely filled
 • Large bold headline near the center-upper area
-• Brand name at the top or bottom as a subtle watermark
-• Use safe zones: keep critical content between 250px–1670px vertically
-• Swipe-up CTA or subtext near the bottom (around y:1650px)`,
+• Brand name at top or bottom as a subtle watermark
+• Keep critical content between y:250px–y:1670px (safe zone)
+• Swipe-up CTA near the bottom (around y:1650px)`,
   },
 
-  // ── Web ───────────────────────────────────────────────────────────────────
+  // ── Web ─────────────────────────────────────────────────────────────────────
   {
     id: 'landing-page',
     name: 'Landing Page',
@@ -99,8 +154,8 @@ DESIGN SPECS:
       { key: 'headline', label: 'Hero headline', type: 'text', required: true, placeholder: 'e.g. The smartest way to manage your team' },
       { key: 'subheadline', label: 'Sub-headline or value prop', type: 'textarea', required: false },
       { key: 'cta_text', label: 'CTA button text', type: 'text', required: false, placeholder: 'e.g. Start for free' },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false, placeholder: 'e.g. #4f46e5, #ffffff' },
-      { key: 'style', label: 'Visual style', type: 'select', required: false, options: ['SaaS / Tech', 'Agency / Creative', 'E-commerce', 'Minimal & Clean', 'Bold & Colorful', 'Dark Mode'] },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
+      { key: 'style', label: 'Visual style', type: 'style-select', required: false, options: ['SaaS / Tech', 'Agency / Creative', 'E-commerce', 'Minimal & Clean', 'Bold & Colorful', 'Dark Mode'] },
       { key: 'sections', label: 'Sections to include', type: 'select', required: false, options: ['Hero only', 'Hero + Features', 'Hero + Features + Testimonial', 'Hero + Pricing', 'Full page (all sections)'] },
     ],
     systemPrompt: `You are an elite UI/UX designer creating a beautiful landing page mockup.
@@ -110,16 +165,16 @@ ${BASE_HTML_RULES}
 DESIGN SPECS:
 • Responsive width (max-width: 1280px, centered) — height scrolls naturally
 • Include a navbar with logo + navigation links + CTA button
-• Hero section: large headline, sub-headline, CTA button(s), optional visual element (abstract shape, device mockup using CSS, or illustration using SVG)
-• If additional sections requested: features grid (3-column cards), social proof/testimonials, pricing table, or footer
-• Use a consistent design system: one primary color, one accent, neutral grays
-• Cards should have subtle shadows; buttons should have hover states (CSS :hover)
-• The page must look like a real, shippable product`,
+• Hero: large headline, sub-headline, CTA button(s), optional abstract visual (CSS shapes or SVG)
+• Additional sections if requested: features grid (3-col cards), testimonials, pricing table, footer
+• Consistent design system: one primary, one accent, neutral grays — all from CSS variables
+• Cards with subtle shadows; buttons with :hover transitions
+• Must look like a real, shippable product`,
   },
   {
     id: 'ad-banner',
     name: 'Ad Banner',
-    description: 'Display ad in standard IAB sizes — leaderboard, medium rectangle, or skyscraper.',
+    description: 'Display ad in standard IAB sizes — leaderboard, rectangle, or skyscraper.',
     icon: '📣',
     category: 'web',
     previewAspect: '728/90',
@@ -127,72 +182,67 @@ DESIGN SPECS:
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
       { key: 'headline', label: 'Ad headline', type: 'text', required: true, placeholder: 'e.g. Save 40% this week only' },
       { key: 'cta_text', label: 'CTA button text', type: 'text', required: false, placeholder: 'e.g. Shop Now' },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
       { key: 'size', label: 'Ad size', type: 'select', required: true, options: ['Leaderboard (728×90)', 'Medium Rectangle (300×250)', 'Half Page (300×600)', 'Wide Skyscraper (160×600)', 'Billboard (970×250)'] },
-      { key: 'style', label: 'Visual style', type: 'select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful'] },
+      { key: 'style', label: 'Visual style', type: 'style-select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful'] },
     ],
     systemPrompt: `You are an elite display advertising designer creating a high-converting ad banner.
 
 ${BASE_HTML_RULES}
 
-DESIGN SPECS — pick dimensions based on the size field:
-• Leaderboard: 728×90px
-• Medium Rectangle: 300×250px
-• Half Page: 300×600px
-• Wide Skyscraper: 160×600px
-• Billboard: 970×250px
-
-Set <html> and <body> to the exact pixel dimensions above; overflow:hidden.
-• Include brand logo/name, headline, optional subtext, and a CTA button
-• The CTA button must be prominent and high-contrast
-• Design for immediate visual impact — the eye should land on headline → CTA within 1 second
-• Keep the design simple and focused — no clutter`,
+DESIGN SPECS — exact pixel dimensions based on size field:
+• Leaderboard: 728×90px | Medium Rectangle: 300×250px | Half Page: 300×600px
+• Wide Skyscraper: 160×600px | Billboard: 970×250px
+Set <html> and <body> to the exact pixel dimensions; overflow:hidden.
+• Brand logo/name, headline, optional subtext, prominent CTA button
+• High contrast CTA — must be immediately visible
+• Simple and focused — no clutter`,
   },
 
-  // ── Email ─────────────────────────────────────────────────────────────────
+  // ── Email ────────────────────────────────────────────────────────────────────
   {
     id: 'email-template',
     name: 'Email Template',
-    description: 'Polished HTML email template — newsletter, promo, or onboarding.',
+    description: 'Polished HTML email — newsletter, promo, or onboarding.',
     icon: '✉️',
     category: 'email',
     previewAspect: '3/4',
     contextFields: [
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
-      { key: 'subject_context', label: 'Email purpose / subject', type: 'text', required: true, placeholder: 'e.g. Welcome email, Monthly newsletter, Promo offer' },
+      { key: 'subject_context', label: 'Email purpose / subject', type: 'text', required: true, placeholder: 'e.g. Welcome email, Monthly newsletter' },
       { key: 'headline', label: 'Main headline', type: 'text', required: true },
       { key: 'body_content', label: 'Email body content', type: 'textarea', required: true, placeholder: 'Key message, sections, or bullet points...' },
       { key: 'cta_text', label: 'CTA button text', type: 'text', required: false, placeholder: 'e.g. Claim your offer' },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
     ],
     systemPrompt: `You are an expert email designer creating a beautiful, email-client-safe HTML email template.
 
 ${BASE_HTML_RULES}
 
 DESIGN SPECS:
-• Use table-based layout for email client compatibility (max-width: 600px, centered)
-• Include: header with logo/brand name (colored bar), hero section with headline, body content, CTA button, footer with unsubscribe placeholder
-• All styles must be inline on each element (not just in <style> — email clients strip <style>)
-• CTA button must use a table with background-color (not CSS background-image) for Outlook compatibility
-• Use web-safe fonts as fallback: Arial, Georgia — Google Fonts as primary
-• The design must look beautiful in a browser preview and be structurally sound for real email sending`,
+• Table-based layout for email compatibility (max-width: 600px, centered)
+• Include: header with brand name (colored bar), hero section, body content, CTA button, footer with unsubscribe placeholder
+• Inline styles on each element for Outlook compatibility (in addition to the <style> block)
+• CTA button: table-based background-color approach
+• Web-safe fallback fonts: Arial, Georgia
+• Must look beautiful in a browser and be structurally sound for real email sending`,
   },
 
-  // ── Print ─────────────────────────────────────────────────────────────────
+  // ── Print ────────────────────────────────────────────────────────────────────
   {
     id: 'poster-flyer',
     name: 'Poster / Flyer',
-    description: 'Print-ready poster or promotional flyer — events, announcements, promotions.',
+    description: 'Print-ready poster or promotional flyer.',
     icon: '🎨',
     category: 'print',
     previewAspect: '8.5/11',
     contextFields: [
       { key: 'brand_name', label: 'Brand / Organizer name', type: 'text', required: true },
-      { key: 'event_title', label: 'Event or promo title', type: 'text', required: true, placeholder: 'e.g. Summer Sale · Grand Opening · Workshop' },
-      { key: 'details', label: 'Key details (date, time, location, etc.)', type: 'textarea', required: false },
+      { key: 'event_title', label: 'Event or promo title', type: 'text', required: true, placeholder: 'e.g. Summer Sale · Grand Opening' },
+      { key: 'details', label: 'Key details (date, time, location)', type: 'textarea', required: false },
       { key: 'tagline', label: 'Tagline or supporting copy', type: 'text', required: false },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false },
-      { key: 'style', label: 'Visual style', type: 'select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Retro / Vintage', 'Hand-drawn Feel'] },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
+      { key: 'style', label: 'Visual style', type: 'style-select', required: false, options: ['Bold & Modern', 'Minimal & Clean', 'Luxury & Elegant', 'Playful & Colorful', 'Dark & Moody', 'Retro / Vintage'] },
     ],
     systemPrompt: `You are an elite graphic designer creating a stunning print poster or flyer.
 
@@ -200,27 +250,27 @@ ${BASE_HTML_RULES}
 
 DESIGN SPECS:
 • Canvas: 816×1056px (US Letter at 96dpi) — set <html> and <body> to exactly width:816px; height:1056px; overflow:hidden
-• Design for print: high contrast, bold typography, clear visual hierarchy
-• Structure: dominant headline (large, impactful), supporting details (date/time/location as styled text), brand name, optional decorative elements
-• Use geometric shapes, bold color blocks, or abstract patterns as background elements
+• High contrast, bold typography, clear visual hierarchy
+• Structure: dominant headline → supporting details → brand name
+• Geometric shapes, bold color blocks, or abstract patterns as background elements
 • Typography hierarchy: Title > Details > Brand Name
-• The design must look ready to print and hand out — professional quality`,
+• Must look ready to print — professional quality`,
   },
 
-  // ── Brand ─────────────────────────────────────────────────────────────────
+  // ── Brand ────────────────────────────────────────────────────────────────────
   {
     id: 'logo-concept',
     name: 'Logo Concept',
-    description: 'SVG-based logo exploration — wordmark, lettermark, or icon + text combos.',
+    description: 'SVG-based logo exploration — wordmark, lettermark, or icon combos.',
     icon: '✨',
     category: 'brand',
     previewAspect: '4/3',
     contextFields: [
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
-      { key: 'brand_description', label: 'What does the brand do?', type: 'textarea', required: true, placeholder: 'Brief description of the brand...' },
+      { key: 'brand_description', label: 'What does the brand do?', type: 'textarea', required: true },
       { key: 'style', label: 'Logo style', type: 'select', required: true, options: ['Wordmark only', 'Lettermark / Monogram', 'Icon + Wordmark', 'Abstract mark + Text', 'Emblem / Badge'] },
-      { key: 'brand_colors', label: 'Preferred colors', type: 'text', required: false },
-      { key: 'mood', label: 'Brand mood / personality', type: 'select', required: false, options: ['Professional & Trustworthy', 'Creative & Bold', 'Luxury & Premium', 'Friendly & Approachable', 'Tech & Innovative', 'Natural & Organic'] },
+      { key: 'brand_colors', label: 'Preferred colors', type: 'color', required: false },
+      { key: 'mood', label: 'Brand mood', type: 'style-select', required: false, options: ['Professional & Trustworthy', 'Creative & Bold', 'Luxury & Premium', 'Friendly & Approachable', 'Tech & Innovative', 'Natural & Organic'] },
       { key: 'variations', label: 'Show variations?', type: 'select', required: false, options: ['Single concept', '3 variations', 'Light + Dark versions'] },
     ],
     systemPrompt: `You are a world-class brand identity designer creating logo concepts using SVG.
@@ -229,16 +279,15 @@ ${BASE_HTML_RULES}
 
 DESIGN SPECS:
 • Canvas: 1200×900px — set <html> and <body> to width:1200px; height:900px; overflow:hidden
-• Background: neutral (white, off-white, or very light gray) to showcase the logo
-• If single: center the logo large (min 400px wide)
-• If 3 variations: arrange them in a 3-column grid with labels beneath each
-• If Light + Dark: show logo on white background (left half) and on dark background (right half)
-• Logos must be built entirely with SVG elements: <path>, <rect>, <circle>, <text>, <polygon>
-• No raster images — pure vector geometry
-• Include the brand name as text in the logo using a carefully chosen Google Font
-• The result must look like a real logo deliverable, not a placeholder`,
+• Neutral background (white or off-white) to showcase the logo
+• Single: center the logo large (min 400px wide)
+• 3 variations: 3-column grid with labels
+• Light + Dark: logo on white (left half) and dark background (right half)
+• Logos built entirely with SVG: <path>, <rect>, <circle>, <text>, <polygon>
+• No raster images — pure vector
+• Include brand name as text using a Google Font
+• Must look like a real logo deliverable`,
   },
-
   {
     id: 'presentation-slide',
     name: 'Presentation Slide',
@@ -249,10 +298,10 @@ DESIGN SPECS:
     contextFields: [
       { key: 'brand_name', label: 'Brand / Company name', type: 'text', required: true },
       { key: 'slide_title', label: 'Slide title', type: 'text', required: true },
-      { key: 'content', label: 'Slide content / key points', type: 'textarea', required: true, placeholder: 'Bullet points, stats, or paragraph...' },
+      { key: 'content', label: 'Slide content / key points', type: 'textarea', required: true },
       { key: 'slide_type', label: 'Slide type', type: 'select', required: false, options: ['Title / Cover slide', 'Content / Text slide', 'Stats / Numbers slide', 'Quote slide', 'Team slide', 'Thank You slide'] },
-      { key: 'brand_colors', label: 'Brand colors', type: 'text', required: false },
-      { key: 'style', label: 'Deck style', type: 'select', required: false, options: ['Corporate & Professional', 'Creative & Bold', 'Minimal & Clean', 'Dark & Dramatic', 'Colorful & Modern'] },
+      { key: 'brand_colors', label: 'Brand colors', type: 'color', required: false },
+      { key: 'style', label: 'Deck style', type: 'style-select', required: false, options: ['Corporate & Professional', 'Creative & Bold', 'Minimal & Clean', 'Dark & Dramatic', 'Colorful & Modern'] },
     ],
     systemPrompt: `You are an elite presentation designer creating a polished 16:9 slide.
 
@@ -261,12 +310,11 @@ ${BASE_HTML_RULES}
 DESIGN SPECS:
 • Viewport: 1280×720px — set <html> and <body> to exactly width:1280px; height:720px; overflow:hidden
 • The entire slide must be filled — no white canvas gaps
-• Clean slide structure with: slide number or brand watermark (small, bottom-right), title area, content area
-• For stats slides: use large numbers with labels, arranged in columns
-• For quote slides: large stylized quote with attribution
-• For title slides: full-bleed background with centered brand name + tagline
-• Typography must scale well on a projector — min 18px for body, 36px+ for titles
-• Use brand colors consistently throughout`,
+• Slide structure: brand watermark (small, bottom-right), title area, content area
+• Stats slides: large numbers with labels in columns
+• Quote slides: large stylized quote with attribution
+• Title slides: full-bleed background, centered brand + tagline
+• Min 18px body, 36px+ titles — must read well on a projector`,
   },
 ];
 
@@ -278,16 +326,30 @@ export const DESIGN_CATEGORIES: Record<string, { label: string; color: string }>
   brand:  { label: 'Brand', color: 'text-teal-600 bg-teal-50 border-teal-200' },
 };
 
+export const STYLE_ICONS: Record<string, string> = {
+  'Bold & Modern': '⚡',
+  'Minimal & Clean': '◻',
+  'Luxury & Elegant': '◆',
+  'Playful & Colorful': '🎨',
+  'Dark & Moody': '🌑',
+  'Gradient & Vibrant': '🌈',
+  'Retro / Vintage': '📻',
+  'SaaS / Tech': '💻',
+  'Agency / Creative': '✏️',
+  'E-commerce': '🛍️',
+  'Bold & Colorful': '🎯',
+  'Dark Mode': '🌙',
+  'Corporate & Professional': '🏢',
+  'Creative & Bold': '🔥',
+  'Dark & Dramatic': '🎭',
+  'Colorful & Modern': '🎪',
+  'Professional & Trustworthy': '🤝',
+  'Luxury & Premium': '💎',
+  'Friendly & Approachable': '😊',
+  'Tech & Innovative': '🚀',
+  'Natural & Organic': '🌿',
+};
+
 export function getDesignType(id: string): DesignType | undefined {
   return DESIGN_TYPES.find((t) => t.id === id);
-}
-
-export function extractHtml(text: string): string {
-  const trimmed = text.trim();
-  // Already raw HTML
-  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) return trimmed;
-  // Wrapped in markdown code block
-  const match = trimmed.match(/```(?:html)?\s*\n?([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  return trimmed;
 }
