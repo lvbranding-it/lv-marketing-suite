@@ -298,6 +298,7 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
           streaming={streaming}
           streamedText={streamedText}
           cssOverrides={cssOverrides}
+          canvasWidth={designType.canvasWidth}
         />
 
       </div>

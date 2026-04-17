@@ -34,12 +34,13 @@ interface DesignPreviewProps {
   streaming: boolean;
   streamedText: string;
   cssOverrides?: Record<string, string>;
+  canvasWidth?: number;
 }
 
-export default function DesignPreview({ html, streaming, streamedText, cssOverrides = {} }: DesignPreviewProps) {
+export default function DesignPreview({ html, streaming, streamedText, cssOverrides = {}, canvasWidth = 1080 }: DesignPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeHeight, setIframeHeight] = useState(600);
-  const [zoom, setZoom] = useState(0.75);
+  const [iframeHeight, setIframeHeight] = useState(canvasWidth); // square as default until postMessage
+  const [zoom, setZoom] = useState(0.5);
 
   const cleanHtml = extractHtml(html);
   const displayHtml = Object.keys(cssOverrides).length > 0
@@ -66,7 +67,7 @@ export default function DesignPreview({ html, streaming, streamedText, cssOverri
     const prev = [...ZOOM_LEVELS].reverse().find((z) => z < zoom);
     if (prev) setZoom(prev);
   };
-  const fitZoom = useCallback(() => setZoom(0.75), []);
+  const fitZoom = useCallback(() => setZoom(0.5), []);
 
   const handleOpenNew = () => {
     if (!cleanHtml) return;
@@ -148,21 +149,27 @@ export default function DesignPreview({ html, streaming, streamedText, cssOverri
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-auto bg-[#1a1a2e] p-6">
-            {/* Checkerboard canvas area */}
+          <div className="flex-1 overflow-auto bg-[#1a1a2e] p-6 flex items-start justify-center">
+            {/*
+              Clip-then-scale pattern:
+              1. Outer div is exactly the visible (scaled) size — acts as the clipping frame
+              2. Inner div is the full canvas size, scaled down via transform
+              3. iframe is the full canvas width/height — no sizing ambiguity
+            */}
             <div
-              className="mx-auto"
+              className="rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/10 flex-shrink-0"
               style={{
-                width: "fit-content",
-                transformOrigin: "top center",
-                transform: `scale(${zoom})`,
-                // Prevents collapsing the container when zoomed out
-                marginBottom: zoom < 1 ? `${-(1 - zoom) * iframeHeight * 0.5}px` : "0",
+                width: canvasWidth * zoom,
+                height: iframeHeight * zoom,
               }}
             >
               <div
-                className="rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/10"
-                style={{ background: "transparent" }}
+                style={{
+                  width: canvasWidth,
+                  height: iframeHeight,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top left",
+                }}
               >
                 <iframe
                   ref={iframeRef}
@@ -170,12 +177,10 @@ export default function DesignPreview({ html, streaming, streamedText, cssOverri
                   sandbox="allow-scripts"
                   title="Design Preview"
                   style={{
-                    width: "100%",
-                    minWidth: "320px",
-                    height: `${iframeHeight}px`,
+                    width: canvasWidth,
+                    height: iframeHeight,
                     border: "none",
                     display: "block",
-                    background: "white",
                   }}
                 />
               </div>

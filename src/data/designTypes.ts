@@ -14,6 +14,7 @@ export interface DesignType {
   icon: string;
   category: 'social' | 'web' | 'print' | 'email' | 'brand';
   previewAspect: string;
+  canvasWidth: number;  // natural pixel width of the design canvas
   contextFields: DesignContextField[];
   systemPrompt: string;
 }
@@ -94,6 +95,7 @@ export const DESIGN_TYPES: DesignType[] = [
     icon: '📱',
     category: 'social',
     previewAspect: '1/1',
+    canvasWidth: 1080,
     contextFields: [
       { key: 'brand_name', label: 'Brand / Account name', type: 'text', required: true, placeholder: 'e.g. LV Branding' },
       { key: 'message', label: 'Main message or headline', type: 'textarea', required: true, placeholder: 'What should the post say?' },
@@ -121,6 +123,7 @@ DESIGN SPECS:
     icon: '🎬',
     category: 'social',
     previewAspect: '9/16',
+    canvasWidth: 1080,
     contextFields: [
       { key: 'brand_name', label: 'Brand / Account name', type: 'text', required: true },
       { key: 'headline', label: 'Headline or topic', type: 'text', required: true, placeholder: 'e.g. 5 Tips for Better Branding' },
@@ -149,6 +152,7 @@ DESIGN SPECS:
     icon: '🌐',
     category: 'web',
     previewAspect: '16/9',
+    canvasWidth: 1280,
     contextFields: [
       { key: 'brand_name', label: 'Brand / Product name', type: 'text', required: true },
       { key: 'headline', label: 'Hero headline', type: 'text', required: true, placeholder: 'e.g. The smartest way to manage your team' },
@@ -178,6 +182,7 @@ DESIGN SPECS:
     icon: '📣',
     category: 'web',
     previewAspect: '728/90',
+    canvasWidth: 728,
     contextFields: [
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
       { key: 'headline', label: 'Ad headline', type: 'text', required: true, placeholder: 'e.g. Save 40% this week only' },
@@ -207,6 +212,7 @@ Set <html> and <body> to the exact pixel dimensions; overflow:hidden.
     icon: '✉️',
     category: 'email',
     previewAspect: '3/4',
+    canvasWidth: 640,
     contextFields: [
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
       { key: 'subject_context', label: 'Email purpose / subject', type: 'text', required: true, placeholder: 'e.g. Welcome email, Monthly newsletter' },
@@ -236,6 +242,7 @@ DESIGN SPECS:
     icon: '🎨',
     category: 'print',
     previewAspect: '8.5/11',
+    canvasWidth: 816,
     contextFields: [
       { key: 'brand_name', label: 'Brand / Organizer name', type: 'text', required: true },
       { key: 'event_title', label: 'Event or promo title', type: 'text', required: true, placeholder: 'e.g. Summer Sale · Grand Opening' },
@@ -265,6 +272,7 @@ DESIGN SPECS:
     icon: '✨',
     category: 'brand',
     previewAspect: '4/3',
+    canvasWidth: 1200,
     contextFields: [
       { key: 'brand_name', label: 'Brand name', type: 'text', required: true },
       { key: 'brand_description', label: 'What does the brand do?', type: 'textarea', required: true },
@@ -295,6 +303,7 @@ DESIGN SPECS:
     icon: '📊',
     category: 'brand',
     previewAspect: '16/9',
+    canvasWidth: 1280,
     contextFields: [
       { key: 'brand_name', label: 'Brand / Company name', type: 'text', required: true },
       { key: 'slide_title', label: 'Slide title', type: 'text', required: true },
