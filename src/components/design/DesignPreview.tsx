@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
-import { Loader2, Code2, Eye, ZoomIn, ZoomOut, Maximize2, ExternalLink } from "lucide-react";
+import { Loader2, Code2, Eye, ZoomIn, ZoomOut, ExternalLink } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -35,12 +35,18 @@ interface DesignPreviewProps {
   streamedText: string;
   cssOverrides?: Record<string, string>;
   canvasWidth?: number;
+  canvasHeight?: number;
 }
 
-export default function DesignPreview({ html, streaming, streamedText, cssOverrides = {}, canvasWidth = 1080 }: DesignPreviewProps) {
+export default function DesignPreview({ html, streaming, streamedText, cssOverrides = {}, canvasWidth = 1080, canvasHeight }: DesignPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeHeight, setIframeHeight] = useState(canvasWidth); // square as default until postMessage
+  const [iframeHeight, setIframeHeight] = useState(canvasHeight ?? canvasWidth);
   const [zoom, setZoom] = useState(0.5);
+
+  // Reset height when canvas dimensions change (e.g. aspect ratio switched)
+  useEffect(() => {
+    setIframeHeight(canvasHeight ?? canvasWidth);
+  }, [canvasWidth, canvasHeight]);
 
   const cleanHtml = extractHtml(html);
   const displayHtml = Object.keys(cssOverrides).length > 0

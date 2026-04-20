@@ -266,23 +266,14 @@ serve(async (req) => {
     });
   }
 
-  // Check for existing pending invitation
-  const { data: existing } = await db
+  // Cancel any existing pending invitation so a fresh one can be sent (resend flow)
+  await db
     .from("invitations")
-    .select("id, accepted_at, cancelled_at, expires_at")
+    .update({ cancelled_at: new Date().toISOString() })
     .eq("org_id", org_id)
     .eq("invited_email", email.toLowerCase())
     .is("accepted_at", null)
-    .is("cancelled_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .maybeSingle();
-
-  if (existing) {
-    return new Response(
-      JSON.stringify({ error: "A pending invitation already exists for this email" }),
-      { status: 409, headers: { ...cors, "Content-Type": "application/json" } }
-    );
-  }
+    .is("cancelled_at", null);
 
   // Insert invitation
   const { data: invitation, error: insertErr } = await db

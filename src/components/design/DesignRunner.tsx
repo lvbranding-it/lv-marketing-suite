@@ -14,13 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDesignRunner } from "@/hooks/useDesignRunner";
 import { useBrandKit } from "@/hooks/useBrandKit";
-import { type DesignType, DESIGN_CATEGORIES, STYLE_ICONS, extractHtml } from "@/data/designTypes";
+import { type DesignType, DESIGN_CATEGORIES, STYLE_ICONS, SOCIAL_POST_FORMATS, extractHtml } from "@/data/designTypes";
+import { downloadAsPng, downloadAsHtml } from "@/lib/exportDesign";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import DesignPreview from "./DesignPreview";
 import DesignColorPicker from "./DesignColorPicker";
 import DesignProperties from "./DesignProperties";
 import DesignLogoUploader from "./DesignLogoUploader";
+import AspectRatioPicker from "./AspectRatioPicker";
 import SaveDesignDialog from "./SaveDesignDialog";
 
 interface DesignRunnerProps {
@@ -38,6 +40,9 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
   const [promptSnapshot, setPromptSnapshot] = useState("");
   const [cssOverrides, setCssOverrides] = useState<Record<string, string>>({});
   const [showProperties, setShowProperties] = useState(false);
+  // Canvas dimensions — may be overridden by aspect-ratio picker
+  const [canvasWidth, setCanvasWidth] = useState(designType.canvasWidth);
+  const [canvasHeight, setCanvasHeight] = useState(designType.canvasWidth); // square default
 
   const category = DESIGN_CATEGORIES[designType.category];
 
@@ -92,14 +97,18 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
     toast({ description: "HTML copied to clipboard!" });
   };
 
-  const handleDownload = () => {
-    const html = extractHtml(currentHtml);
+  const handleDownloadPng = () => {
+    const html = extractHtml(generatedHtml);
     if (!html) return;
-    const blob = new Blob([html], { type: "text/html" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${designType.id}-${Date.now()}.html`;
-    a.click();
+    const filename = `${designType.id}-${Date.now()}`;
+    downloadAsPng(html, filename, canvasWidth, canvasHeight);
+    toast({ description: "Opening PNG export — download will start automatically." });
+  };
+
+  const handleDownloadHtml = () => {
+    const html = extractHtml(generatedHtml);
+    if (!html) return;
+    downloadAsHtml(html, `${designType.id}-${Date.now()}`);
   };
 
   const handleSave = async (title: string) => {
@@ -164,7 +173,23 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
                     {field.required && <span className="text-destructive ml-0.5">*</span>}
                   </Label>
 
-                  {field.type === "textarea" ? (
+                  {field.type === "aspect-ratio" ? (
+                    <Controller
+                      name={field.key}
+                      control={form.control}
+                      render={({ field: f }) => (
+                        <AspectRatioPicker
+                          options={[...SOCIAL_POST_FORMATS]}
+                          value={f.value as string ?? "square"}
+                          onChange={(value, opt) => {
+                            f.onChange(opt.label);
+                            setCanvasWidth(opt.width);
+                            setCanvasHeight(opt.height);
+                          }}
+                        />
+                      )}
+                    />
+                  ) : field.type === "textarea" ? (
                     <Textarea
                       id={field.key}
                       placeholder={field.placeholder}
@@ -271,8 +296,8 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleCopy}>
                 <Copy size={11} className="mr-1.5" />Copy HTML
               </Button>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleDownload}>
-                <Download size={11} className="mr-1.5" />Download
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleDownloadHtml}>
+                <Download size={11} className="mr-1.5" />HTML
               </Button>
               <Button
                 variant="outline"
@@ -291,6 +316,15 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
                 <RotateCcw size={11} className="mr-1.5" />New
               </Button>
             </div>
+            {/* PNG export — primary action */}
+            <Button
+              size="sm"
+              className="w-full h-9 text-xs font-semibold"
+              onClick={handleDownloadPng}
+            >
+              <Download size={12} className="mr-1.5" />
+              Export as PNG
+            </Button>
             <Button
               variant={showProperties ? "default" : "outline"}
               size="sm"
@@ -318,7 +352,8 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
           streaming={streaming}
           streamedText={streamedText}
           cssOverrides={cssOverrides}
-          canvasWidth={designType.canvasWidth}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
         />
 
       </div>

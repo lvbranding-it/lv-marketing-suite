@@ -1,7 +1,7 @@
 export interface DesignContextField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'color' | 'style-select';
+  type: 'text' | 'textarea' | 'select' | 'color' | 'style-select' | 'aspect-ratio';
   placeholder?: string;
   required: boolean;
   options?: string[];
@@ -93,12 +93,13 @@ export const DESIGN_TYPES: DesignType[] = [
   {
     id: 'social-post',
     name: 'Social Post',
-    description: 'Square Instagram or Facebook post — bold, scroll-stopping visuals.',
+    description: 'Instagram or Facebook post — square, portrait, or landscape format.',
     icon: '📱',
     category: 'social',
     previewAspect: '1/1',
     canvasWidth: 1080,
     contextFields: [
+      { key: 'format', label: 'Post format', type: 'aspect-ratio', required: false },
       { key: 'brand_name', label: 'Brand / Account name', type: 'text', required: true, placeholder: 'e.g. LV Branding' },
       { key: 'message', label: 'Main message or headline', type: 'textarea', required: true, placeholder: 'What should the post say?' },
       { key: 'subtext', label: 'Supporting text or CTA', type: 'text', required: false, placeholder: 'e.g. Link in bio · Shop now' },
@@ -110,7 +111,11 @@ export const DESIGN_TYPES: DesignType[] = [
 ${BASE_HTML_RULES}
 
 DESIGN SPECS:
-• Viewport: 1080×1080px — set <html> and <body> to exactly width:1080px; height:1080px; overflow:hidden
+• Read the "Post format" field to get exact canvas dimensions:
+  - Square 1:1 (default) → width:1080px; height:1080px
+  - Portrait 4:5 → width:1080px; height:1350px
+  - Landscape 1.91:1 → width:1080px; height:566px
+• Set <html> and <body> to EXACTLY those pixel dimensions; overflow:hidden
 • The entire canvas must be filled — no white gaps
 • Use large, impactful typography as the hero element
 • Include decorative shapes, geometric accents, or subtle textures via CSS
@@ -328,6 +333,13 @@ DESIGN SPECS:
 • Min 18px body, 36px+ titles — must read well on a projector`,
   },
 ];
+
+/** Aspect ratio options used by the 'aspect-ratio' context field type */
+export const SOCIAL_POST_FORMATS = [
+  { label: '1:1', value: 'square',    width: 1080, height: 1080, description: 'Square' },
+  { label: '4:5', value: 'portrait',  width: 1080, height: 1350, description: 'Portrait' },
+  { label: '1.91:1', value: 'landscape', width: 1080, height: 566, description: 'Landscape' },
+] as const;
 
 export const DESIGN_CATEGORIES: Record<string, { label: string; color: string }> = {
   social: { label: 'Social Media', color: 'text-pink-600 bg-pink-50 border-pink-200' },
