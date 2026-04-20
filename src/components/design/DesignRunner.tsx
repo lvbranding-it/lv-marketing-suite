@@ -60,11 +60,14 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
     defaultValues: Object.fromEntries(designType.contextFields.map((f) => [f.key, ""])),
   });
 
+  // Inject the brand logo data URL into generated HTML (replaces {{BRAND_LOGO}} placeholder)
+  const injectLogo = (html: string) =>
+    logoDataUrl ? html.replaceAll("{{BRAND_LOGO}}", logoDataUrl) : html;
+
   const buildPrompt = (values: Record<string, unknown>): string => {
     const lines: string[] = [];
     if (logoDataUrl) {
-      lines.push(`**Brand Logo:** Use this exact data URL as the <img src="..."> for the brand logo: ${logoDataUrl}`);
-      lines.push(`Display the logo at an appropriate size for this design type (typically 40–80px tall). Preserve its aspect ratio.`);
+      lines.push(`**Brand Logo:** Include an <img src="{{BRAND_LOGO}}" alt="Brand Logo"> in the design — use that placeholder exactly as written. It will be replaced with the real logo image.`);
     }
     for (const field of designType.contextFields) {
       const value = values[field.key];
@@ -90,15 +93,19 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
     [promptSnapshot, designType, generate]
   );
 
+  // Logo-injected versions for preview and export
+  const renderedHtml = injectLogo(generatedHtml);
+  const renderedCurrentHtml = injectLogo(currentHtml);
+
   const handleCopy = () => {
-    const html = extractHtml(currentHtml);
+    const html = extractHtml(renderedCurrentHtml);
     if (!html) return;
     navigator.clipboard.writeText(html);
     toast({ description: "HTML copied to clipboard!" });
   };
 
   const handleDownloadPng = () => {
-    const html = extractHtml(generatedHtml);
+    const html = extractHtml(renderedHtml);
     if (!html) return;
     const filename = `${designType.id}-${Date.now()}`;
     downloadAsPng(html, filename, canvasWidth, canvasHeight);
@@ -106,7 +113,7 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
   };
 
   const handleDownloadHtml = () => {
-    const html = extractHtml(generatedHtml);
+    const html = extractHtml(renderedHtml);
     if (!html) return;
     downloadAsHtml(html, `${designType.id}-${Date.now()}`);
   };
@@ -114,7 +121,7 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
   const handleSave = async (title: string) => {
     setSaving(true);
     try {
-      await saveOutput(designType, promptSnapshot, extractHtml(generatedHtml), title);
+      await saveOutput(designType, promptSnapshot, extractHtml(renderedHtml), title);
       setShowSaveDialog(false);
       toast({ description: "Design saved to your library!" });
     } catch {
@@ -124,14 +131,14 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
     }
   };
 
-  const hasOutput = !!currentHtml || streaming;
+  const hasOutput = !!renderedCurrentHtml || streaming;
 
   return (
     <div className="flex h-full min-h-0">
       {/* ── Left Panel: Form ──────────────────────────────────────────────────── */}
-      <div className="w-72 xl:w-80 shrink-0 border-r border-border flex flex-col bg-background">
+      <div className="w-72 xl:w-80 shrink-0 border-r border-border flex flex-col bg-background overflow-hidden">
         <ScrollArea className="flex-1">
-          <div className="px-4 py-4 space-y-5">
+          <div className="px-4 py-4 space-y-5 min-w-0">
             {/* Design type header */}
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl shrink-0">
@@ -348,7 +355,7 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
         )}
 
         <DesignPreview
-          html={generatedHtml}
+          html={renderedHtml}
           streaming={streaming}
           streamedText={streamedText}
           cssOverrides={cssOverrides}
@@ -371,7 +378,7 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
             </button>
           </div>
           <DesignProperties
-            html={generatedHtml}
+            html={renderedHtml}
             onCssOverrideChange={setCssOverrides}
             onRefine={handleRefine}
             streaming={streaming}

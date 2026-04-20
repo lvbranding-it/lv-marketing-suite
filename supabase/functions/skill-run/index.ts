@@ -93,7 +93,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
-        max_tokens: 8096,
+        max_tokens: 16000,
         system: skillSystemPrompt,
         messages,
         stream: true,
