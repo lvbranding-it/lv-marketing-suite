@@ -175,7 +175,10 @@ export default function DesignRunner({ designType }: DesignRunnerProps) {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               {designType.contextFields.map((field) => (
                 <div key={field.key} className="space-y-1.5">
-                  <Label htmlFor={field.key} className="text-xs font-medium">
+                  <Label
+                    htmlFor={field.type === "text" || field.type === "textarea" ? field.key : undefined}
+                    className="text-xs font-medium"
+                  >
                     {field.label}
                     {field.required && <span className="text-destructive ml-0.5">*</span>}
                   </Label>
