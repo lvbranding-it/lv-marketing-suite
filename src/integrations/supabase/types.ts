@@ -108,6 +108,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      branch_team_members: {
+        Row: {
+          branch_id: string;
+          org_id: string;
+          user_id: string;
+          role: "regional_ceo" | "manager" | "crew";
+          assigned_by: string | null;
+          assigned_at: string;
+        };
+        Insert: {
+          branch_id: string;
+          org_id: string;
+          user_id: string;
+          role?: "regional_ceo" | "manager" | "crew";
+          assigned_by?: string | null;
+          assigned_at?: string;
+        };
+        Update: {
+          branch_id?: string;
+          org_id?: string;
+          user_id?: string;
+          role?: "regional_ceo" | "manager" | "crew";
+          assigned_by?: string | null;
+          assigned_at?: string;
+        };
+        Relationships: [];
+      };
       intake_submissions: {
         Row: {
           id: string;
@@ -907,6 +934,7 @@ export type Database = {
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
+      branch_member_role: "regional_ceo" | "manager" | "crew";
       branch_status: "planning" | "active" | "paused" | "archived";
       member_role: "owner" | "admin" | "member";
       photo_status: "not_selected" | "selected" | "editing" | "ready" | "ready_for_download";
@@ -920,6 +948,7 @@ export type Tables<T extends keyof Database["public"]["Tables"]> =
 
 export type Organization = Tables<"organizations">;
 export type OrgBranch = Tables<"org_branches">;
+export type BranchTeamMember = Tables<"branch_team_members">;
 export type BranchUsageEvent = Tables<"branch_usage_events">;
 export type Project = Tables<"projects">;
 export type SkillOutputRow = Tables<"skill_outputs">;
