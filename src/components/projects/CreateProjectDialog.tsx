@@ -17,9 +17,11 @@ import {
 } from "@/components/ui/dialog";
 import { useCreateProject } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
+import BranchSelect from "@/components/branches/BranchSelect";
 
 const schema = z.object({
   name: z.string().min(1, "Project name is required"),
+  branch_id: z.string().optional(),
   client_name: z.string().optional(),
   description: z.string().optional(),
 });
@@ -38,12 +40,15 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", client_name: "", description: "" },
+    defaultValues: { name: "", branch_id: "unassigned", client_name: "", description: "" },
   });
 
   const onSubmit = async (values: FormValues) => {
     try {
-      const project = await createProject.mutateAsync(values);
+      const project = await createProject.mutateAsync({
+        ...values,
+        branch_id: values.branch_id === "unassigned" ? null : values.branch_id,
+      });
       form.reset();
       onClose();
       toast({ description: "Project created!" });
@@ -76,6 +81,15 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
             {form.formState.errors.name && (
               <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Branch</Label>
+            <BranchSelect
+              mode="assign"
+              value={form.watch("branch_id") ?? "unassigned"}
+              onValueChange={(value) => form.setValue("branch_id", value)}
+            />
           </div>
 
           <div className="space-y-1.5">

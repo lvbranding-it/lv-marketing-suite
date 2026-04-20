@@ -46,13 +46,14 @@ export function useCreateProject() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (values: { name: string; client_name?: string; description?: string }) => {
+    mutationFn: async (values: { name: string; client_name?: string; description?: string; branch_id?: string | null }) => {
       if (!org || !user) throw new Error("Not authenticated");
       const { data, error } = await supabase
         .from("projects")
         .insert({
           org_id: org.id,
           name: values.name,
+          branch_id: values.branch_id ?? null,
           client_name: values.client_name ?? null,
           description: values.description ?? null,
           created_by: user.id,

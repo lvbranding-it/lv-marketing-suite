@@ -15,6 +15,12 @@ import {
   Loader2,
   ChevronDown,
   Settings2,
+  Store,
+  MapPin,
+  Plus,
+  Eye,
+  CheckCircle2,
+  Globe2,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -33,10 +39,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage, type Language } from "@/hooks/useLanguage";
 import { useOrg } from "@/hooks/useOrg";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useBranchUsageSummary } from "@/hooks/useBranches";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -79,6 +87,36 @@ interface ActivityRow {
   entity_label: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
+}
+
+type BranchStatus = "planning" | "active" | "paused" | "archived";
+
+interface BranchRow {
+  id: string;
+  org_id: string;
+  name: string;
+  code: string | null;
+  country: string;
+  city: string | null;
+  region: string;
+  timezone: string;
+  primary_language: Language;
+  status: BranchStatus;
+  hq_monitored: boolean;
+  monthly_budget_cents: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BranchFormState {
+  name: string;
+  code: string;
+  country: string;
+  city: string;
+  timezone: string;
+  primaryLanguage: Language;
+  monthlyBudgetDollars: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -135,9 +173,13 @@ const ACTION_LABELS: Record<string, string> = {
   deleted_project: "Deleted project",
   sent_campaign: "Sent campaign",
   approved_campaign: "Approved campaign",
+  created_branch: "Created branch",
+  updated_branch_status: "Updated branch status",
 };
 
-function actionLabel(action: string) {
+function actionLabel(action: string, translate: (key: string) => string) {
+  const translated = translate(`activity.${action}`);
+  if (translated !== `activity.${action}`) return translated;
   return ACTION_LABELS[action] ?? action.replace(/_/g, " ");
 }
 
@@ -145,6 +187,7 @@ function actionLabel(action: string) {
 
 export default function Settings() {
   const { user } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const { org, role } = useOrg();
   const perms = usePermissions();
   const { toast } = useToast();
@@ -155,6 +198,16 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState<"manager" | "member">("member");
   const [activityPage, setActivityPage] = useState(0);
   const [featurePanelUserId, setFeaturePanelUserId] = useState<string | null>(null);
+  const [branchForm, setBranchForm] = useState<BranchFormState>({
+    name: "",
+    code: "",
+    country: "Mexico",
+    city: "",
+    timezone: "America/Mexico_City",
+    primaryLanguage: "es",
+    monthlyBudgetDollars: "",
+  });
+  const { summary: branchUsageSummary } = useBranchUsageSummary(30);
 
   const initials = (
     (user?.user_metadata?.full_name as string | undefined) ??
@@ -218,10 +271,153 @@ export default function Settings() {
     enabled: !!org && perms.canViewActivityLog,
   });
 
+  // ── Branches query ─────────────────────────────────────────────────────────
+  const { data: branches = [], isLoading: branchesLoading } = useQuery<BranchRow[]>({
+    queryKey: ["org_branches", org?.id],
+    queryFn: async () => {
+      if (!org) return [];
+      const { data, error } = await supabase
+        .from("org_branches")
+        .select("*")
+        .eq("org_id", org.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BranchRow[];
+    },
+    enabled: !!org,
+  });
+
   const [allActivity, setAllActivity] = useState<ActivityRow[]>([]);
   // Accumulate pages
   const displayedActivity =
     activityPage === 0 ? activityRows : [...allActivity, ...activityRows];
+
+  // ── Add branch mutation ────────────────────────────────────────────────────
+  const addBranchMutation = useMutation({
+    mutationFn: async () => {
+      if (!org || !user) throw new Error("No organization");
+      const name = branchForm.name.trim();
+      if (!name) throw new Error("Branch name is required");
+
+      const payload = {
+        org_id: org.id,
+        name,
+        code: branchForm.code.trim().toUpperCase() || null,
+        country: branchForm.country.trim() || "Mexico",
+        city: branchForm.city.trim() || null,
+        region: "Latam",
+        timezone: branchForm.timezone.trim() || "America/Mexico_City",
+        primary_language: branchForm.primaryLanguage,
+        monthly_budget_cents: Math.max(0, Math.round(Number(branchForm.monthlyBudgetDollars || 0) * 100)),
+        status: "planning" as BranchStatus,
+        hq_monitored: true,
+        created_by: user.id,
+      };
+
+      const { data, error } = await supabase
+        .from("org_branches")
+        .insert(payload)
+        .select("*")
+        .single();
+      if (error) throw error;
+      const branch = data as BranchRow;
+
+      await (supabase as any).from("activity_log").insert({
+        org_id: org.id,
+        user_id: user.id,
+        user_email: user.email,
+        action: "created_branch",
+        entity_type: "branch",
+        entity_id: branch.id,
+        entity_label: name,
+        metadata: {
+          country: payload.country,
+          city: payload.city,
+          code: payload.code,
+          hq_monitored: true,
+        },
+      });
+
+      return branch;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org_branches", org?.id] });
+      queryClient.invalidateQueries({ queryKey: ["activity_log", org?.id] });
+      toast({ description: t("branches.created") });
+      setBranchForm({
+        name: "",
+        code: "",
+        country: "Mexico",
+        city: "",
+        timezone: "America/Mexico_City",
+        primaryLanguage: "es",
+        monthlyBudgetDollars: "",
+      });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : t("branches.createFailed"),
+      });
+    },
+  });
+
+  // ── Update branch status mutation ──────────────────────────────────────────
+  const updateBranchStatusMutation = useMutation({
+    mutationFn: async ({ branch, status }: { branch: BranchRow; status: BranchStatus }) => {
+      if (!org || !user) throw new Error("No organization");
+      const { error } = await supabase
+        .from("org_branches")
+        .update({ status })
+        .eq("org_id", org.id)
+        .eq("id", branch.id);
+      if (error) throw error;
+
+      await (supabase as any).from("activity_log").insert({
+        org_id: org.id,
+        user_id: user.id,
+        user_email: user.email,
+        action: "updated_branch_status",
+        entity_type: "branch",
+        entity_id: branch.id,
+        entity_label: branch.name,
+        metadata: { status },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org_branches", org?.id] });
+      queryClient.invalidateQueries({ queryKey: ["activity_log", org?.id] });
+      toast({ description: t("branches.statusUpdated") });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : t("branches.statusUpdateFailed"),
+      });
+    },
+  });
+
+  const updateBranchBudgetMutation = useMutation({
+    mutationFn: async ({ branch, monthlyBudgetCents }: { branch: BranchRow; monthlyBudgetCents: number }) => {
+      if (!org) throw new Error("No organization");
+      const { error } = await supabase
+        .from("org_branches")
+        .update({ monthly_budget_cents: monthlyBudgetCents })
+        .eq("org_id", org.id)
+        .eq("id", branch.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org_branches", org?.id] });
+      toast({ description: "Branch budget updated." });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : "Failed to update branch budget",
+      });
+    },
+  });
 
   // ── Remove member mutation ──────────────────────────────────────────────────
   const removeMemberMutation = useMutation({
@@ -384,19 +580,21 @@ export default function Settings() {
   }
 
   const displayRole = role as MemberRole | null;
+  const branchStatusOptions: BranchStatus[] = ["planning", "active", "paused", "archived"];
 
   return (
     <AppShell>
-      <Header title="Settings" />
+      <Header title={t("settings.title")} />
 
-      <div className="p-3 sm:p-6 max-w-2xl mx-auto">
+      <div className="p-3 sm:p-6 max-w-4xl mx-auto">
         <Tabs defaultValue="account">
-          <TabsList>
-            <TabsTrigger value="account">Account</TabsTrigger>
-            <TabsTrigger value="organization">Organization</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsList className="h-auto flex-wrap">
+            <TabsTrigger value="account">{t("settings.account")}</TabsTrigger>
+            <TabsTrigger value="organization">{t("settings.organization")}</TabsTrigger>
+            <TabsTrigger value="branches">{t("settings.branches")}</TabsTrigger>
+            <TabsTrigger value="team">{t("settings.team")}</TabsTrigger>
             {perms.canViewActivityLog && (
-              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="activity">{t("settings.activity")}</TabsTrigger>
             )}
           </TabsList>
 
@@ -419,7 +617,25 @@ export default function Settings() {
               </div>
             </div>
             <div className="bg-muted/40 rounded-lg p-4 text-sm text-muted-foreground">
-              To update your name or email, contact your workspace administrator.
+              {t("settings.profileHelp")}
+            </div>
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Globe2 size={15} />
+                <span className="text-xs font-semibold uppercase tracking-wider">
+                  {t("settings.languagePreference")}
+                </span>
+              </div>
+              <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{t("language.english")}</SelectItem>
+                  <SelectItem value="es">{t("language.spanish")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("settings.languageHelp")}</p>
             </div>
           </TabsContent>
 
@@ -429,20 +645,339 @@ export default function Settings() {
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <Building2 size={15} />
                 <span className="text-xs font-semibold uppercase tracking-wider">
-                  Organization
+                  {t("settings.organization")}
                 </span>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Name</Label>
+                <Label className="text-xs text-muted-foreground">{t("settings.name")}</Label>
                 <p className="text-sm font-medium mt-0.5">{org?.name ?? "—"}</p>
               </div>
               <Separator />
               <div>
-                <Label className="text-xs text-muted-foreground">Organization ID</Label>
+                <Label className="text-xs text-muted-foreground">{t("settings.organizationId")}</Label>
                 <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">
                   {org?.id ?? "—"}
                 </p>
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Branches Tab ── */}
+          <TabsContent value="branches" className="mt-6 space-y-6">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Store size={15} className="text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">{t("branches.title")}</h3>
+                  </div>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    {t("branches.subtitle")}
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 text-primary">
+                  <Eye size={12} />
+                  {t("branches.hqMonitored")}
+                </Badge>
+              </div>
+
+              <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-primary" />
+                  <span>{t("branches.hqMonitoredHelp")}</span>
+                </div>
+              </div>
+            </div>
+
+            {perms.isAdmin && (
+              <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Plus size={14} className="text-muted-foreground" />
+                  <h3 className="text-sm font-semibold">{t("branches.add")}</h3>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-name" className="text-xs">
+                      {t("branches.branchName")}
+                    </Label>
+                    <Input
+                      id="branch-name"
+                      value={branchForm.name}
+                      placeholder={t("branches.namePlaceholder")}
+                      onChange={(event) =>
+                        setBranchForm((current) => ({ ...current, name: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-code" className="text-xs">
+                      {t("branches.code")}
+                    </Label>
+                    <Input
+                      id="branch-code"
+                      value={branchForm.code}
+                      placeholder={t("branches.codePlaceholder")}
+                      onChange={(event) =>
+                        setBranchForm((current) => ({ ...current, code: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-country" className="text-xs">
+                      {t("branches.country")}
+                    </Label>
+                    <Input
+                      id="branch-country"
+                      value={branchForm.country}
+                      placeholder={t("branches.countryPlaceholder")}
+                      onChange={(event) =>
+                        setBranchForm((current) => ({ ...current, country: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-city" className="text-xs">
+                      {t("branches.city")}
+                    </Label>
+                    <Input
+                      id="branch-city"
+                      value={branchForm.city}
+                      placeholder={t("branches.cityPlaceholder")}
+                      onChange={(event) =>
+                        setBranchForm((current) => ({ ...current, city: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-timezone" className="text-xs">
+                      {t("branches.timezone")}
+                    </Label>
+                    <Input
+                      id="branch-timezone"
+                      value={branchForm.timezone}
+                      onChange={(event) =>
+                        setBranchForm((current) => ({ ...current, timezone: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">{t("branches.primaryLanguage")}</Label>
+                    <Select
+                      value={branchForm.primaryLanguage}
+                      onValueChange={(value) =>
+                        setBranchForm((current) => ({
+                          ...current,
+                          primaryLanguage: value as Language,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="es">{t("branches.language.es")}</SelectItem>
+                        <SelectItem value="en">{t("branches.language.en")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="branch-budget" className="text-xs">
+                      Monthly AI budget ($)
+                    </Label>
+                    <Input
+                      id="branch-budget"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={branchForm.monthlyBudgetDollars}
+                      placeholder="0 = no limit"
+                      onChange={(event) =>
+                        setBranchForm((current) => ({
+                          ...current,
+                          monthlyBudgetDollars: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  className="gap-2 text-white hover:opacity-90"
+                  style={{ backgroundColor: "#CB2039" }}
+                  disabled={addBranchMutation.isPending || !branchForm.name.trim()}
+                  onClick={() => addBranchMutation.mutate()}
+                >
+                  {addBranchMutation.isPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Plus size={14} />
+                  )}
+                  {t("branches.add")}
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {branchesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  {t("branches.loading")}
+                </div>
+              ) : branches.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
+                  <Store size={24} className="mx-auto mb-2 text-muted-foreground/60" />
+                  <p className="text-sm text-muted-foreground">{t("branches.addFirst")}</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {branches.map((branch) => {
+                    const usage = branchUsageSummary.find((item) => item.branch.id === branch.id);
+                    const usageCents = usage?.costCents ?? 0;
+                    const budgetCents = branch.monthly_budget_cents ?? 0;
+                    const budgetPct = budgetCents > 0
+                      ? Math.min(100, Math.round((usageCents / budgetCents) * 100))
+                      : 0;
+
+                    return (
+                    <div
+                      key={branch.id}
+                      className="rounded-lg border border-border bg-card p-4 space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="truncate text-sm font-semibold">{branch.name}</h4>
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {branch.code || t("branches.noCode")}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                            <MapPin size={11} />
+                            <span className="truncate">
+                              {[branch.city || t("branches.noCity"), branch.country].join(", ")}
+                            </span>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 gap-1 border-primary/30 text-primary">
+                          <Eye size={11} />
+                          {t("branches.hqMonitored")}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md bg-muted/40 p-2">
+                          <p className="text-muted-foreground">{t("branches.region")}</p>
+                          <p className="mt-0.5 font-medium">{branch.region}</p>
+                        </div>
+                        <div className="rounded-md bg-muted/40 p-2">
+                          <p className="text-muted-foreground">{t("branches.primaryLanguage")}</p>
+                          <p className="mt-0.5 font-medium">
+                            {t(`branches.language.${branch.primary_language}`)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-border p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-medium text-muted-foreground">
+                              30-day AI usage
+                            </p>
+                            <p className="text-sm font-semibold">
+                              ${(usageCents / 100).toFixed(2)}
+                              <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                {usage?.units ?? 0} tokens
+                              </span>
+                            </p>
+                          </div>
+                          {perms.isAdmin ? (
+                            <div className="w-28">
+                              <Label className="sr-only" htmlFor={`budget-${branch.id}`}>
+                                Monthly AI budget
+                              </Label>
+                              <Input
+                                id={`budget-${branch.id}`}
+                                type="number"
+                                min={0}
+                                step="1"
+                                defaultValue={budgetCents ? String(Math.round(budgetCents / 100)) : ""}
+                                placeholder="Budget"
+                                className="h-8 text-xs"
+                                onBlur={(event) => {
+                                  const nextCents = Math.max(0, Math.round(Number(event.target.value || 0) * 100));
+                                  if (nextCents !== budgetCents) {
+                                    updateBranchBudgetMutation.mutate({
+                                      branch,
+                                      monthlyBudgetCents: nextCents,
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {budgetCents ? `$${(budgetCents / 100).toFixed(0)} budget` : "No budget"}
+                            </span>
+                          )}
+                        </div>
+                        {budgetCents > 0 && (
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={cn(
+                                "h-full rounded-full",
+                                budgetPct >= 90 ? "bg-destructive" : "bg-primary"
+                              )}
+                              style={{ width: `${budgetPct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">{t("branches.timezone")}</p>
+                          <p className="text-xs font-medium">{branch.timezone}</p>
+                        </div>
+                        {perms.isAdmin ? (
+                          <Select
+                            value={branch.status}
+                            disabled={updateBranchStatusMutation.isPending}
+                            onValueChange={(value) =>
+                              updateBranchStatusMutation.mutate({
+                                branch,
+                                status: value as BranchStatus,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-32 text-xs" aria-label={t("common.status")}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {branchStatusOptions.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {t(`branches.status.${status}`)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant="outline">
+                            {t(`branches.status.${branch.status}`)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                  })}
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -452,16 +987,16 @@ export default function Settings() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Users size={14} className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Team Members</h3>
+                <h3 className="text-sm font-semibold">{t("settings.teamMembers")}</h3>
               </div>
 
               {membersLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <Loader2 size={14} className="animate-spin" />
-                  Loading members…
+                  {t("settings.loadingMembers")}
                 </div>
               ) : members.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No members yet.</p>
+                <p className="text-sm text-muted-foreground">{t("settings.noMembers")}</p>
               ) : (
                 <div className="space-y-2">
                   {members.map((member) => {
@@ -548,7 +1083,7 @@ export default function Settings() {
                         {featurePanelUserId === member.user_id && (
                           <div className="mt-2 ml-9 p-3 bg-muted/40 rounded-lg border border-border space-y-2">
                             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                              Feature Access
+                              {t("settings.featureAccess")}
                             </p>
                             {[
                               { key: "campaigns", label: "Campaigns", icon: "📧" },
@@ -600,7 +1135,7 @@ export default function Settings() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Mail size={14} className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Pending Invitations</h3>
+                <h3 className="text-sm font-semibold">{t("settings.pendingInvitations")}</h3>
               </div>
 
               {invitationsLoading ? (
@@ -609,7 +1144,7 @@ export default function Settings() {
                   Loading…
                 </div>
               ) : invitations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No pending invitations.</p>
+                <p className="text-sm text-muted-foreground">{t("settings.noPendingInvitations")}</p>
               ) : (
                 <div className="space-y-2">
                   {invitations.map((invite) => (
@@ -665,7 +1200,7 @@ export default function Settings() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <UserPlus size={14} className="text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Invite Team Member</h3>
+                    <h3 className="text-sm font-semibold">{t("settings.inviteTeamMember")}</h3>
                   </div>
 
                   <div className="space-y-3">
@@ -744,7 +1279,7 @@ export default function Settings() {
                       ) : (
                         <UserPlus size={14} />
                       )}
-                      Send Invite
+                      {t("settings.sendInvite")}
                     </Button>
                   </div>
                 </div>
@@ -804,7 +1339,7 @@ export default function Settings() {
                             <td className="px-3 py-2 truncate max-w-[120px]">
                               {row.user_email ?? row.user_id?.slice(0, 8) ?? "—"}
                             </td>
-                            <td className="px-3 py-2">{actionLabel(row.action)}</td>
+                            <td className="px-3 py-2">{actionLabel(row.action, t)}</td>
                             <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell truncate max-w-[140px]">
                               {row.entity_label ?? row.entity_type ?? "—"}
                             </td>

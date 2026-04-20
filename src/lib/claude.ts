@@ -19,6 +19,9 @@ export async function runSkillStream(
     userMessage: string;
     conversationHistory?: Message[];
     marketingContext?: Record<string, unknown>;
+    orgId?: string;
+    branchId?: string | null;
+    sourceType?: string;
   },
   callbacks: StreamCallbacks
 ): Promise<void> {

@@ -23,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Clock } from "lucide-react";
 import { useOrg } from "@/hooks/useOrg";
+import BranchSelect from "@/components/branches/BranchSelect";
+import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
 const STATUS_META: Record<string, { label: string; class: string }> = {
   draft:            { label: "Draft",            class: "bg-slate-100 text-slate-600 border-slate-200" },
@@ -136,7 +138,11 @@ function Stat({
 export default function Campaigns() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { data: campaigns = [], isLoading } = useCampaigns();
+  const { data: allCampaigns = [], isLoading } = useCampaigns();
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
+  const campaigns = allCampaigns.filter((campaign) =>
+    branchMatchesFilter(campaign.branch_id, branchFilter)
+  );
   const deleteCampaign = useDeleteCampaign();
   const [deleteTarget, setDeleteTarget] = useState<EmailCampaign | null>(null);
   const sendCampaign = useSendCampaign();
@@ -206,6 +212,7 @@ export default function Campaigns() {
       // Insert into contacts table (upsert by email + org_id to avoid duplicates)
       const rows = contacts.map((c) => ({
         org_id:     org.id,
+        branch_id:  branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
         email:      c.email,
         first_name: c.first_name || null,
         last_name:  c.last_name  || null,
@@ -240,7 +247,8 @@ export default function Campaigns() {
       <Header title="Email Campaigns" subtitle="Compose, send and track email blasts" />
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
       {/* Header actions */}
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
         {/* CSV import */}
         <label className={cn(
           "flex items-center gap-1.5 h-9 px-3 text-sm border border-border rounded-md cursor-pointer",

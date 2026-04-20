@@ -54,6 +54,60 @@ export type Database = {
         };
         Relationships: [];
       };
+      org_branches: {
+        Row: {
+          id: string;
+          org_id: string;
+          name: string;
+          code: string | null;
+          country: string;
+          city: string | null;
+          region: string;
+          timezone: string;
+          primary_language: "en" | "es";
+          status: "planning" | "active" | "paused" | "archived";
+          hq_monitored: boolean;
+          monthly_budget_cents: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          name: string;
+          code?: string | null;
+          country?: string;
+          city?: string | null;
+          region?: string;
+          timezone?: string;
+          primary_language?: "en" | "es";
+          status?: "planning" | "active" | "paused" | "archived";
+          hq_monitored?: boolean;
+          monthly_budget_cents?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          name?: string;
+          code?: string | null;
+          country?: string;
+          city?: string | null;
+          region?: string;
+          timezone?: string;
+          primary_language?: "en" | "es";
+          status?: "planning" | "active" | "paused" | "archived";
+          hq_monitored?: boolean;
+          monthly_budget_cents?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       intake_submissions: {
         Row: {
           id: string;
@@ -118,6 +172,7 @@ export type Database = {
         Row: {
           id: string;
           org_id: string;
+          branch_id: string | null;
           name: string;
           description: string | null;
           client_name: string | null;
@@ -131,6 +186,7 @@ export type Database = {
         Insert: {
           id?: string;
           org_id: string;
+          branch_id?: string | null;
           name: string;
           description?: string | null;
           client_name?: string | null;
@@ -144,6 +200,7 @@ export type Database = {
         Update: {
           id?: string;
           org_id?: string;
+          branch_id?: string | null;
           name?: string;
           description?: string | null;
           client_name?: string | null;
@@ -160,6 +217,7 @@ export type Database = {
         Row: {
           id: string;
           org_id: string;
+          branch_id: string | null;
           project_id: string | null;
           user_id: string;
           skill_id: string;
@@ -174,6 +232,7 @@ export type Database = {
         Insert: {
           id?: string;
           org_id: string;
+          branch_id?: string | null;
           project_id?: string | null;
           user_id: string;
           skill_id: string;
@@ -188,6 +247,7 @@ export type Database = {
         Update: {
           id?: string;
           org_id?: string;
+          branch_id?: string | null;
           project_id?: string | null;
           user_id?: string;
           skill_id?: string;
@@ -205,6 +265,7 @@ export type Database = {
         Row: {
           id: string;
           org_id: string;
+          branch_id: string | null;
           first_name: string | null;
           last_name: string | null;
           title: string | null;
@@ -242,6 +303,7 @@ export type Database = {
         Insert: {
           id?: string;
           org_id: string;
+          branch_id?: string | null;
           first_name?: string | null;
           last_name?: string | null;
           title?: string | null;
@@ -279,6 +341,7 @@ export type Database = {
         Update: {
           id?: string;
           org_id?: string;
+          branch_id?: string | null;
           first_name?: string | null;
           last_name?: string | null;
           title?: string | null;
@@ -418,6 +481,7 @@ export type Database = {
         Row: {
           id: string;
           org_id: string;
+          branch_id: string | null;
           created_by: string | null;
           name: string;
           subject: string;
@@ -439,6 +503,7 @@ export type Database = {
         Insert: {
           id?: string;
           org_id: string;
+          branch_id?: string | null;
           created_by?: string | null;
           name: string;
           subject?: string;
@@ -460,6 +525,7 @@ export type Database = {
         Update: {
           id?: string;
           org_id?: string;
+          branch_id?: string | null;
           created_by?: string | null;
           name?: string;
           subject?: string;
@@ -595,6 +661,7 @@ export type Database = {
         Row: {
           id: string;
           org_id: string;
+          branch_id: string | null;
           created_by: string | null;
           name: string;
           client_name: string;
@@ -624,6 +691,7 @@ export type Database = {
         Insert: {
           id?: string;
           org_id: string;
+          branch_id?: string | null;
           created_by?: string | null;
           name: string;
           client_name: string;
@@ -653,6 +721,7 @@ export type Database = {
         Update: {
           id?: string;
           org_id?: string;
+          branch_id?: string | null;
           created_by?: string | null;
           name?: string;
           client_name?: string;
@@ -792,10 +861,53 @@ export type Database = {
         };
         Relationships: [];
       };
+      branch_usage_events: {
+        Row: {
+          id: string;
+          org_id: string;
+          branch_id: string | null;
+          user_id: string | null;
+          source_type: string;
+          source_id: string | null;
+          units: number;
+          unit_type: string;
+          estimated_cost_cents: number;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          branch_id?: string | null;
+          user_id?: string | null;
+          source_type: string;
+          source_id?: string | null;
+          units?: number;
+          unit_type?: string;
+          estimated_cost_cents?: number;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          branch_id?: string | null;
+          user_id?: string | null;
+          source_type?: string;
+          source_id?: string | null;
+          units?: number;
+          unit_type?: string;
+          estimated_cost_cents?: number;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
+      branch_status: "planning" | "active" | "paused" | "archived";
       member_role: "owner" | "admin" | "member";
       photo_status: "not_selected" | "selected" | "editing" | "ready" | "ready_for_download";
       session_status: "active" | "archived";
@@ -807,6 +919,8 @@ export type Tables<T extends keyof Database["public"]["Tables"]> =
   Database["public"]["Tables"][T]["Row"];
 
 export type Organization = Tables<"organizations">;
+export type OrgBranch = Tables<"org_branches">;
+export type BranchUsageEvent = Tables<"branch_usage_events">;
 export type Project = Tables<"projects">;
 export type SkillOutputRow = Tables<"skill_outputs">;
 export type TeamMember = Tables<"team_members">;

@@ -63,6 +63,7 @@ export default function ApolloPanel({ onImported }: Props) {
     setImporting((s) => new Set(s).add(p.id));
     try {
       await importContact.mutateAsync({
+        branch_id: null,
         first_name: p.first_name,
         last_name: p.last_name,
         title: p.title,

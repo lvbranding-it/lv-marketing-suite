@@ -51,6 +51,9 @@ serve(async (req) => {
       userMessage,
       conversationHistory,
       marketingContext,
+      orgId,
+      branchId,
+      sourceType,
     } = await req.json();
 
     if (!skillSystemPrompt || !userMessage) {
@@ -58,6 +61,63 @@ serve(async (req) => {
         JSON.stringify({ error: "skillSystemPrompt and userMessage are required" }),
         { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
       );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAdmin = supabaseUrl && serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey)
+      : null;
+
+    if (supabaseAdmin && orgId) {
+      const { data: membership } = await supabaseAdmin
+        .from("team_members")
+        .select("user_id")
+        .eq("org_id", orgId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!membership) {
+        return new Response(JSON.stringify({ error: "Unauthorized organization" }), {
+          status: 403,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    if (supabaseAdmin && orgId && branchId) {
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+
+      const { data: branch } = await supabaseAdmin
+        .from("org_branches")
+        .select("monthly_budget_cents")
+        .eq("org_id", orgId)
+        .eq("id", branchId)
+        .maybeSingle();
+
+      const monthlyBudgetCents = Number(branch?.monthly_budget_cents ?? 0);
+      if (monthlyBudgetCents > 0) {
+        const { data: events } = await supabaseAdmin
+          .from("branch_usage_events")
+          .select("estimated_cost_cents")
+          .eq("org_id", orgId)
+          .eq("branch_id", branchId)
+          .gte("created_at", monthStart.toISOString());
+
+        const monthSpendCents = (events ?? []).reduce(
+          (sum, event) => sum + Number(event.estimated_cost_cents ?? 0),
+          0
+        );
+
+        if (monthSpendCents >= monthlyBudgetCents) {
+          return new Response(
+            JSON.stringify({ error: "Branch AI usage budget reached for this month." }),
+            { status: 402, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
 
     // Build messages array
@@ -123,6 +183,8 @@ serve(async (req) => {
       const reader = claudeResponse.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
 
       try {
         while (true) {
@@ -140,6 +202,13 @@ serve(async (req) => {
 
             try {
               const event = JSON.parse(data);
+              if (event.type === "message_start") {
+                inputTokens = Number(event.message?.usage?.input_tokens ?? inputTokens);
+                outputTokens = Number(event.message?.usage?.output_tokens ?? outputTokens);
+              }
+              if (event.type === "message_delta") {
+                outputTokens = Number(event.usage?.output_tokens ?? outputTokens);
+              }
               if (
                 event.type === "content_block_delta" &&
                 event.delta?.type === "text_delta" &&
@@ -153,6 +222,27 @@ serve(async (req) => {
               // Skip malformed events
             }
           }
+        }
+
+        if (supabaseAdmin && orgId) {
+          const estimatedCostCents = Math.ceil(
+            (inputTokens * 300 + outputTokens * 1500) / 1_000_000
+          );
+
+          await supabaseAdmin.from("branch_usage_events").insert({
+            org_id: orgId,
+            branch_id: branchId ?? null,
+            user_id: userId,
+            source_type: sourceType ?? "ai_skill",
+            units: inputTokens + outputTokens,
+            unit_type: "tokens",
+            estimated_cost_cents: estimatedCostCents,
+            metadata: {
+              model: "claude-sonnet-4-6",
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+            },
+          });
         }
 
         await writer.write(encoder.encode("data: [DONE]\n\n"));

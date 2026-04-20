@@ -9,6 +9,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePhotoSessions, useSessionPhotos } from "@/hooks/usePhotoSessions";
 import type { PhotoSession } from "@/integrations/supabase/types";
+import BranchSelect from "@/components/branches/BranchSelect";
+import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
 function SessionCardWithPhotos({ session }: { session: PhotoSession }) {
   const { data: photos = [] } = useSessionPhotos(session.id);
@@ -20,12 +22,14 @@ type StatusFilter = "all" | "active" | "archived";
 export default function PhotoSessions() {
   const [createOpen, setCreateOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: sessions = [], isLoading } = usePhotoSessions();
 
   const filtered =
-    statusFilter === "all"
-      ? sessions
-      : sessions.filter((s) => s.status === statusFilter);
+    sessions.filter((s) =>
+      (statusFilter === "all" || s.status === statusFilter) &&
+      branchMatchesFilter(s.branch_id, branchFilter)
+    );
 
   return (
     <AppShell>
@@ -41,13 +45,16 @@ export default function PhotoSessions() {
       />
 
       <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4">
-        <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="archived">Archived</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="archived">Archived</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">

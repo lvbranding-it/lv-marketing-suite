@@ -27,7 +27,8 @@ export function useSkillRunner() {
     async (
       userMessage: string,
       skill: Skill,
-      marketingContext?: Record<string, unknown>
+      marketingContext?: Record<string, unknown>,
+      branchId?: string | null
     ) => {
       setState((prev) => ({
         ...prev,
@@ -41,6 +42,9 @@ export function useSkillRunner() {
           userMessage,
           conversationHistory: state.conversationHistory,
           marketingContext,
+          orgId: org?.id,
+          branchId: branchId ?? null,
+          sourceType: "ai_skill",
         },
         {
           onToken: (token) => {
@@ -71,7 +75,7 @@ export function useSkillRunner() {
         }
       );
     },
-    [state.conversationHistory]
+    [state.conversationHistory, org?.id]
   );
 
   const saveOutput = useCallback(
@@ -86,6 +90,7 @@ export function useSkillRunner() {
 
       const { error } = await supabase.from("skill_outputs").insert({
         org_id: org.id,
+        branch_id: inputData.branch_id ?? null,
         project_id: projectId ?? null,
         user_id: user.id,
         skill_id: skill.id,

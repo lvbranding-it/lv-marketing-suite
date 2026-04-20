@@ -33,6 +33,7 @@ function toImportedContact(c: Contact): ImportedContact {
   return {
     id: String(c.id),
     org_id: "",
+    branch_id: null,
     first_name: c.first,
     last_name: c.last,
     title: c.title,

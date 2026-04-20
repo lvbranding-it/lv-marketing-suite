@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { Zap, FolderOpen, BarChart3, Clock } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -10,6 +11,9 @@ import { useProjects } from "@/hooks/useProjects";
 import { useSkillOutputs } from "@/hooks/useSkillOutputs";
 import { SKILLS, FEATURED_SKILL_IDS } from "@/data/skills";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/hooks/useLanguage";
+import BranchSelect from "@/components/branches/BranchSelect";
+import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
 function StatCard({
   icon: Icon,
@@ -41,11 +45,15 @@ function StatCard({
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: recentOutputs = [], isLoading: outputsLoading } = useSkillOutputs({ limit: 5 });
 
-  const activeProjects = projects.filter((p) => p.status === "active");
+  const visibleProjects = projects.filter((p) => branchMatchesFilter(p.branch_id, branchFilter));
+  const visibleOutputs = recentOutputs.filter((o) => branchMatchesFilter(o.branch_id, branchFilter));
+  const activeProjects = visibleProjects.filter((p) => p.status === "active");
   const hasContext = projects.some((p) => p.context_complete);
 
   const featuredSkills = FEATURED_SKILL_IDS.map((id) =>
@@ -55,7 +63,7 @@ export default function Dashboard() {
   // Week's outputs
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekOutputs = recentOutputs.filter(
+  const weekOutputs = visibleOutputs.filter(
     (o) => new Date(o.created_at) >= weekAgo
   );
 
@@ -64,33 +72,37 @@ export default function Dashboard() {
   return (
     <AppShell>
       <Header
-        title={`Hey ${userName} 👋`}
-        subtitle="Here's your marketing workspace."
+        title={t("dashboard.greeting", { name: userName })}
+        subtitle={t("dashboard.subtitle")}
       />
 
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-8 max-w-6xl mx-auto">
+        <div className="flex justify-end">
+          <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
             icon={BarChart3}
-            label="Total Outputs"
-            value={recentOutputs.length}
+            label={t("dashboard.totalOutputs")}
+            value={visibleOutputs.length}
             loading={outputsLoading}
           />
           <StatCard
             icon={FolderOpen}
-            label="Active Projects"
+            label={t("dashboard.activeProjects")}
             value={activeProjects.length}
             loading={projectsLoading}
           />
           <StatCard
             icon={Zap}
-            label="Skills Available"
+            label={t("dashboard.skillsAvailable")}
             value={SKILLS.length}
           />
           <StatCard
             icon={Clock}
-            label="This Week"
+            label={t("dashboard.thisWeek")}
             value={weekOutputs.length}
             loading={outputsLoading}
           />
@@ -99,12 +111,12 @@ export default function Dashboard() {
         {/* Quick Start */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-foreground">Quick Start</h2>
+            <h2 className="text-sm font-semibold text-foreground">{t("dashboard.quickStart")}</h2>
             <button
               onClick={() => navigate("/skills")}
               className="text-xs text-primary hover:underline"
             >
-              View all skills →
+              {t("dashboard.viewAllSkills")} →
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
@@ -120,27 +132,27 @@ export default function Dashboard() {
           {/* Recent Outputs */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-foreground">Recent Outputs</h2>
+              <h2 className="text-sm font-semibold text-foreground">{t("dashboard.recentOutputs")}</h2>
               <button
                 onClick={() => navigate("/history")}
                 className="text-xs text-primary hover:underline"
               >
-                View all →
+                {t("dashboard.viewAll")} →
               </button>
             </div>
             {outputsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
               </div>
-            ) : recentOutputs.length === 0 ? (
+            ) : visibleOutputs.length === 0 ? (
               <div className="bg-muted/40 rounded-lg p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No outputs yet. Run a skill to get started!
+                  {t("dashboard.noOutputs")}
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {recentOutputs.slice(0, 5).map((output) => (
+                {visibleOutputs.slice(0, 5).map((output) => (
                   <SkillOutputCard key={output.id} output={output} />
                 ))}
               </div>
@@ -150,12 +162,12 @@ export default function Dashboard() {
           {/* Active Projects */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-foreground">Active Projects</h2>
+              <h2 className="text-sm font-semibold text-foreground">{t("dashboard.activeProjects")}</h2>
               <button
                 onClick={() => navigate("/projects")}
                 className="text-xs text-primary hover:underline"
               >
-                View all →
+                {t("dashboard.viewAll")} →
               </button>
             </div>
             {projectsLoading ? (
@@ -165,7 +177,7 @@ export default function Dashboard() {
             ) : activeProjects.length === 0 ? (
               <div className="bg-muted/40 rounded-lg p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No active projects. Create one to organize your outputs.
+                  {t("dashboard.noProjects")}
                 </p>
               </div>
             ) : (

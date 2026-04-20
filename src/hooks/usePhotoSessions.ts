@@ -176,6 +176,7 @@ export function useDeliverableSignedUrl(storagePath: string | undefined) {
 
 type CreateSessionInput = {
   name: string;
+  branch_id?: string | null;
   client_name: string;
   client_email?: string;
   cc_emails?: string[];
@@ -198,6 +199,7 @@ export function useCreateSession() {
         .from("photo_sessions")
         .insert({
           org_id: org.id,
+          branch_id: values.branch_id ?? null,
           created_by: user.id,
           name: values.name,
           client_name: values.client_name,
@@ -229,6 +231,7 @@ export function useCreateSession() {
             const lastName = nameParts.slice(1).join(" ") || null;
             await supabase.from("contacts").insert({
               org_id: org.id,
+              branch_id: values.branch_id ?? null,
               created_by: user.id,
               first_name: firstName,
               last_name: lastName,

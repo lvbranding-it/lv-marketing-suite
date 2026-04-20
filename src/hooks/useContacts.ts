@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 export interface ImportedContact {
   id: string;
   org_id: string;
+  branch_id: string | null;
   first_name: string | null;
   last_name: string | null;
   title: string | null;

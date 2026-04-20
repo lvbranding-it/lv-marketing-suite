@@ -18,6 +18,8 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
+import BranchSelect from "@/components/branches/BranchSelect";
+import type { BranchFilterValue } from "@/hooks/useBranches";
 
 type Step = 1 | 2 | 3;
 
@@ -45,6 +47,7 @@ export default function CampaignComposer() {
   const [subject,      setSubject]      = useState(cloneData?.subject ?? "");
   const [previewText,  setPreviewText]  = useState(cloneData?.preview_text ?? "");
   const [bodyHtml,     setBodyHtml]     = useState(cloneData?.body_html ?? "");
+  const [branchId,     setBranchId]     = useState<BranchFilterValue>("unassigned");
   const [sending,      setSending]      = useState(false);
 
   // Edit mode: load existing campaign
@@ -59,6 +62,7 @@ export default function CampaignComposer() {
       setSubject(existingCampaign.subject ?? "");
       setPreviewText(existingCampaign.preview_text ?? "");
       setBodyHtml(existingCampaign.body_html ?? "");
+      setBranchId(existingCampaign.branch_id ?? "unassigned");
       setInitialized(true);
     }
   }, [existingCampaign, initialized, cloneData]);
@@ -108,6 +112,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html: bodyHtml,
           recipient_count: recipients.length,
+          branch_id: branchId === "unassigned" ? null : branchId,
         });
         if (recipients.length > 0) {
           await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
@@ -120,6 +125,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html: bodyHtml,
           recipients,
+          branch_id: branchId === "unassigned" ? null : branchId,
         });
         setDraftId(campaign.id);
       }
@@ -145,7 +151,7 @@ export default function CampaignComposer() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignName, subject, previewText, bodyHtml, recipients, initialized]);
+  }, [campaignName, subject, previewText, bodyHtml, recipients, branchId, initialized]);
 
   const handleSend = async () => {
     setSending(true);
@@ -160,6 +166,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html: bodyHtml,
           recipient_count: recipients.length,
+          branch_id: branchId === "unassigned" ? null : branchId,
         });
         await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
         campaignToSend = { id: draftId } as EmailCampaign;
@@ -170,6 +177,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html: bodyHtml,
           recipients,
+          branch_id: branchId === "unassigned" ? null : branchId,
         });
       }
       const result = await sendCampaign.mutateAsync(campaignToSend.id);
@@ -194,6 +202,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html: bodyHtml,
           recipient_count: recipients.length,
+          branch_id: branchId === "unassigned" ? null : branchId,
         });
         await upsertRecipients.mutateAsync({ campaignId: draftId, recipients });
         campaignToSubmit = { id: draftId } as EmailCampaign;
@@ -204,6 +213,7 @@ export default function CampaignComposer() {
           preview_text: previewText,
           body_html:    bodyHtml,
           recipients,
+          branch_id:    branchId === "unassigned" ? null : branchId,
           status:       "pending_approval",
         });
       }
@@ -288,6 +298,12 @@ export default function CampaignComposer() {
                   Describe your campaign and let AI draft it, then edit as needed.
                 </p>
               </div>
+              <BranchSelect
+                mode="assign"
+                value={branchId}
+                onValueChange={setBranchId}
+                className="max-w-xs"
+              />
 
               {/* Wait for existing campaign data before mounting the composer */}
               {editId && !initialized ? (

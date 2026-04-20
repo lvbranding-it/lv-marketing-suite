@@ -9,10 +9,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/hooks/useProjects";
 import { useSkillOutputs } from "@/hooks/useSkillOutputs";
+import BranchSelect from "@/components/branches/BranchSelect";
+import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
 export default function Projects() {
   const [createOpen, setCreateOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: projects = [], isLoading } = useProjects();
   const { data: allOutputs = [] } = useSkillOutputs();
 
@@ -22,9 +25,10 @@ export default function Projects() {
   }, {});
 
   const filtered =
-    statusFilter === "all"
-      ? projects
-      : projects.filter((p) => p.status === statusFilter);
+    projects.filter((p) =>
+      (statusFilter === "all" || p.status === statusFilter) &&
+      branchMatchesFilter(p.branch_id, branchFilter)
+    );
 
   return (
     <AppShell>
@@ -40,14 +44,17 @@ export default function Projects() {
       />
 
       <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4">
-        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="paused">Paused</TabsTrigger>
-            <TabsTrigger value="archived">Archived</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="paused">Paused</TabsTrigger>
+              <TabsTrigger value="archived">Archived</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">

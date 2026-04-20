@@ -63,6 +63,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
   const selectedProject: Project | undefined = projects.find(
     (p) => p.id === selectedProjectId
   );
+  const selectedBranchId = selectedProject?.branch_id ?? null;
 
   // Auto-scroll output
   useEffect(() => {
@@ -93,14 +94,14 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
     );
     const message = buildUserMessage(values);
     setInputDataToSave(stringValues);
-    await run(message, skill, getMarketingContext());
+    await run(message, skill, getMarketingContext(), selectedBranchId);
   };
 
   const handleFollowUp = async () => {
     if (!followUp.trim() || streaming) return;
     const message = followUp.trim();
     setFollowUp("");
-    await run(message, skill, getMarketingContext());
+    await run(message, skill, getMarketingContext(), selectedBranchId);
   };
 
   const handleCopy = () => {
@@ -127,6 +128,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
     if (!org || !user) return;
     await saveOutput.mutateAsync({
       org_id: org.id,
+      branch_id: selectedBranchId,
       project_id: selectedProjectId !== "none" ? selectedProjectId : null,
       user_id: user.id,
       skill_id: skill.id,

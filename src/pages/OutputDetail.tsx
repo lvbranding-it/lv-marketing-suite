@@ -108,7 +108,7 @@ export default function OutputDetail() {
       project?.context_complete
         ? (project.marketing_context as Record<string, unknown>)
         : undefined;
-    await run(message, skill, marketingContext);
+    await run(message, skill, marketingContext, output?.branch_id ?? project?.branch_id ?? null);
   };
 
   const handleSaveContinuation = () => {
@@ -124,6 +124,7 @@ export default function OutputDetail() {
     if (!org || !user || !skill) return;
     await saveOutputMutation.mutateAsync({
       org_id: org.id,
+      branch_id: output?.branch_id ?? project?.branch_id ?? null,
       project_id: output?.project_id ?? null,
       user_id: user.id,
       skill_id: skill.id,

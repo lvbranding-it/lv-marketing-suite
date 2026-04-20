@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ImportedContact } from "@/hooks/useContacts";
+import BranchSelect from "@/components/branches/BranchSelect";
 
 const INDUSTRIES = [
   { value: "re",     label: "Real Estate" },
@@ -40,6 +41,7 @@ const EMP_RANGES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
 const schema = z.object({
   first_name:      z.string().min(1, "First name is required"),
+  branch_id:       z.string().optional(),
   last_name:       z.string().min(1, "Last name is required"),
   title:           z.string().optional(),
   company:         z.string().optional(),
@@ -71,6 +73,7 @@ export default function ContactFormModal({ open, contact, onClose, onSave, savin
     resolver: zodResolver(schema),
     defaultValues: {
       first_name: "",
+      branch_id: "unassigned",
       last_name: "",
       title: "",
       company: "",
@@ -91,6 +94,7 @@ export default function ContactFormModal({ open, contact, onClose, onSave, savin
     if (contact) {
       form.reset({
         first_name:      contact.first_name ?? "",
+        branch_id:       contact.branch_id ?? "unassigned",
         last_name:       contact.last_name ?? "",
         title:           contact.title ?? "",
         company:         contact.company ?? "",
@@ -106,7 +110,7 @@ export default function ContactFormModal({ open, contact, onClose, onSave, savin
       });
     } else {
       form.reset({
-        first_name: "", last_name: "", title: "", company: "",
+      first_name: "", branch_id: "unassigned", last_name: "", title: "", company: "",
         email: "", phone: "", linkedin_url: "", website: "",
         city: "", state: "", industry: "", employees_range: "", fit_score: "",
       });
@@ -117,6 +121,7 @@ export default function ContactFormModal({ open, contact, onClose, onSave, savin
     const score = values.fit_score ? parseInt(values.fit_score, 10) : null;
     await onSave({
       first_name:      values.first_name,
+      branch_id:       values.branch_id === "unassigned" ? null : values.branch_id,
       last_name:       values.last_name,
       title:           values.title || null,
       company:         values.company || null,
@@ -149,6 +154,14 @@ export default function ContactFormModal({ open, contact, onClose, onSave, savin
               <Input {...form.register("last_name")} className="h-9 text-sm" placeholder="Smith" />
             </Field>
           </div>
+
+          <Field label="Branch">
+            <BranchSelect
+              mode="assign"
+              value={form.watch("branch_id") ?? "unassigned"}
+              onValueChange={(value) => form.setValue("branch_id", value)}
+            />
+          </Field>
 
           {/* Title + Company */}
           <div className="grid grid-cols-2 gap-3">

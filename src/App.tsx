@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { OrgProvider } from "@/hooks/useOrg";
+import { LanguageProvider } from "@/hooks/useLanguage";
 
 // Pages
 import Auth from "@/pages/Auth";
@@ -205,14 +206,16 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AuthProvider>
-            <OrgProvider>
-              <AppRoutes />
-              <Toaster />
-            </OrgProvider>
-          </AuthProvider>
-        </BrowserRouter>
+        <LanguageProvider>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <AuthProvider>
+              <OrgProvider>
+                <AppRoutes />
+                <Toaster />
+              </OrgProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </LanguageProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

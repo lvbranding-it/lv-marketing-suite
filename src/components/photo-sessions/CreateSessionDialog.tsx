@@ -16,11 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateSession } from "@/hooks/usePhotoSessions";
+import BranchSelect from "@/components/branches/BranchSelect";
 
 const emailSchema = z.string().email("Invalid email").or(z.literal(""));
 
 const schema = z.object({
   name:               z.string().min(1, "Session name is required"),
+  branch_id:          z.string().optional(),
   client_name:        z.string().min(1, "Client name is required"),
   client_email:       emailSchema.optional(),
   photo_limit:        z.coerce.number().min(0).default(0),
@@ -50,11 +52,13 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema) as Resolver<FormValues>,
     defaultValues: {
       photo_limit: 0,
+      branch_id: "unassigned",
       extra_photo_price: 0,
       allow_zip_download: false,
       invoice_type: "none",
@@ -103,6 +107,7 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
     try {
       const session = await createSession.mutateAsync({
         name: values.name,
+        branch_id: values.branch_id === "unassigned" ? null : values.branch_id,
         client_name: values.client_name,
         client_email: values.client_email || undefined,
         cc_emails: ccEmails.filter(Boolean),
@@ -145,6 +150,15 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
             <Label htmlFor="client_email">Client Email</Label>
             <Input id="client_email" type="email" placeholder="jane@example.com" {...register("client_email")} />
             {errors.client_email && <p className="text-xs text-destructive">{errors.client_email.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Branch</Label>
+            <BranchSelect
+              mode="assign"
+              value={watch("branch_id") ?? "unassigned"}
+              onValueChange={(value) => setValue("branch_id", value)}
+            />
           </div>
 
           {ccEmails.length > 0 && (

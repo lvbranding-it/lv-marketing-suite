@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { parseContactsCSV } from "@/lib/csvImport";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import BranchSelect from "@/components/branches/BranchSelect";
+import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
 type SortKey = "score" | "name" | "company";
 type SortDir = 1 | -1;
@@ -64,7 +66,12 @@ export default function Contacts() {
   const { log } = useActivityLog();
   const { org } = useOrg();
 
-  const { data: imported = [], isLoading } = useImportedContacts();
+  const { data: allImported = [], isLoading } = useImportedContacts();
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
+  const imported = useMemo(
+    () => allImported.filter((contact) => branchMatchesFilter(contact.branch_id, branchFilter)),
+    [allImported, branchFilter]
+  );
   const addContact    = useImportContact();
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
@@ -113,6 +120,7 @@ export default function Contacts() {
         apollo_id:  null,
         signals:    [],
         raw_data:   {},
+        branch_id:  branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
       }));
 
       const { error } = await supabase
@@ -317,6 +325,7 @@ export default function Contacts() {
       apollo_id:       null,
       signals:         c.signals,
       raw_data:        {},
+      branch_id:       branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
       pipeline_stage:  "lead",
       deal_value:      null,
       deal_probability: null,
@@ -365,6 +374,7 @@ export default function Contacts() {
       raw_data:        {},
       created_at:      new Date().toISOString(),
       updated_at:      new Date().toISOString(),
+      branch_id:       branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
       pipeline_stage:  "lead",
       deal_value:      null,
       deal_probability: null,
@@ -389,6 +399,7 @@ export default function Contacts() {
     } else {
       await addContact.mutateAsync({
         ...values,
+        branch_id: values.branch_id ?? (branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null),
         source:    "manual",
         source_id: null,
         apollo_id: null,
@@ -402,8 +413,10 @@ export default function Contacts() {
 
   // ── Stat helpers ────────────────────────────────────────────────────────
   const visibleStatic = useMemo(
-    () => STATIC_CONTACTS.filter((c) => !hiddenStaticIds.has(c.id)),
-    [hiddenStaticIds]
+    () => branchFilter === "all" || branchFilter === "unassigned"
+      ? STATIC_CONTACTS.filter((c) => !hiddenStaticIds.has(c.id))
+      : [],
+    [hiddenStaticIds, branchFilter]
   );
 
   const signalCount = useMemo(() => {
@@ -442,6 +455,9 @@ export default function Contacts() {
       <Header title="Contacts" subtitle="Houston MSA · brand-ready decision makers" />
 
       <div className="p-3 sm:p-6 pb-16">
+        <div className="mb-4 flex justify-end">
+          <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+        </div>
         <Tabs defaultValue="my-contacts">
           <div className="flex items-center gap-2 mb-4 sm:mb-6">
             <div className="overflow-x-auto flex-1 min-w-0">

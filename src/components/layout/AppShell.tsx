@@ -23,7 +23,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
+import LanguageSwitcher from "@/components/layout/LanguageSwitcher";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/hooks/useLanguage";
 import { useOrg } from "@/hooks/useOrg";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,15 +40,15 @@ import {
 } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/skills", label: "Skills", icon: Zap },
-  { to: "/projects", label: "Projects", icon: FolderOpen },
-  { to: "/contacts",  label: "Contacts",  icon: Users },
-  { to: "/intake",    label: "Intake",     icon: ClipboardList },
-  { to: "/campaigns",      label: "Campaigns",      icon: Mail },
-  { to: "/photo-sessions", label: "Photo Sessions", icon: Camera },
-  { to: "/files",          label: "File Drop",      icon: FolderDown },
-  { to: "/history",        label: "History",        icon: History },
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/skills", labelKey: "nav.skills", icon: Zap },
+  { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
+  { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
+  { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
+  { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
+  { to: "/photo-sessions", labelKey: "nav.photoSessions", icon: Camera },
+  { to: "/files", labelKey: "nav.fileDrop", icon: FolderDown },
+  { to: "/history", labelKey: "nav.history", icon: History },
 ];
 
 interface SidebarContentProps {
@@ -56,6 +58,7 @@ interface SidebarContentProps {
 function SidebarContent({ collapsed = false }: SidebarContentProps) {
   const { user, signOut } = useAuth();
   const { org } = useOrg();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const perms = usePermissions();
 
@@ -99,7 +102,9 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             if (to === "/intake")       return perms.canAccessIntake;
             return true;
           });
-          return visibleNavItems.map(({ to, label, icon: Icon }) =>
+          return visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
+          const label = t(labelKey);
+          return (
           collapsed ? (
             <TooltipProvider key={to} delayDuration={0}>
               <Tooltip>
@@ -138,7 +143,8 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               {label}
             </NavLink>
           )
-        ); })()}
+          );
+        }); })()}
         {/* External apps */}
         <div className="pt-2 mt-1 border-t border-sidebar-border/40 space-y-0.5">
           {collapsed ? (
@@ -255,6 +261,8 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
 
       {/* Footer */}
       <div className={cn("p-3 space-y-1", collapsed && "flex flex-col items-center")}>
+        <LanguageSwitcher collapsed={collapsed} className={collapsed ? undefined : "mb-2"} />
+
         <NavLink
           to="/settings"
           className={({ isActive }) =>
@@ -268,7 +276,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
           }
         >
           <Settings size={16} />
-          {!collapsed && "Settings"}
+          {!collapsed && t("nav.settings")}
         </NavLink>
 
         <div

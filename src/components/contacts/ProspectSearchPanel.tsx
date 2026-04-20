@@ -57,6 +57,7 @@ export default function ProspectSearchPanel({ onImported }: Props) {
     setImporting((s) => new Set(s).add(key));
     try {
       await importContact.mutateAsync({
+        branch_id: null,
         first_name: p.first_name ?? null,
         last_name: p.last_name ?? null,
         title: p.job_title ?? null,

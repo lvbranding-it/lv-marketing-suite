@@ -109,6 +109,7 @@ export function useCreateCampaign() {
       preview_text: string;
       body_html: string;
       recipients: SelectedRecipient[];
+      branch_id?: string | null;
       status?: CampaignStatus;
     }) => {
       if (!org) throw new Error("No org");
@@ -118,6 +119,7 @@ export function useCreateCampaign() {
         .from("email_campaigns")
         .insert({
           org_id:          org.id,
+          branch_id:       payload.branch_id ?? null,
           name:            payload.name,
           subject:         payload.subject,
           preview_text:    payload.preview_text,
@@ -167,6 +169,7 @@ export function useUpdateCampaign() {
       preview_text?: string;
       body_html?: string;
       recipient_count?: number;
+      branch_id?: string | null;
     }) => {
       const { id, ...fields } = payload;
       const { data, error } = await supabase
