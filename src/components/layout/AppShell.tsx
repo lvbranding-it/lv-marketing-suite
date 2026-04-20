@@ -20,7 +20,6 @@ import {
   Crown,
   RefreshCw,
   FolderDown,
-  Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -47,7 +46,6 @@ const NAV_ITEMS = [
   { to: "/campaigns",      label: "Campaigns",      icon: Mail },
   { to: "/photo-sessions", label: "Photo Sessions", icon: Camera },
   { to: "/files",          label: "File Drop",      icon: FolderDown },
-  { to: "/design",         label: "Design Suite",   icon: Palette },
   { to: "/history",        label: "History",        icon: History },
 ];
 

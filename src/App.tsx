@@ -16,8 +16,6 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import History from "@/pages/History";
 import Settings from "@/pages/Settings";
 import Contacts from "@/pages/Contacts";
-import DesignSuite from "@/pages/DesignSuite";
-import DesignRunnerPage from "@/pages/DesignRunnerPage";
 import Intake from "@/pages/Intake";
 import IntakeForm from "@/pages/IntakeForm";
 import OutputDetail from "@/pages/OutputDetail";
@@ -197,22 +195,6 @@ function AppRoutes() {
       <Route
         path="/upload/:token"
         element={<Suspense fallback={null}><ClientUpload /></Suspense>}
-      />
-      <Route
-        path="/design"
-        element={
-          <ProtectedRoute>
-            <DesignSuite />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/design/:typeId"
-        element={
-          <ProtectedRoute>
-            <DesignRunnerPage />
-          </ProtectedRoute>
-        }
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
