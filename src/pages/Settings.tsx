@@ -22,11 +22,13 @@ import {
   Eye,
   CheckCircle2,
   Globe2,
+  Megaphone,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -53,7 +55,7 @@ import { useOrg } from "@/hooks/useOrg";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useBranchUsageSummary } from "@/hooks/useBranches";
+import { formatBranchLocalTime, getBranchFlag, useBranchUsageSummary } from "@/hooks/useBranches";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -107,12 +109,14 @@ interface BranchRow {
   name: string;
   code: string | null;
   country: string;
+  country_flag: string | null;
   city: string | null;
   region: string;
   timezone: string;
   primary_language: Language;
   status: BranchStatus;
   hq_monitored: boolean;
+  notification_banner: string | null;
   monthly_budget_cents: number;
   created_by: string | null;
   created_at: string;
@@ -123,10 +127,12 @@ interface BranchFormState {
   name: string;
   code: string;
   country: string;
+  countryFlag: string;
   city: string;
   timezone: string;
   primaryLanguage: Language;
   monthlyBudgetDollars: string;
+  notificationBanner: string;
 }
 
 interface BranchTeamRow {
@@ -331,10 +337,12 @@ export default function Settings() {
     name: "",
     code: "",
     country: "Mexico",
+    countryFlag: "",
     city: "",
     timezone: "America/Mexico_City",
     primaryLanguage: "es",
     monthlyBudgetDollars: "",
+    notificationBanner: "",
   });
   const { summary: branchUsageSummary } = useBranchUsageSummary(30);
 
@@ -448,10 +456,12 @@ export default function Settings() {
         name,
         code: branchForm.code.trim().toUpperCase() || null,
         country: branchForm.country.trim() || "Mexico",
+        country_flag: branchForm.countryFlag.trim() || null,
         city: branchForm.city.trim() || null,
         region: "Latam",
         timezone: branchForm.timezone.trim() || "America/Mexico_City",
         primary_language: branchForm.primaryLanguage,
+        notification_banner: branchForm.notificationBanner.trim() || null,
         monthly_budget_cents: Math.max(0, Math.round(Number(branchForm.monthlyBudgetDollars || 0) * 100)),
         status: "planning" as BranchStatus,
         hq_monitored: true,
@@ -493,10 +503,12 @@ export default function Settings() {
         name: "",
         code: "",
         country: "Mexico",
+        countryFlag: "",
         city: "",
         timezone: "America/Mexico_City",
         primaryLanguage: "es",
         monthlyBudgetDollars: "",
+        notificationBanner: "",
       });
     },
     onError: (err) => {
@@ -560,6 +572,34 @@ export default function Settings() {
       toast({
         variant: "destructive",
         description: err instanceof Error ? err.message : "Failed to update branch budget",
+      });
+    },
+  });
+
+  const updateBranchProfileMutation = useMutation({
+    mutationFn: async ({
+      branch,
+      values,
+    }: {
+      branch: BranchRow;
+      values: Partial<Pick<BranchRow, "country_flag" | "notification_banner">>;
+    }) => {
+      if (!org) throw new Error("No organization");
+      const { error } = await supabase
+        .from("org_branches")
+        .update(values)
+        .eq("org_id", org.id)
+        .eq("id", branch.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org_branches", org?.id] });
+      toast({ description: t("branches.profileUpdated") });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : t("branches.profileUpdateFailed"),
       });
     },
   });
@@ -972,6 +1012,8 @@ export default function Settings() {
                     const availableMembers = members.filter((member) => !assignedUserIds.has(member.user_id));
                     const teamDraft = branchTeamDrafts[branch.id] ?? { userId: "none", role: "crew" as BranchTeamRole };
                     const canManageTeam = canManageBranchTeam(branch.id);
+                    const branchFlag = getBranchFlag(branch);
+                    const localTime = formatBranchLocalTime(branch.timezone, language === "es" ? "es-ES" : "en-US");
 
                     return (
                     <div
@@ -981,6 +1023,11 @@ export default function Settings() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
+                            {branchFlag && (
+                              <span className="text-lg leading-none" aria-hidden="true">
+                                {branchFlag}
+                              </span>
+                            )}
                             <h4 className="truncate text-sm font-semibold">{branch.name}</h4>
                             <Badge variant="secondary" className="shrink-0 text-[10px]">
                               {branch.code || t("branches.noCode")}
@@ -1010,6 +1057,61 @@ export default function Settings() {
                             {t(`branches.language.${branch.primary_language}`)}
                           </p>
                         </div>
+                        <div className="rounded-md bg-muted/40 p-2">
+                          <p className="text-muted-foreground">{t("branches.localTime")}</p>
+                          <p className="mt-0.5 font-medium">{localTime}</p>
+                        </div>
+                        <div className="rounded-md bg-muted/40 p-2">
+                          <p className="text-muted-foreground">{t("branches.countryFlag")}</p>
+                          {perms.isAdmin ? (
+                            <Input
+                              defaultValue={branch.country_flag ?? ""}
+                              maxLength={8}
+                              placeholder={branchFlag || "Flag"}
+                              className="mt-1 h-7 px-2 text-xs"
+                              onBlur={(event) => {
+                                const nextFlag = event.target.value.trim() || null;
+                                if (nextFlag !== (branch.country_flag ?? null)) {
+                                  updateBranchProfileMutation.mutate({
+                                    branch,
+                                    values: { country_flag: nextFlag },
+                                  });
+                                }
+                              }}
+                            />
+                          ) : (
+                            <p className="mt-0.5 font-medium">{branchFlag || "—"}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                          <Megaphone size={13} className="text-primary" />
+                          <p className="text-xs font-semibold">{t("branches.notificationBanner")}</p>
+                        </div>
+                        {perms.isAdmin ? (
+                          <Textarea
+                            defaultValue={branch.notification_banner ?? ""}
+                            placeholder={t("branches.notificationPlaceholder")}
+                            className="min-h-[72px] resize-none text-xs"
+                            onBlur={(event) => {
+                              const nextBanner = event.target.value.trim() || null;
+                              if (nextBanner !== (branch.notification_banner ?? null)) {
+                                updateBranchProfileMutation.mutate({
+                                  branch,
+                                  values: { notification_banner: nextBanner },
+                                });
+                              }
+                            }}
+                          />
+                        ) : branch.notification_banner ? (
+                          <p className="text-xs leading-relaxed text-foreground">
+                            {branch.notification_banner}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">{t("branches.noNotification")}</p>
+                        )}
                       </div>
 
                       <div className="rounded-md border border-border p-3 space-y-2">
@@ -1145,7 +1247,7 @@ export default function Settings() {
                         )}
 
                         {canManageTeam && (
-                          <div className="grid gap-2 sm:grid-cols-[1fr_140px_auto]">
+                          <div className="grid gap-2 sm:grid-cols-2">
                             <Select
                               value={teamDraft.userId}
                               onValueChange={(value) =>
@@ -1190,7 +1292,7 @@ export default function Settings() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-8 gap-1.5 text-xs"
+                              className="h-8 w-full gap-1.5 text-xs sm:col-span-2"
                               disabled={teamDraft.userId === "none" || addBranchTeamMemberMutation.isPending}
                               onClick={() =>
                                 addBranchTeamMemberMutation.mutate({
@@ -1699,6 +1801,21 @@ export default function Settings() {
             </div>
 
             <div className="space-y-1.5">
+              <Label htmlFor="branch-country-flag" className="text-xs">
+                {t("branches.countryFlag")}
+              </Label>
+              <Input
+                id="branch-country-flag"
+                value={branchForm.countryFlag}
+                maxLength={8}
+                placeholder={t("branches.countryFlagPlaceholder")}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, countryFlag: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="branch-city" className="text-xs">
                 {t("branches.city")}
               </Label>
@@ -1746,7 +1863,7 @@ export default function Settings() {
               </Select>
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-1.5">
               <Label htmlFor="branch-budget" className="text-xs">
                 Monthly AI budget ($)
               </Label>
@@ -1761,6 +1878,24 @@ export default function Settings() {
                   setBranchForm((current) => ({
                     ...current,
                     monthlyBudgetDollars: event.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="branch-notification" className="text-xs">
+                {t("branches.notificationBanner")}
+              </Label>
+              <Textarea
+                id="branch-notification"
+                value={branchForm.notificationBanner}
+                placeholder={t("branches.notificationPlaceholder")}
+                className="resize-none"
+                onChange={(event) =>
+                  setBranchForm((current) => ({
+                    ...current,
+                    notificationBanner: event.target.value,
                   }))
                 }
               />

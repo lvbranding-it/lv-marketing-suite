@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { Zap, FolderOpen, BarChart3, Clock } from "lucide-react";
+import { Zap, FolderOpen, BarChart3, Clock, MapPin, Megaphone } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import SkillCard from "@/components/skills/SkillCard";
@@ -13,7 +13,13 @@ import { SKILLS, FEATURED_SKILL_IDS } from "@/data/skills";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import BranchSelect from "@/components/branches/BranchSelect";
-import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
+import {
+  branchMatchesFilter,
+  formatBranchLocalTime,
+  getBranchFlag,
+  useAccessibleBranches,
+  type BranchFilterValue,
+} from "@/hooks/useBranches";
 
 function StatCard({
   icon: Icon,
@@ -50,6 +56,8 @@ export default function Dashboard() {
   const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: recentOutputs = [], isLoading: outputsLoading } = useSkillOutputs({ limit: 5 });
+  const { data: accessibleBranches = [] } = useAccessibleBranches();
+  const selectedBranch = accessibleBranches.find((branch) => branch.id === branchFilter) ?? null;
 
   const visibleProjects = projects.filter((p) => branchMatchesFilter(p.branch_id, branchFilter));
   const visibleOutputs = recentOutputs.filter((o) => branchMatchesFilter(o.branch_id, branchFilter));
@@ -80,6 +88,48 @@ export default function Dashboard() {
         <div className="flex justify-end">
           <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
         </div>
+
+        {selectedBranch && (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {getBranchFlag(selectedBranch) && (
+                    <span className="text-xl leading-none" aria-hidden="true">
+                      {getBranchFlag(selectedBranch)}
+                    </span>
+                  )}
+                  <h2 className="truncate text-sm font-semibold text-foreground">
+                    {selectedBranch.name}
+                  </h2>
+                  {selectedBranch.code && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      {selectedBranch.code}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin size={11} />
+                    {[selectedBranch.city, selectedBranch.country].filter(Boolean).join(", ")}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock size={11} />
+                    {formatBranchLocalTime(selectedBranch.timezone)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {selectedBranch.notification_banner?.trim() && (
+              <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+                <div className="flex items-start gap-2">
+                  <Megaphone size={14} className="mt-0.5 shrink-0 text-primary" />
+                  <p className="leading-relaxed">{selectedBranch.notification_banner}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">

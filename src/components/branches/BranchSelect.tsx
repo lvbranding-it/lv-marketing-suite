@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Building2 } from "lucide-react";
 import {
   Select,
@@ -6,7 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useOrgBranches, type BranchFilterValue } from "@/hooks/useBranches";
+import {
+  getBranchFlag,
+  useAccessibleBranches,
+  type BranchFilterValue,
+} from "@/hooks/useBranches";
 import { cn } from "@/lib/utils";
 
 interface BranchSelectProps {
@@ -24,8 +29,17 @@ export default function BranchSelect({
   className,
   triggerClassName,
 }: BranchSelectProps) {
-  const { data: branches = [] } = useOrgBranches();
+  const { data: branches = [], isBranchRestricted } = useAccessibleBranches();
   const showFilterOptions = mode === "filter";
+  const allowGlobalFilterOptions = showFilterOptions && !isBranchRestricted;
+
+  useEffect(() => {
+    if (!isBranchRestricted) return;
+    if (branches.length === 0) return;
+    if (branches.some((branch) => branch.id === value)) return;
+
+    onValueChange(branches[0].id);
+  }, [branches, isBranchRestricted, onValueChange, value]);
 
   return (
     <div className={cn("min-w-[180px]", className)}>
@@ -37,16 +51,17 @@ export default function BranchSelect({
           </div>
         </SelectTrigger>
         <SelectContent>
-          {showFilterOptions ? (
+          {allowGlobalFilterOptions ? (
             <>
               <SelectItem value="all">All branches</SelectItem>
               <SelectItem value="unassigned">Unassigned</SelectItem>
             </>
-          ) : (
+          ) : !showFilterOptions ? (
             <SelectItem value="unassigned">No branch</SelectItem>
-          )}
+          ) : null}
           {branches.map((branch) => (
             <SelectItem key={branch.id} value={branch.id}>
+              {getBranchFlag(branch) ? `${getBranchFlag(branch)} ` : ""}
               {branch.name}
               {branch.code ? ` (${branch.code})` : ""}
             </SelectItem>
