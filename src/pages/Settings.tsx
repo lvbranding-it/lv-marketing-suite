@@ -206,6 +206,15 @@ function RoleBadge({ role }: { role: MemberRole }) {
   );
 }
 
+function statusBorderClass(status: BranchStatus) {
+  switch (status) {
+    case "active":   return "border-emerald-300 text-emerald-700";
+    case "planning": return "border-blue-200 text-blue-700";
+    case "paused":   return "border-amber-300 text-amber-700";
+    default:         return "";
+  }
+}
+
 function branchTeamRoleClass(role: BranchTeamRole) {
   switch (role) {
     case "regional_ceo":
@@ -405,6 +414,11 @@ export default function Settings() {
     notificationBanner: "",
   });
   const { summary: branchUsageSummary } = useBranchUsageSummary(30);
+  const [expandedBranchId, setExpandedBranchId] = useState<string | null>(null);
+  const [branchTabMap, setBranchTabMap] = useState<Record<string, "info" | "team" | "bulletin">>({});
+  const getActiveBranchTab = (id: string) => branchTabMap[id] ?? "info";
+  const setActiveBranchTab = (id: string, tab: "info" | "team" | "bulletin") =>
+    setBranchTabMap((prev) => ({ ...prev, [id]: tab }));
 
   const initials = (
     (user?.user_metadata?.full_name as string | undefined) ??
@@ -1156,7 +1170,7 @@ export default function Settings() {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {branchesLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <Loader2 size={14} className="animate-spin" />
@@ -1168,7 +1182,7 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">{t("branches.addFirst")}</p>
                 </div>
               ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-2">
                   {branches.map((branch) => {
                     const usage = branchUsageSummary.find((item) => item.branch.id === branch.id);
                     const usageCents = usage?.costCents ?? 0;
@@ -1177,7 +1191,7 @@ export default function Settings() {
                       ? Math.min(100, Math.round((usageCents / budgetCents) * 100))
                       : 0;
                     const branchTeam = branchTeamRows.filter((row) => row.branch_id === branch.id);
-                    const branchPendingInvites = branchInvitations.filter((invite) => invite.branch_id === branch.id);
+                    const branchPendingInvites = branchInvitations.filter((inv) => inv.branch_id === branch.id);
                     const canManageTeam = canManageBranchTeam(branch.id);
                     const allowedBranchInviteRoles = branchInviteRoleOptions(branch.id);
                     const inviteDraft = branchInviteDrafts[branch.id] ?? {
@@ -1187,405 +1201,437 @@ export default function Settings() {
                     };
                     const branchFlag = getBranchFlag(branch);
                     const localTime = formatBranchLocalTime(branch.timezone, language === "es" ? "es-ES" : "en-US");
+                    const isExpanded = expandedBranchId === branch.id;
+                    const activeTab = getActiveBranchTab(branch.id);
 
                     return (
-                    <div
-                      key={branch.id}
-                      className="rounded-lg border border-border bg-card p-4 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                      <div key={branch.id} className="rounded-lg border border-border bg-card overflow-hidden">
+
+                        {/* ── Collapsed header ── */}
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          {/* Clickable expand area */}
+                          <button
+                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                            onClick={() => setExpandedBranchId(isExpanded ? null : branch.id)}
+                          >
                             {branchFlag && (
-                              <span className="text-lg leading-none" aria-hidden="true">
+                              <span className="text-xl leading-none shrink-0" aria-hidden="true">
                                 {branchFlag}
                               </span>
                             )}
-                            <h4 className="truncate text-sm font-semibold">{branch.name}</h4>
-                            <Badge variant="secondary" className="shrink-0 text-[10px]">
-                              {branch.code || t("branches.noCode")}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin size={11} />
-                            <span className="truncate">
-                              {[branch.city || t("branches.noCity"), branch.country].join(", ")}
-                            </span>
-                          </div>
-                        </div>
-                        {canViewBranchGovernance && (
-                          <Badge variant="outline" className="shrink-0 gap-1 border-primary/30 text-primary">
-                            <Eye size={11} />
-                            {t("branches.hqMonitored")}
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-md bg-muted/40 p-2">
-                          <p className="text-muted-foreground">{t("branches.region")}</p>
-                          <p className="mt-0.5 font-medium">{branch.region}</p>
-                        </div>
-                        <div className="rounded-md bg-muted/40 p-2">
-                          <p className="text-muted-foreground">{t("branches.city")}</p>
-                          {perms.isAdmin ? (
-                            <Input
-                              defaultValue={branch.city ?? ""}
-                              placeholder={t("branches.noCity")}
-                              className="mt-1 h-7 px-2 text-xs"
-                              onBlur={(event) => {
-                                const nextCity = event.target.value.trim() || null;
-                                if (nextCity !== (branch.city ?? null)) {
-                                  updateBranchProfileMutation.mutate({
-                                    branch,
-                                    values: { city: nextCity },
-                                  });
-                                }
-                              }}
-                            />
-                          ) : (
-                            <p className="mt-0.5 font-medium">{branch.city || t("branches.noCity")}</p>
-                          )}
-                        </div>
-                        <div className="rounded-md bg-muted/40 p-2">
-                          <p className="text-muted-foreground">{t("branches.primaryLanguage")}</p>
-                          <p className="mt-0.5 font-medium">
-                            {t(`branches.language.${branch.primary_language}`)}
-                          </p>
-                        </div>
-                        <div className="rounded-md bg-muted/40 p-2">
-                          <p className="text-muted-foreground">{t("branches.localTime")}</p>
-                          <p className="mt-0.5 font-medium">{localTime}</p>
-                        </div>
-                        <div className="rounded-md bg-muted/40 p-2">
-                          <p className="text-muted-foreground">{t("branches.countryFlag")}</p>
-                          {perms.isAdmin ? (
-                            <Input
-                              defaultValue={branch.country_flag ?? ""}
-                              maxLength={8}
-                              placeholder={branchFlag || "Flag"}
-                              className="mt-1 h-7 px-2 text-xs"
-                              onBlur={(event) => {
-                                const nextFlag = event.target.value.trim() || null;
-                                if (nextFlag !== (branch.country_flag ?? null)) {
-                                  updateBranchProfileMutation.mutate({
-                                    branch,
-                                    values: { country_flag: nextFlag },
-                                  });
-                                }
-                              }}
-                            />
-                          ) : (
-                            <p className="mt-0.5 font-medium">{branchFlag || "—"}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
-                        <div className="mb-2 flex items-center gap-2">
-                          <Megaphone size={13} className="text-primary" />
-                          <p className="text-xs font-semibold">{t("branches.notificationBanner")}</p>
-                        </div>
-                        {perms.isAdmin ? (
-                          <Textarea
-                            defaultValue={branch.notification_banner ?? ""}
-                            placeholder={t("branches.notificationPlaceholder")}
-                            className="min-h-[72px] resize-none text-xs"
-                            onBlur={(event) => {
-                              const nextBanner = event.target.value.trim() || null;
-                              if (nextBanner !== (branch.notification_banner ?? null)) {
-                                updateBranchProfileMutation.mutate({
-                                  branch,
-                                  values: { notification_banner: nextBanner },
-                                });
-                              }
-                            }}
-                          />
-                        ) : branch.notification_banner ? (
-                          <p className="text-xs leading-relaxed text-foreground">
-                            {branch.notification_banner}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">{t("branches.noNotification")}</p>
-                        )}
-                      </div>
-
-                      {canViewBranchGovernance && (
-                        <div className="rounded-md border border-border p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-medium text-muted-foreground">
-                                30-day AI usage
-                              </p>
-                              <p className="text-sm font-semibold">
-                                ${(usageCents / 100).toFixed(2)}
-                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                                  {usage?.units ?? 0} tokens
-                                </span>
-                              </p>
-                            </div>
-                            <div className="w-28">
-                              <Label className="sr-only" htmlFor={`budget-${branch.id}`}>
-                                Monthly AI budget
-                              </Label>
-                              <Input
-                                id={`budget-${branch.id}`}
-                                type="number"
-                                min={0}
-                                step="1"
-                                defaultValue={budgetCents ? String(Math.round(budgetCents / 100)) : ""}
-                                placeholder="Budget"
-                                className="h-8 text-xs"
-                                onBlur={(event) => {
-                                  const nextCents = Math.max(0, Math.round(Number(event.target.value || 0) * 100));
-                                  if (nextCents !== budgetCents) {
-                                    updateBranchBudgetMutation.mutate({
-                                      branch,
-                                      monthlyBudgetCents: nextCents,
-                                    });
-                                  }
-                                }}
-                              />
-                            </div>
-                          </div>
-                          {budgetCents > 0 && (
-                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full",
-                                  budgetPct >= 90 ? "bg-destructive" : "bg-primary"
-                                )}
-                                style={{ width: `${budgetPct}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="rounded-md border border-border p-3 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Users size={13} className="text-muted-foreground" />
-                            <p className="text-xs font-semibold">{t("branches.team")}</p>
-                          </div>
-                          {branchTeamLoading && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
-                        </div>
-
-                        {branchTeam.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">{t("branches.noTeam")}</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {branchTeam.map((teamMember) => (
-                              <div
-                                key={`${teamMember.branch_id}-${teamMember.user_id}`}
-                                className="flex items-center justify-between gap-2 rounded-md bg-muted/35 px-2 py-2"
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate text-xs font-medium">
-                                    {memberDisplayName(teamMember.user_id)}
-                                  </p>
-                                  <span
-                                    className={cn(
-                                      "mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                                      branchTeamRoleClass(teamMember.role)
-                                    )}
-                                  >
-                                    {t(`branches.role.${teamMember.role}`)}
-                                  </span>
-                                </div>
-                                {canManageTeam && canManageBranchTeamMember(branch.id, teamMember.role) && (
-                                  <div className="flex shrink-0 items-center gap-1">
-                                    <Select
-                                      value={teamMember.role}
-                                      disabled={updateBranchTeamRoleMutation.isPending}
-                                      onValueChange={(value) =>
-                                        updateBranchTeamRoleMutation.mutate({
-                                          branchId: branch.id,
-                                          userId: teamMember.user_id,
-                                          role: value as BranchTeamRole,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger className="h-8 w-32 text-xs" aria-label={t("common.status")}>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {branchInviteRoleOptions(branch.id).map((roleOption) => (
-                                          <SelectItem key={roleOption} value={roleOption}>
-                                            {t(`branches.role.${roleOption}`)}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                      disabled={removeBranchTeamMemberMutation.isPending}
-                                      onClick={() =>
-                                        removeBranchTeamMemberMutation.mutate({
-                                          branchId: branch.id,
-                                          userId: teamMember.user_id,
-                                        })
-                                      }
-                                    >
-                                      <Trash2 size={13} />
-                                    </Button>
-                                  </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold truncate">{branch.name}</span>
+                                {branch.code && (
+                                  <Badge variant="secondary" className="text-[10px] shrink-0 h-4 px-1.5">
+                                    {branch.code}
+                                  </Badge>
                                 )}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[branch.city, branch.country].filter(Boolean).join(", ")}
+                              </p>
+                            </div>
+                          </button>
 
-                        {canManageTeam && (
-                          <div className="space-y-2 rounded-md border border-dashed border-border p-2">
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <Input
-                                value={inviteDraft.name}
-                                placeholder="Name"
-                                className="h-8 text-xs"
-                                onChange={(event) =>
-                                  setBranchInviteDrafts((current) => ({
-                                    ...current,
-                                    [branch.id]: { ...inviteDraft, name: event.target.value },
-                                  }))
-                                }
-                              />
-                              <Input
-                                type="email"
-                                value={inviteDraft.email}
-                                placeholder="email@company.com"
-                                className="h-8 text-xs"
-                                onChange={(event) =>
-                                  setBranchInviteDrafts((current) => ({
-                                    ...current,
-                                    [branch.id]: { ...inviteDraft, email: event.target.value },
-                                  }))
-                                }
-                              />
+                          {/* Right controls — stop propagation so they don't toggle expand */}
+                          <div
+                            className="flex items-center gap-2 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {branchTeam.length > 0 && (
+                              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                                {branchTeam.length} {branchTeam.length === 1 ? "member" : "members"}
+                              </span>
+                            )}
+                            {branchPendingInvites.length > 0 && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-amber-200 text-amber-700 bg-amber-50 hidden sm:inline-flex">
+                                {branchPendingInvites.length} pending
+                              </Badge>
+                            )}
+                            {canViewBranchGovernance && (
                               <Select
-                                value={inviteDraft.role}
+                                value={branch.status}
+                                disabled={updateBranchStatusMutation.isPending}
                                 onValueChange={(value) =>
-                                  setBranchInviteDrafts((current) => ({
-                                    ...current,
-                                    [branch.id]: { ...inviteDraft, role: value as BranchTeamRole },
-                                  }))
+                                  updateBranchStatusMutation.mutate({ branch, status: value as BranchStatus })
                                 }
                               >
-                                <SelectTrigger className="h-8 text-xs" aria-label={t("branches.team")}>
+                                <SelectTrigger
+                                  className={cn("h-7 w-24 text-xs border", statusBorderClass(branch.status))}
+                                  aria-label={t("common.status")}
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {allowedBranchInviteRoles.map((roleOption) => (
-                                    <SelectItem key={roleOption} value={roleOption}>
-                                      {t(`branches.role.${roleOption}`)}
+                                  {branchStatusOptions.map((status) => (
+                                    <SelectItem key={status} value={status}>
+                                      {t(`branches.status.${status}`)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 w-full gap-1.5 text-xs"
-                                disabled={sendBranchInviteMutation.isPending || !inviteDraft.email.trim()}
-                                onClick={() => sendBranchInviteMutation.mutate({ branch, draft: inviteDraft })}
-                              >
-                                {sendBranchInviteMutation.isPending ? (
-                                  <Loader2 size={12} className="animate-spin" />
-                                ) : (
-                                  <UserPlus size={12} />
-                                )}
-                                {t("settings.sendInvite")}
-                              </Button>
-                            </div>
+                            )}
+                            <button
+                              className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted/60 transition-colors"
+                              onClick={() => setExpandedBranchId(isExpanded ? null : branch.id)}
+                            >
+                              <ChevronDown
+                                size={14}
+                                className={cn("text-muted-foreground transition-transform duration-200", isExpanded && "rotate-180")}
+                              />
+                            </button>
                           </div>
-                        )}
+                        </div>
 
-                        {canManageTeam && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                                {t("settings.pendingInvitations")}
-                              </p>
-                              {branchInvitationsLoading && (
-                                <Loader2 size={11} className="animate-spin text-muted-foreground" />
-                              )}
+                        {/* ── Expandable body ── */}
+                        {isExpanded && (
+                          <div className="border-t border-border">
+                            {/* Tab bar */}
+                            <div className="flex border-b border-border bg-muted/20">
+                              {(["info", "team", "bulletin"] as const).map((tab) => (
+                                <button
+                                  key={tab}
+                                  className={cn(
+                                    "px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                                    activeTab === tab
+                                      ? "border-primary text-primary bg-background"
+                                      : "border-transparent text-muted-foreground hover:text-foreground"
+                                  )}
+                                  onClick={() => setActiveBranchTab(branch.id, tab)}
+                                >
+                                  {tab === "info" && "Info"}
+                                  {tab === "team" && (
+                                    <>
+                                      Team
+                                      {branchTeam.length > 0 && ` (${branchTeam.length})`}
+                                      {branchPendingInvites.length > 0 && (
+                                        <span className="ml-1 text-amber-600">· {branchPendingInvites.length} pending</span>
+                                      )}
+                                    </>
+                                  )}
+                                  {tab === "bulletin" && (
+                                    <>
+                                      Bulletin
+                                      {branch.notification_banner && (
+                                        <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" />
+                                      )}
+                                    </>
+                                  )}
+                                </button>
+                              ))}
                             </div>
-                            {branchPendingInvites.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">{t("settings.noPendingInvitations")}</p>
-                            ) : (
-                              <div className="space-y-1.5">
-                                {branchPendingInvites.map((invite) => (
-                                  <div
-                                    key={invite.id}
-                                    className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5"
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-medium">{invite.invited_email}</p>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        {t(`branches.role.${invite.role}`)} · {format(new Date(invite.expires_at), "MMM d")}
-                                      </p>
+
+                            <div className="p-4">
+
+                              {/* ── Info Tab ── */}
+                              {activeTab === "info" && (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.region")}</p>
+                                      <p className="mt-0.5 font-medium">{branch.region}</p>
                                     </div>
-                                    <div className="flex shrink-0 items-center gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs"
-                                        disabled={resendBranchInviteMutation.isPending}
-                                        onClick={() => resendBranchInviteMutation.mutate({ branch, invite })}
-                                      >
-                                        <RefreshCw size={11} />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                                        disabled={cancelBranchInviteMutation.isPending}
-                                        onClick={() => cancelBranchInviteMutation.mutate(invite.id)}
-                                      >
-                                        <Trash2 size={11} />
-                                      </Button>
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.primaryLanguage")}</p>
+                                      <p className="mt-0.5 font-medium">{t(`branches.language.${branch.primary_language}`)}</p>
+                                    </div>
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.localTime")}</p>
+                                      <p className="mt-0.5 font-medium">{localTime}</p>
+                                    </div>
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.timezone")}</p>
+                                      <p className="mt-0.5 font-medium truncate text-[11px]">{branch.timezone}</p>
+                                    </div>
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.city")}</p>
+                                      {perms.isAdmin ? (
+                                        <Input
+                                          defaultValue={branch.city ?? ""}
+                                          placeholder={t("branches.noCity")}
+                                          className="mt-1 h-7 px-2 text-xs"
+                                          onBlur={(event) => {
+                                            const nextCity = event.target.value.trim() || null;
+                                            if (nextCity !== (branch.city ?? null)) {
+                                              updateBranchProfileMutation.mutate({ branch, values: { city: nextCity } });
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <p className="mt-0.5 font-medium">{branch.city || t("branches.noCity")}</p>
+                                      )}
+                                    </div>
+                                    <div className="rounded-md bg-muted/40 p-2">
+                                      <p className="text-muted-foreground">{t("branches.countryFlag")}</p>
+                                      {perms.isAdmin ? (
+                                        <Input
+                                          defaultValue={branch.country_flag ?? ""}
+                                          maxLength={8}
+                                          placeholder={branchFlag || "🏳"}
+                                          className="mt-1 h-7 px-2 text-xs"
+                                          onBlur={(event) => {
+                                            const nextFlag = event.target.value.trim() || null;
+                                            if (nextFlag !== (branch.country_flag ?? null)) {
+                                              updateBranchProfileMutation.mutate({ branch, values: { country_flag: nextFlag } });
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <p className="mt-0.5 font-medium">{branchFlag || "—"}</p>
+                                      )}
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                            )}
+
+                                  {canViewBranchGovernance && (
+                                    <div className="rounded-md border border-border p-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                          <p className="text-[11px] font-medium text-muted-foreground">30-day AI usage</p>
+                                          <p className="text-sm font-semibold">
+                                            ${(usageCents / 100).toFixed(2)}
+                                            <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                              {usage?.units ?? 0} tokens
+                                            </span>
+                                          </p>
+                                        </div>
+                                        <div className="w-28">
+                                          <Label className="sr-only" htmlFor={`budget-${branch.id}`}>Monthly AI budget</Label>
+                                          <Input
+                                            id={`budget-${branch.id}`}
+                                            type="number"
+                                            min={0}
+                                            step="1"
+                                            defaultValue={budgetCents ? String(Math.round(budgetCents / 100)) : ""}
+                                            placeholder="Budget $"
+                                            className="h-8 text-xs"
+                                            onBlur={(event) => {
+                                              const nextCents = Math.max(0, Math.round(Number(event.target.value || 0) * 100));
+                                              if (nextCents !== budgetCents) {
+                                                updateBranchBudgetMutation.mutate({ branch, monthlyBudgetCents: nextCents });
+                                              }
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                      {budgetCents > 0 && (
+                                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                                          <div
+                                            className={cn("h-full rounded-full", budgetPct >= 90 ? "bg-destructive" : "bg-primary")}
+                                            style={{ width: `${budgetPct}%` }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* ── Team Tab ── */}
+                              {activeTab === "team" && (
+                                <div className="space-y-3">
+                                  {branchTeamLoading ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <Loader2 size={12} className="animate-spin" /> Loading…
+                                    </div>
+                                  ) : branchTeam.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">{t("branches.noTeam")}</p>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      {branchTeam.map((teamMember) => (
+                                        <div
+                                          key={`${teamMember.branch_id}-${teamMember.user_id}`}
+                                          className="flex items-center justify-between gap-2 rounded-md bg-muted/35 px-2 py-2"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="truncate text-xs font-medium">
+                                              {memberDisplayName(teamMember.user_id)}
+                                            </p>
+                                            <span className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium", branchTeamRoleClass(teamMember.role))}>
+                                              {t(`branches.role.${teamMember.role}`)}
+                                            </span>
+                                          </div>
+                                          {canManageTeam && canManageBranchTeamMember(branch.id, teamMember.role) && (
+                                            <div className="flex shrink-0 items-center gap-1">
+                                              <Select
+                                                value={teamMember.role}
+                                                disabled={updateBranchTeamRoleMutation.isPending}
+                                                onValueChange={(value) =>
+                                                  updateBranchTeamRoleMutation.mutate({
+                                                    branchId: branch.id,
+                                                    userId: teamMember.user_id,
+                                                    role: value as BranchTeamRole,
+                                                  })
+                                                }
+                                              >
+                                                <SelectTrigger className="h-7 w-28 text-xs" aria-label={t("common.status")}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {branchInviteRoleOptions(branch.id).map((roleOption) => (
+                                                    <SelectItem key={roleOption} value={roleOption}>
+                                                      {t(`branches.role.${roleOption}`)}
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                                disabled={removeBranchTeamMemberMutation.isPending}
+                                                onClick={() =>
+                                                  removeBranchTeamMemberMutation.mutate({ branchId: branch.id, userId: teamMember.user_id })
+                                                }
+                                              >
+                                                <Trash2 size={13} />
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {canManageTeam && (
+                                    <div className="rounded-md border border-dashed border-border p-3 space-y-2">
+                                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        {t("settings.inviteTeamMember")}
+                                      </p>
+                                      <div className="grid gap-2 sm:grid-cols-2">
+                                        <Input
+                                          value={inviteDraft.name}
+                                          placeholder="Name (optional)"
+                                          className="h-8 text-xs"
+                                          onChange={(event) =>
+                                            setBranchInviteDrafts((current) => ({
+                                              ...current,
+                                              [branch.id]: { ...inviteDraft, name: event.target.value },
+                                            }))
+                                          }
+                                        />
+                                        <Input
+                                          type="email"
+                                          value={inviteDraft.email}
+                                          placeholder="email@company.com"
+                                          className="h-8 text-xs"
+                                          onChange={(event) =>
+                                            setBranchInviteDrafts((current) => ({
+                                              ...current,
+                                              [branch.id]: { ...inviteDraft, email: event.target.value },
+                                            }))
+                                          }
+                                        />
+                                        <Select
+                                          value={inviteDraft.role}
+                                          onValueChange={(value) =>
+                                            setBranchInviteDrafts((current) => ({
+                                              ...current,
+                                              [branch.id]: { ...inviteDraft, role: value as BranchTeamRole },
+                                            }))
+                                          }
+                                        >
+                                          <SelectTrigger className="h-8 text-xs">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {allowedBranchInviteRoles.map((roleOption) => (
+                                              <SelectItem key={roleOption} value={roleOption}>
+                                                {t(`branches.role.${roleOption}`)}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8 w-full gap-1.5 text-xs"
+                                          disabled={sendBranchInviteMutation.isPending || !inviteDraft.email.trim()}
+                                          onClick={() => sendBranchInviteMutation.mutate({ branch, draft: inviteDraft })}
+                                        >
+                                          {sendBranchInviteMutation.isPending
+                                            ? <Loader2 size={12} className="animate-spin" />
+                                            : <UserPlus size={12} />
+                                          }
+                                          {t("settings.sendInvite")}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {canManageTeam && branchPendingInvites.length > 0 && (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                          {t("settings.pendingInvitations")}
+                                        </p>
+                                        {branchInvitationsLoading && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
+                                      </div>
+                                      {branchPendingInvites.map((invite) => (
+                                        <div
+                                          key={invite.id}
+                                          className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="truncate text-xs font-medium">{invite.invited_email}</p>
+                                            <p className="text-[11px] text-muted-foreground">
+                                              {t(`branches.role.${invite.role}`)} · expires {format(new Date(invite.expires_at), "MMM d")}
+                                            </p>
+                                          </div>
+                                          <div className="flex shrink-0 items-center gap-1">
+                                            <Button
+                                              variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                                              disabled={resendBranchInviteMutation.isPending}
+                                              onClick={() => resendBranchInviteMutation.mutate({ branch, invite })}
+                                            >
+                                              <RefreshCw size={11} />
+                                            </Button>
+                                            <Button
+                                              variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                              disabled={cancelBranchInviteMutation.isPending}
+                                              onClick={() => cancelBranchInviteMutation.mutate(invite.id)}
+                                            >
+                                              <Trash2 size={11} />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* ── Bulletin Tab ── */}
+                              {activeTab === "bulletin" && (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-muted-foreground">
+                                    {t("branches.notificationPlaceholder")}
+                                  </p>
+                                  {perms.isAdmin ? (
+                                    <Textarea
+                                      defaultValue={branch.notification_banner ?? ""}
+                                      placeholder={t("branches.notificationPlaceholder")}
+                                      className="min-h-[96px] resize-none text-sm"
+                                      onBlur={(event) => {
+                                        const nextBanner = event.target.value.trim() || null;
+                                        if (nextBanner !== (branch.notification_banner ?? null)) {
+                                          updateBranchProfileMutation.mutate({ branch, values: { notification_banner: nextBanner } });
+                                        }
+                                      }}
+                                    />
+                                  ) : branch.notification_banner ? (
+                                    <p className="text-sm leading-relaxed">{branch.notification_banner}</p>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">{t("branches.noNotification")}</p>
+                                  )}
+                                </div>
+                              )}
+
+                            </div>
                           </div>
                         )}
                       </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">{t("branches.timezone")}</p>
-                          <p className="text-xs font-medium">{branch.timezone}</p>
-                        </div>
-                        {canViewBranchGovernance ? (
-                          <Select
-                            value={branch.status}
-                            disabled={updateBranchStatusMutation.isPending}
-                            onValueChange={(value) =>
-                              updateBranchStatusMutation.mutate({
-                                branch,
-                                status: value as BranchStatus,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-8 w-32 text-xs" aria-label={t("common.status")}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {branchStatusOptions.map((status) => (
-                                <SelectItem key={status} value={status}>
-                                  {t(`branches.status.${status}`)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
+                    );
                   })}
                 </div>
               )}
