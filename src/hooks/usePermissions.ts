@@ -35,7 +35,7 @@ export function usePermissions() {
     canAccessSkills:    features.skills    !== false,
     canAccessIntake:    features.intake    !== false,
     // Contacts
-    canAddContacts:      isAdmin || isBranchOnly,
+    canAddContacts:      true,               // all roles can add/import contacts; HQ prospecting tools are gated separately
     canDeleteContacts:   isAdmin,
     canEditContacts:     true,           // all roles
     canResearchContacts: true,           // all roles
