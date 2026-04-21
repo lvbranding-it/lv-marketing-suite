@@ -1595,11 +1595,11 @@ export default function Settings() {
           {/* ── Team Tab ── */}
           {!isBranchOnly && (
           <TabsContent value="team" className="mt-6 space-y-8">
-            {/* Team Members */}
+            {/* HQ Team Members */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Users size={14} className="text-muted-foreground" />
-                <h3 className="text-sm font-semibold">{t("settings.teamMembers")}</h3>
+                <h3 className="text-sm font-semibold">{t("settings.hqTeam")}</h3>
               </div>
 
               {membersLoading ? (
@@ -1894,6 +1894,153 @@ export default function Settings() {
                       {t("settings.sendInvite")}
                     </Button>
                   </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Branch Teams (HQ view) ── */}
+            {perms.isAdmin && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Store size={14} className="text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">{t("settings.branchTeams")}</h3>
+                    {branchTeamRows.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        — {t("settings.branchTeamsMeta", {
+                          members: branchTeamRows.length,
+                          branches: branches.filter((b) =>
+                            branchTeamRows.some((r) => r.branch_id === b.id)
+                          ).length,
+                        })}
+                      </span>
+                    )}
+                  </div>
+
+                  {branchTeamLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("settings.loadingMembers")}
+                    </div>
+                  ) : branchTeamRows.length === 0 && branchInvitations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t("settings.noBranchTeamsYet")}
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {branches.map((branch) => {
+                        const branchTeam = branchTeamRows.filter((row) => row.branch_id === branch.id);
+                        const branchPendingCount = branchInvitations.filter((inv) => inv.branch_id === branch.id).length;
+                        if (branchTeam.length === 0 && branchPendingCount === 0) return null;
+                        const branchFlag = getBranchFlag(branch);
+
+                        return (
+                          <div key={branch.id} className="rounded-lg border border-border bg-card p-3 space-y-2">
+                            {/* Branch header */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {branchFlag && (
+                                <span className="text-base leading-none" aria-hidden="true">
+                                  {branchFlag}
+                                </span>
+                              )}
+                              <h4 className="text-xs font-semibold">{branch.name}</h4>
+                              <span className="text-[10px] text-muted-foreground">{branch.country}</span>
+                              {branchPendingCount > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="h-4 px-1.5 text-[9px] border-amber-200 text-amber-700 bg-amber-50"
+                                >
+                                  {t("settings.pendingInvitesCount", { count: branchPendingCount })}
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Branch members */}
+                            {branchTeam.length === 0 ? (
+                              <p className="text-xs text-muted-foreground pl-1">
+                                {t("settings.noActiveMembersYet")}
+                              </p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {branchTeam.map((teamMember) => {
+                                  const displayName =
+                                    teamMember.display_name ||
+                                    teamMember.invited_email ||
+                                    `${teamMember.user_id.slice(0, 8)}…`;
+                                  const avatarInitials = displayName.slice(0, 2).toUpperCase();
+
+                                  return (
+                                    <div
+                                      key={`${teamMember.branch_id}-${teamMember.user_id}`}
+                                      className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2.5 py-1.5"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <Avatar className="h-6 w-6 shrink-0">
+                                          <AvatarFallback className="text-[9px] font-semibold bg-primary/10 text-primary">
+                                            {avatarInitials}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-medium truncate">{displayName}</p>
+                                          <span
+                                            className={cn(
+                                              "inline-flex rounded-full border px-2 py-0.5 text-[9px] font-medium",
+                                              branchTeamRoleClass(teamMember.role)
+                                            )}
+                                          >
+                                            {t(`branches.role.${teamMember.role}`)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-1">
+                                        <Select
+                                          value={teamMember.role}
+                                          disabled={updateBranchTeamRoleMutation.isPending}
+                                          onValueChange={(value) =>
+                                            updateBranchTeamRoleMutation.mutate({
+                                              branchId: branch.id,
+                                              userId: teamMember.user_id,
+                                              role: value as BranchTeamRole,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="h-7 w-28 text-xs">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {branchTeamRoleOptions.map((roleOption) => (
+                                              <SelectItem key={roleOption} value={roleOption}>
+                                                {t(`branches.role.${roleOption}`)}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                          disabled={removeBranchTeamMemberMutation.isPending}
+                                          onClick={() =>
+                                            removeBranchTeamMemberMutation.mutate({
+                                              branchId: branch.id,
+                                              userId: teamMember.user_id,
+                                            })
+                                          }
+                                        >
+                                          <Trash2 size={12} />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}
