@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { Zap, FolderOpen, BarChart3, Clock, MapPin, Megaphone } from "lucide-react";
+import { Zap, FolderOpen, BarChart3, Clock, MapPin } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import SkillCard from "@/components/skills/SkillCard";
@@ -15,7 +15,6 @@ import { useLanguage } from "@/hooks/useLanguage";
 import BranchSelect from "@/components/branches/BranchSelect";
 import {
   branchMatchesFilter,
-  formatBranchLocalTime,
   getBranchFlag,
   useAccessibleBranches,
   type BranchFilterValue,
@@ -45,6 +44,39 @@ function StatCard({
         )}
         <p className="text-xs text-muted-foreground">{label}</p>
       </div>
+    </div>
+  );
+}
+
+function BranchHeaderSummary({
+  branch,
+}: {
+  branch: NonNullable<ReturnType<typeof useAccessibleBranches>["data"]>[number];
+}) {
+  const flag = getBranchFlag(branch);
+  const location = [branch.city, branch.country].filter(Boolean).join(", ");
+
+  return (
+    <div className="min-w-0 text-right">
+      <div className="flex items-center justify-end gap-2">
+        {flag && (
+          <span className="text-base leading-none" aria-hidden="true">
+            {flag}
+          </span>
+        )}
+        <p className="truncate text-sm font-semibold text-foreground">{branch.name}</p>
+        {branch.code && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+            {branch.code}
+          </span>
+        )}
+      </div>
+      {location && (
+        <p className="mt-1 inline-flex items-center justify-end gap-1 text-xs text-muted-foreground">
+          <MapPin size={11} />
+          {location}
+        </p>
+      )}
     </div>
   );
 }
@@ -85,57 +117,16 @@ export default function Dashboard() {
       <Header
         title={t("dashboard.greeting", { name: userName })}
         subtitle={t("dashboard.subtitle")}
+        actions={
+          branchContext && !showBranchSelector ? (
+            <BranchHeaderSummary branch={branchContext} />
+          ) : showBranchSelector ? (
+            <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+          ) : null
+        }
       />
 
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-8 max-w-6xl mx-auto">
-        <div className="flex flex-col items-end gap-3">
-          {branchContext ? (
-            <div className="w-full rounded-lg border border-border bg-card p-4 sm:w-auto sm:min-w-[360px] sm:max-w-xl">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  {getBranchFlag(branchContext) && (
-                    <span className="text-xl leading-none" aria-hidden="true">
-                      {getBranchFlag(branchContext)}
-                    </span>
-                  )}
-                  <h2 className="truncate text-sm font-semibold text-foreground">
-                    {branchContext.name}
-                  </h2>
-                  {branchContext.code && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                      {branchContext.code}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin size={11} />
-                    {[branchContext.city, branchContext.country].filter(Boolean).join(", ")}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock size={11} />
-                    {formatBranchLocalTime(branchContext.timezone)}
-                  </span>
-                </div>
-              </div>
-              {branchContext.notification_banner?.trim() && (
-                <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
-                  <div className="flex items-start gap-2">
-                    <Megaphone size={14} className="mt-0.5 shrink-0 text-primary" />
-                    <p className="leading-relaxed">{branchContext.notification_banner}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {showBranchSelector && (
-            <div className="flex justify-end">
-              <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
-            </div>
-          )}
-        </div>
-
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
