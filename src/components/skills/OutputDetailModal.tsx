@@ -12,8 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { useUpdateSkillOutput, useDeleteSkillOutput } from "@/hooks/useSkillOutputs";
 import { getSkill, SKILL_CATEGORIES } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill } from "@/data/skillTranslations";
 import type { SkillOutputRow } from "@/integrations/supabase/types";
 import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
 interface OutputDetailModalProps {
@@ -24,16 +27,21 @@ interface OutputDetailModalProps {
 
 export default function OutputDetailModal({ output, open, onClose }: OutputDetailModalProps) {
   const { toast } = useToast();
+  const { language, t } = useLanguage();
   const updateOutput = useUpdateSkillOutput();
   const deleteOutput = useDeleteSkillOutput();
 
   const skill = getSkill(output.skill_id);
+  const localizedSkill = skill ? localizeSkill(skill, language) : null;
   const categoryMeta = skill ? SKILL_CATEGORIES[skill.category] : null;
-  const timeAgo = formatDistanceToNow(new Date(output.created_at), { addSuffix: true });
+  const timeAgo = formatDistanceToNow(new Date(output.created_at), {
+    addSuffix: true,
+    locale: language === "es" ? es : undefined,
+  });
 
   const handleCopy = () => {
     navigator.clipboard.writeText(output.output_text);
-    toast({ description: "Copied to clipboard!" });
+    toast({ description: t("skills.copied") });
   };
 
   const handleStar = () => {
@@ -41,7 +49,7 @@ export default function OutputDetailModal({ output, open, onClose }: OutputDetai
   };
 
   const handleDelete = () => {
-    if (confirm("Delete this output?")) {
+    if (confirm(t("skills.deleteOutputConfirm"))) {
       deleteOutput.mutate(output.id);
       onClose();
     }
@@ -60,13 +68,13 @@ export default function OutputDetailModal({ output, open, onClose }: OutputDetai
                     variant="outline"
                     className={cn("text-[10px]", categoryMeta.color)}
                   >
-                    {skill?.name ?? output.skill_name}
+                    {localizedSkill?.name ?? output.skill_name}
                   </Badge>
                 )}
                 <span className="text-xs text-muted-foreground">{timeAgo}</span>
               </div>
               <DialogTitle className="text-base">
-                {output.title ?? "Untitled Output"}
+                {output.title ?? (language === "es" ? "Resultado sin titulo" : "Untitled Output")}
               </DialogTitle>
             </div>
             <div className="flex items-center gap-1 shrink-0">

@@ -24,12 +24,16 @@ import { getSkill, SKILL_CATEGORIES } from "@/data/skills";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 import SaveOutputDialog from "@/components/skills/SaveOutputDialog";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeContextField, localizeSkill, translateSkillOption } from "@/data/skillTranslations";
 
 export default function OutputDetail() {
   const { outputId } = useParams<{ outputId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { language, t } = useLanguage();
   const { org } = useOrg();
   const { user } = useAuth();
 
@@ -40,6 +44,7 @@ export default function OutputDetail() {
   const saveOutputMutation = useSaveSkillOutput();
 
   const skill = output ? getSkill(output.skill_id) : null;
+  const localizedSkill = skill ? localizeSkill(skill, language) : null;
   const categoryMeta = skill ? SKILL_CATEGORIES[skill.category] : null;
 
   const { streaming, streamedText, conversationHistory, error, run, init } =
@@ -56,12 +61,15 @@ export default function OutputDetail() {
     if (!output || initialized) return;
 
     // Reconstruct the original user message from input_data + skill context fields
-    let userMessage = "Continue from previous context.";
+    let userMessage = language === "es" ? "Continua desde el contexto anterior." : "Continue from previous context.";
     if (output.input_data && skill) {
       const lines: string[] = [];
       for (const field of skill.contextFields) {
         const val = (output.input_data as Record<string, string>)[field.key];
-        if (val) lines.push(`**${field.label}:** ${val}`);
+        if (val) {
+          const localizedField = localizeContextField(skill, field, language);
+          lines.push(`**${localizedField.label}:** ${translateSkillOption(val, language)}`);
+        }
       }
       if (lines.length > 0) userMessage = lines.join("\n");
     }
@@ -71,7 +79,7 @@ export default function OutputDetail() {
       { role: "assistant", content: output.output_text },
     ]);
     setInitialized(true);
-  }, [output, skill, initialized, init]);
+  }, [output, skill, initialized, init, language]);
 
   // Auto-scroll to bottom when new content arrives
   useEffect(() => {
@@ -81,7 +89,7 @@ export default function OutputDetail() {
   const handleCopy = () => {
     if (!output) return;
     navigator.clipboard.writeText(output.output_text);
-    toast({ description: "Copied to clipboard!" });
+    toast({ description: t("skills.copied") });
   };
 
   const handleStar = () => {
@@ -91,7 +99,7 @@ export default function OutputDetail() {
 
   const handleDelete = () => {
     if (!output) return;
-    if (confirm("Delete this output? This cannot be undone.")) {
+    if (confirm(t("skills.deleteOutputConfirmLong"))) {
       deleteOutput.mutate(output.id, {
         onSuccess: () => {
           navigate(output.project_id ? `/projects/${output.project_id}` : "/history");
@@ -135,7 +143,7 @@ export default function OutputDetail() {
       is_starred: false,
     });
     setShowSaveDialog(false);
-    toast({ description: "Continuation saved!" });
+    toast({ description: t("skills.continuationSaved") });
   };
 
   const handleBack = () => {
@@ -163,17 +171,20 @@ export default function OutputDetail() {
       <AppShell>
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
           <p className="text-4xl mb-3">❓</p>
-          <p className="text-muted-foreground text-sm mb-4">Output not found.</p>
+          <p className="text-muted-foreground text-sm mb-4">{t("skills.outputNotFound")}</p>
           <Button variant="outline" size="sm" onClick={() => navigate("/history")}>
             <ArrowLeft size={13} className="mr-1.5" />
-            Back to History
+            {t("nav.history")}
           </Button>
         </div>
       </AppShell>
     );
   }
 
-  const timeAgo = formatDistanceToNow(new Date(output.created_at), { addSuffix: true });
+  const timeAgo = formatDistanceToNow(new Date(output.created_at), {
+    addSuffix: true,
+    locale: language === "es" ? es : undefined,
+  });
 
   return (
     <AppShell>
@@ -184,11 +195,11 @@ export default function OutputDetail() {
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft size={13} />
-          {project ? project.name : "History"}
+          {project ? project.name : t("nav.history")}
         </button>
         <span className="text-muted-foreground">/</span>
         <span className="font-medium text-foreground truncate max-w-[200px] sm:max-w-sm">
-          {output.title ?? skill?.name ?? "Output"}
+          {output.title ?? localizedSkill?.name ?? "Output"}
         </span>
       </div>
 
@@ -200,7 +211,7 @@ export default function OutputDetail() {
               <span className="text-lg">{skill?.icon ?? "📄"}</span>
               {categoryMeta && (
                 <Badge variant="outline" className={cn("text-[10px]", categoryMeta.color)}>
-                  {skill?.name ?? output.skill_name}
+                  {localizedSkill?.name ?? output.skill_name}
                 </Badge>
               )}
               {project && (
@@ -254,7 +265,7 @@ export default function OutputDetail() {
                           setShowSaveDialog(true);
                         }}
                       >
-                        <Save size={11} /> Save this
+                        <Save size={11} /> {t("skills.saveThis")}
                       </Button>
                     </div>
                   </div>
@@ -296,7 +307,9 @@ export default function OutputDetail() {
             <Textarea
               value={followUp}
               onChange={(e) => setFollowUp(e.target.value)}
-              placeholder={`Continue the conversation with ${skill?.name ?? "the AI"}… (⌘↵ to send)`}
+              placeholder={t("skills.continuePlaceholder", {
+                skill: localizedSkill?.name ?? t("skills.theAI"),
+              })}
               rows={2}
               className="text-sm resize-none flex-1"
               onKeyDown={(e) => {
@@ -317,7 +330,7 @@ export default function OutputDetail() {
                 ) : (
                   <Send size={14} />
                 )}
-                <span className="sm:hidden">Send</span>
+                <span className="sm:hidden">{t("common.send")}</span>
               </Button>
               {continuationTurns.length > 0 && (
                 <Button
@@ -326,7 +339,7 @@ export default function OutputDetail() {
                   onClick={handleSaveContinuation}
                   className="h-9 gap-1.5 text-xs"
                 >
-                  <Save size={13} /> Save latest
+                  <Save size={13} /> {t("skills.saveLatest")}
                 </Button>
               )}
             </div>
@@ -338,7 +351,7 @@ export default function OutputDetail() {
         open={showSaveDialog}
         onClose={() => setShowSaveDialog(false)}
         onSave={handleSave}
-        defaultTitle={`${skill?.name ?? "Output"} — continuation`}
+        defaultTitle={`${localizedSkill?.name ?? "Output"} - ${language === "es" ? "continuacion" : "continuation"}`}
         saving={saveOutputMutation.isPending}
       />
     </AppShell>

@@ -1,4 +1,6 @@
 import { SKILLS, SKILL_CATEGORIES, type SkillCategory, type Skill } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill, translateSkillCategory } from "@/data/skillTranslations";
 import SkillCard from "./SkillCard";
 
 interface SkillGridProps {
@@ -12,16 +14,22 @@ export default function SkillGrid({
   activeCategory = "all",
   hasContext = false,
 }: SkillGridProps) {
+  const { language, t } = useLanguage();
   const q = searchQuery.toLowerCase().trim();
 
   const filtered = SKILLS.filter((skill) => {
+    const localizedSkill = localizeSkill(skill, language);
+    const localizedCategory = translateSkillCategory(skill.category, language);
     const matchesCategory =
       activeCategory === "all" || skill.category === activeCategory;
     const matchesSearch =
       !q ||
       skill.name.toLowerCase().includes(q) ||
       skill.description.toLowerCase().includes(q) ||
-      skill.category.toLowerCase().includes(q);
+      skill.category.toLowerCase().includes(q) ||
+      localizedSkill.name.toLowerCase().includes(q) ||
+      localizedSkill.description.toLowerCase().includes(q) ||
+      (localizedCategory?.toLowerCase().includes(q) ?? false);
     return matchesCategory && matchesSearch;
   });
 
@@ -29,7 +37,7 @@ export default function SkillGrid({
     return (
       <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
         <p className="text-4xl mb-3">🔍</p>
-        <p className="text-muted-foreground text-sm">No skills match your search.</p>
+        <p className="text-muted-foreground text-sm">{t("skills.noMatch")}</p>
       </div>
     );
   }
@@ -64,7 +72,7 @@ export default function SkillGrid({
           return (
             <section key={cat}>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                {SKILL_CATEGORIES[cat].label}
+                {translateSkillCategory(cat, language) ?? SKILL_CATEGORIES[cat].label}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
                 {skills.map((skill) => (

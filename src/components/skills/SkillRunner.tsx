@@ -17,6 +17,13 @@ import { useSaveSkillOutput } from "@/hooks/useSkillOutputs";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import { type Skill, SKILL_CATEGORIES } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import {
+  localizeContextField,
+  localizeSkill,
+  translateSkillCategory,
+  translateSkillOption,
+} from "@/data/skillTranslations";
 import type { Project } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import SaveOutputDialog from "./SaveOutputDialog";
@@ -28,6 +35,7 @@ interface SkillRunnerProps {
 
 export default function SkillRunner({ skill }: SkillRunnerProps) {
   const { toast } = useToast();
+  const { language, t } = useLanguage();
   const { data: projects = [] } = useProjects();
   const { org } = useOrg();
   const { user } = useAuth();
@@ -41,13 +49,15 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
 
   const outputRef = useRef<HTMLDivElement>(null);
   const { streaming, streamedText, conversationHistory, error, run, reset } = useSkillRunner();
+  const localizedSkill = localizeSkill(skill, language);
 
   // Build dynamic Zod schema from contextFields
   const schemaShape: Record<string, z.ZodTypeAny> = {};
   for (const field of skill.contextFields) {
+    const localizedField = localizeContextField(skill, field, language);
     let schema: z.ZodTypeAny = z.string();
     if (field.required) {
-      schema = z.string().min(1, `${field.label} is required`);
+      schema = z.string().min(1, t("skills.required", { label: localizedField.label }));
     } else {
       schema = z.string().optional();
     }
@@ -82,7 +92,9 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
     for (const field of skill.contextFields) {
       const value = formValues[field.key];
       if (value) {
-        lines.push(`**${field.label}:** ${String(value)}`);
+        const localizedField = localizeContextField(skill, field, language);
+        const valueText = translateSkillOption(String(value), language);
+        lines.push(`**${localizedField.label}:** ${valueText}`);
       }
     }
     return lines.join("\n");
@@ -111,7 +123,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
     const text = lastAssistantMsg?.content ?? streamedText;
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({ description: "Copied to clipboard!" });
+    toast({ description: t("skills.copied") });
   };
 
   const handleSaveClick = () => {
@@ -139,7 +151,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
       is_starred: false,
     });
     setShowSaveDialog(false);
-    toast({ description: "Output saved!" });
+    toast({ description: t("skills.outputSaved") });
   };
 
   const hasOutput = conversationHistory.length > 0 || streaming;
@@ -153,28 +165,28 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xl">{skill.icon}</span>
-              <h2 className="text-base font-semibold">{skill.name}</h2>
+              <h2 className="text-base font-semibold">{localizedSkill.name}</h2>
             </div>
             <Badge
               variant="outline"
               className={cn("text-[10px]", SKILL_CATEGORIES[skill.category].color)}
             >
-              {SKILL_CATEGORIES[skill.category].label}
+              {translateSkillCategory(skill.category, language) ?? SKILL_CATEGORIES[skill.category].label}
             </Badge>
             <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-              {skill.description}
+              {localizedSkill.description}
             </p>
           </div>
 
           {/* Project selector */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Project (optional)</Label>
+            <Label className="text-xs font-medium">{t("skills.projectOptional")}</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
               <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Select a project..." />
+                <SelectValue placeholder={t("skills.selectProject")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No project</SelectItem>
+                <SelectItem value="none">{t("skills.noProject")}</SelectItem>
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="flex items-center gap-1.5">
@@ -187,29 +199,31 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
             {selectedProject && !selectedProject.context_complete && (
               <p className="text-[11px] text-amber-600 flex items-center gap-1">
                 <AlertCircle size={11} />
-                No marketing context set up for this project.
+                {t("skills.noMarketingContext")}
               </p>
             )}
             {selectedProject?.context_complete && (
               <p className="text-[11px] text-green-600">
-                ✓ Marketing context will be used automatically.
+                {t("skills.contextWillBeUsed")}
               </p>
             )}
           </div>
 
           {/* Context form fields */}
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-            {skill.contextFields.map((field) => (
+            {skill.contextFields.map((field) => {
+              const localizedField = localizeContextField(skill, field, language);
+              return (
               <div key={field.key} className="space-y-1.5">
                 <Label htmlFor={field.key} className="text-xs font-medium">
-                  {field.label}
+                  {localizedField.label}
                   {field.required && <span className="text-destructive ml-0.5">*</span>}
                 </Label>
 
                 {field.type === "textarea" ? (
                   <Textarea
                     id={field.key}
-                    placeholder={field.placeholder}
+                    placeholder={localizedField.placeholder}
                     rows={3}
                     className="text-sm resize-none"
                     {...form.register(field.key)}
@@ -220,12 +234,12 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                     defaultValue=""
                   >
                     <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select..." />
+                      <SelectValue placeholder={t("skills.selectPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {field.options?.map((opt) => (
                         <SelectItem key={opt} value={opt}>
-                          {opt}
+                          {translateSkillOption(opt, language)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -234,7 +248,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   <Input
                     id={field.key}
                     type={field.type}
-                    placeholder={field.placeholder}
+                    placeholder={localizedField.placeholder}
                     className="h-9 text-sm"
                     {...form.register(field.key)}
                   />
@@ -246,7 +260,8 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   </p>
                 )}
               </div>
-            ))}
+            );
+            })}
 
             <Button
               type="submit"
@@ -256,12 +271,12 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
               {streaming ? (
                 <>
                   <Loader2 size={14} className="mr-2 animate-spin" />
-                  Running...
+                  {t("skills.running")}
                 </>
               ) : (
                 <>
                   <Send size={14} className="mr-2" />
-                  Run Skill
+                  {t("skills.run")}
                 </>
               )}
             </Button>
@@ -275,9 +290,10 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <span className="text-5xl mb-4">{skill.icon}</span>
             <p className="text-muted-foreground text-sm max-w-sm">
-              Fill in the context form and click{" "}
-              <strong>Run Skill</strong> to get AI-generated{" "}
-              {skill.name.toLowerCase()} output.
+              {t("skills.emptyState", {
+                action: t("skills.run"),
+                skill: localizedSkill.name.toLowerCase(),
+              })}
             </p>
           </div>
         ) : (
@@ -337,7 +353,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   className="h-8 text-xs"
                 >
                   <Copy size={12} className="mr-1.5" />
-                  Copy
+                  {t("common.copy")}
                 </Button>
                 <Button
                   variant="outline"
@@ -347,7 +363,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   className="h-8 text-xs"
                 >
                   <Save size={12} className="mr-1.5" />
-                  Save
+                  {t("common.save")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -356,7 +372,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   className="h-8 text-xs ml-auto text-muted-foreground"
                 >
                   <RotateCcw size={12} className="mr-1.5" />
-                  New Run
+                  {t("skills.newRun")}
                 </Button>
               </div>
 
@@ -366,7 +382,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   <Textarea
                     value={followUp}
                     onChange={(e) => setFollowUp(e.target.value)}
-                    placeholder="Ask a follow-up question..."
+                    placeholder={t("skills.followUpPlaceholder")}
                     rows={2}
                     className="text-sm resize-none flex-1"
                     onKeyDown={(e) => {
@@ -395,7 +411,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
         open={showSaveDialog}
         onClose={() => setShowSaveDialog(false)}
         onSave={handleSave}
-        defaultTitle={`${skill.name} — ${new Date().toLocaleDateString()}`}
+        defaultTitle={`${localizedSkill.name} - ${new Date().toLocaleDateString()}`}
         saving={saveOutput.isPending}
       />
     </div>

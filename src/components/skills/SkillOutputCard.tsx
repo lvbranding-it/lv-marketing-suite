@@ -5,8 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUpdateSkillOutput, useDeleteSkillOutput } from "@/hooks/useSkillOutputs";
 import { getSkill, SKILL_CATEGORIES } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill } from "@/data/skillTranslations";
 import type { SkillOutputRow } from "@/integrations/supabase/types";
 import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 
 interface SkillOutputCardProps {
   output: SkillOutputRow;
@@ -14,12 +17,17 @@ interface SkillOutputCardProps {
 
 export default function SkillOutputCard({ output }: SkillOutputCardProps) {
   const navigate = useNavigate();
+  const { language, t } = useLanguage();
   const updateOutput = useUpdateSkillOutput();
   const deleteOutput = useDeleteSkillOutput();
 
   const skill = getSkill(output.skill_id);
+  const localizedSkill = skill ? localizeSkill(skill, language) : null;
   const categoryMeta = skill ? SKILL_CATEGORIES[skill.category] : null;
-  const timeAgo = formatDistanceToNow(new Date(output.created_at), { addSuffix: true });
+  const timeAgo = formatDistanceToNow(new Date(output.created_at), {
+    addSuffix: true,
+    locale: language === "es" ? es : undefined,
+  });
 
   const handleStar = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -28,7 +36,7 @@ export default function SkillOutputCard({ output }: SkillOutputCardProps) {
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm("Delete this output?")) {
+    if (confirm(t("skills.deleteOutputConfirm"))) {
       deleteOutput.mutate(output.id);
     }
   };
@@ -51,7 +59,7 @@ export default function SkillOutputCard({ output }: SkillOutputCardProps) {
               variant="outline"
               className={cn("text-[10px] px-1.5 py-0", categoryMeta.color)}
             >
-              {skill?.name ?? output.skill_name}
+              {localizedSkill?.name ?? output.skill_name}
             </Badge>
           )}
         </div>
@@ -82,7 +90,7 @@ export default function SkillOutputCard({ output }: SkillOutputCardProps) {
             size="icon"
             className="h-7 w-7 text-muted-foreground"
             onClick={handleOpen}
-            title="Open full page"
+            title={t("skills.openFullPage")}
           >
             <ExternalLink size={13} />
           </Button>

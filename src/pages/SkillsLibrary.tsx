@@ -7,27 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProjects } from "@/hooks/useProjects";
 import { SKILL_CATEGORIES, type SkillCategory } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { translateSkillCategory } from "@/data/skillTranslations";
 import { useNavigate } from "react-router-dom";
-
-const ALL_CATEGORIES: Array<{ value: "all" | SkillCategory; label: string }> = [
-  { value: "all", label: "All" },
-  ...Object.entries(SKILL_CATEGORIES).map(([key, meta]) => ({
-    value: key as SkillCategory,
-    label: meta.label,
-  })),
-];
 
 export default function SkillsLibrary() {
   const navigate = useNavigate();
+  const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<"all" | SkillCategory>("all");
   const { data: projects = [] } = useProjects();
 
   const hasContext = projects.some((p) => p.context_complete);
+  const allCategories: Array<{ value: "all" | SkillCategory; label: string }> = [
+    { value: "all", label: t("skills.all") },
+    ...Object.entries(SKILL_CATEGORIES).map(([key, meta]) => ({
+      value: key as SkillCategory,
+      label: translateSkillCategory(key as SkillCategory, language) ?? meta.label,
+    })),
+  ];
 
   return (
     <AppShell>
-      <Header title="Skills Library" subtitle="33 AI-powered marketing skills" />
+      <Header title={t("skills.title")} subtitle={t("skills.subtitle", { count: 33 })} />
 
       <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-4">
         {/* Context warning banner */}
@@ -35,14 +37,14 @@ export default function SkillsLibrary() {
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <div>
-              <span className="font-medium">Tip:</span> Set up a{" "}
+              <span className="font-medium">{t("skills.tip")}</span> {t("skills.tipLead")}{" "}
               <button
                 className="underline font-medium"
                 onClick={() => navigate("/projects")}
               >
-                Project Marketing Context
+                {t("skills.tipAction")}
               </button>{" "}
-              to get better, more personalized outputs from every skill.
+              {t("skills.tipSuffix")}
             </div>
           </div>
         )}
@@ -56,7 +58,7 @@ export default function SkillsLibrary() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search skills..."
+            placeholder={t("skills.searchPlaceholder")}
             className="pl-9 h-9"
           />
         </div>
@@ -67,7 +69,7 @@ export default function SkillsLibrary() {
           onValueChange={(v) => setActiveCategory(v as "all" | SkillCategory)}
         >
           <TabsList className="flex-wrap h-auto gap-1 bg-muted p-1 overflow-x-auto">
-            {ALL_CATEGORIES.map(({ value, label }) => (
+            {allCategories.map(({ value, label }) => (
               <TabsTrigger
                 key={value}
                 value={value}

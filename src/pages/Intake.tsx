@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateProject, useUpdateProject } from "@/hooks/useProjects";
 import { runSkillStream } from "@/lib/claude";
 import { getSkill } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ Please produce a comprehensive, well-structured marketing context document that 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Intake() {
   const navigate = useNavigate();
+  const { language } = useLanguage();
   const { org } = useOrg();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -206,7 +208,11 @@ export default function Intake() {
 
     await runSkillStream(
       {
-        skillSystemPrompt: pmcSkill.systemPrompt,
+        skillSystemPrompt: `${pmcSkill.systemPrompt}\n\n${
+          language === "es"
+            ? "Important: respond in Spanish for all user-facing content. Keep brand names, product names, URLs, code, metrics, and technical acronyms unchanged when appropriate."
+            : "Important: respond in English for all user-facing content unless the user explicitly asks otherwise."
+        }`,
         userMessage: prompt,
         conversationHistory: [],
         marketingContext: {},

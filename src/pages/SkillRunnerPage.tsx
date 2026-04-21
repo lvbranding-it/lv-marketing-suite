@@ -4,22 +4,26 @@ import AppShell from "@/components/layout/AppShell";
 import SkillRunner from "@/components/skills/SkillRunner";
 import { Badge } from "@/components/ui/badge";
 import { getSkill, SKILL_CATEGORIES } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill, translateSkillCategory } from "@/data/skillTranslations";
 import { cn } from "@/lib/utils";
 
 export default function SkillRunnerPage() {
   const { skillId } = useParams<{ skillId: string }>();
   const navigate = useNavigate();
+  const { language, t } = useLanguage();
 
   const skill = skillId ? getSkill(skillId) : undefined;
+  const localizedSkill = skill ? localizeSkill(skill, language) : undefined;
 
   if (!skill) {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
           <p className="text-4xl mb-3">❓</p>
-          <p className="text-muted-foreground text-sm mb-4">Skill not found.</p>
+          <p className="text-muted-foreground text-sm mb-4">{t("skills.notFound")}</p>
           <Link to="/skills" className="text-primary text-sm underline">
-            Back to Skills Library
+            {t("skills.backToLibrary")}
           </Link>
         </div>
       </AppShell>
@@ -44,17 +48,17 @@ export default function SkillRunnerPage() {
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft size={13} />
-            Skills
+            {t("skills.back")}
           </button>
           <span className="text-muted-foreground">/</span>
           <div className="flex items-center gap-2">
             <span className="text-lg">{skill.icon}</span>
-            <span className="text-sm font-medium">{skill.name}</span>
+            <span className="text-sm font-medium">{localizedSkill?.name ?? skill.name}</span>
             <Badge
               variant="outline"
               className={cn("text-[10px] px-1.5 py-0", categoryMeta.color)}
             >
-              {categoryMeta.label}
+              {translateSkillCategory(skill.category, language) ?? categoryMeta.label}
             </Badge>
           </div>
         </div>

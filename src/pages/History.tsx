@@ -9,8 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillOutputs } from "@/hooks/useSkillOutputs";
 import { useProjects } from "@/hooks/useProjects";
 import { SKILLS } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill } from "@/data/skillTranslations";
 
 export default function History() {
+  const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [skillFilter, setSkillFilter] = useState<string>("all");
@@ -25,9 +28,12 @@ export default function History() {
   const filtered = outputs.filter((o) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
+    const skill = SKILLS.find((s) => s.id === o.skill_id);
+    const localizedSkill = skill ? localizeSkill(skill, language) : null;
     return (
       o.output_text.toLowerCase().includes(q) ||
       o.skill_name.toLowerCase().includes(q) ||
+      (localizedSkill?.name.toLowerCase().includes(q) ?? false) ||
       (o.title?.toLowerCase().includes(q) ?? false)
     );
   });
@@ -35,8 +41,11 @@ export default function History() {
   return (
     <AppShell>
       <Header
-        title="Output History"
-        subtitle={`${filtered.length} output${filtered.length !== 1 ? "s" : ""}`}
+        title={t("history.title")}
+        subtitle={t("history.subtitle", {
+          count: filtered.length,
+          suffix: filtered.length !== 1 ? "s" : "",
+        })}
       />
 
       <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4">
@@ -50,16 +59,16 @@ export default function History() {
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search outputs..."
+              placeholder={t("history.searchPlaceholder")}
               className="pl-9 h-9"
             />
           </div>
           <Select value={projectFilter} onValueChange={setProjectFilter}>
             <SelectTrigger className="h-9 w-full sm:w-44 text-sm">
-              <SelectValue placeholder="All projects" />
+              <SelectValue placeholder={t("history.allProjects")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All projects</SelectItem>
+              <SelectItem value="all">{t("history.allProjects")}</SelectItem>
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
@@ -69,13 +78,13 @@ export default function History() {
           </Select>
           <Select value={skillFilter} onValueChange={setSkillFilter}>
             <SelectTrigger className="h-9 w-full sm:w-44 text-sm">
-              <SelectValue placeholder="All skills" />
+              <SelectValue placeholder={t("history.allSkills")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All skills</SelectItem>
+              <SelectItem value="all">{t("history.allSkills")}</SelectItem>
               {SKILLS.filter((s) => !s.isFoundation).map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.icon} {s.name}
+                  {s.icon} {localizeSkill(s, language).name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -92,8 +101,8 @@ export default function History() {
             <p className="text-4xl mb-3">📭</p>
             <p className="text-muted-foreground text-sm">
               {searchQuery || projectFilter !== "all" || skillFilter !== "all"
-                ? "No outputs match your filters."
-                : "No outputs saved yet. Run a skill and save your results!"}
+                ? t("history.noFilterMatch")
+                : t("history.noSaved")}
             </p>
           </div>
         ) : (

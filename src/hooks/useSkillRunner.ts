@@ -3,6 +3,7 @@ import { runSkillStream, type Message } from "@/lib/claude";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { useOrg } from "./useOrg";
+import { useLanguage } from "./useLanguage";
 import type { Skill } from "@/data/skills";
 
 interface SkillRunnerState {
@@ -15,6 +16,7 @@ interface SkillRunnerState {
 export function useSkillRunner() {
   const { user } = useAuth();
   const { org } = useOrg();
+  const { language } = useLanguage();
 
   const [state, setState] = useState<SkillRunnerState>({
     streaming: false,
@@ -38,7 +40,11 @@ export function useSkillRunner() {
 
       await runSkillStream(
         {
-          skillSystemPrompt: skill.systemPrompt,
+          skillSystemPrompt: `${skill.systemPrompt}\n\n${
+            language === "es"
+              ? "Important: respond in Spanish for all user-facing content. Keep brand names, product names, URLs, code, metrics, and technical acronyms unchanged when appropriate."
+              : "Important: respond in English for all user-facing content unless the user explicitly asks otherwise."
+          }`,
           userMessage,
           conversationHistory: state.conversationHistory,
           marketingContext,
@@ -75,7 +81,7 @@ export function useSkillRunner() {
         }
       );
     },
-    [state.conversationHistory, org?.id]
+    [state.conversationHistory, org?.id, language]
   );
 
   const saveOutput = useCallback(

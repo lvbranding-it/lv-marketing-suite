@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { type Skill, SKILL_CATEGORIES, CATEGORY_BORDER_COLORS } from "@/data/skills";
+import { useLanguage } from "@/hooks/useLanguage";
+import { localizeSkill, translateSkillCategory } from "@/data/skillTranslations";
 
 interface SkillCardProps {
   skill: Skill;
@@ -10,6 +12,8 @@ interface SkillCardProps {
 
 export default function SkillCard({ skill, hasContext = false }: SkillCardProps) {
   const navigate = useNavigate();
+  const { language, t } = useLanguage();
+  const localizedSkill = localizeSkill(skill, language);
   const categoryMeta = SKILL_CATEGORIES[skill.category];
 
   const handleClick = () => {
@@ -34,20 +38,20 @@ export default function SkillCard({ skill, hasContext = false }: SkillCardProps)
         <span className="text-2xl leading-none">{skill.icon}</span>
         {skill.isFoundation && (
           <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
-            Setup First
+            {t("skills.setupFirst")}
           </span>
         )}
         {!skill.isFoundation && !hasContext && (
-          <span className="text-[10px] font-medium text-muted-foreground/60">No context</span>
+          <span className="text-[10px] font-medium text-muted-foreground/60">{t("skills.noContext")}</span>
         )}
       </div>
 
       <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors leading-tight mb-1">
-        {skill.name}
+        {localizedSkill.name}
       </h3>
 
       <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-        {skill.description}
+        {localizedSkill.description}
       </p>
 
       <div className="mt-3">
@@ -55,7 +59,7 @@ export default function SkillCard({ skill, hasContext = false }: SkillCardProps)
           variant="outline"
           className={cn("text-[10px] px-2 py-0.5 border", categoryMeta.color)}
         >
-          {categoryMeta.label}
+          {translateSkillCategory(skill.category, language) ?? categoryMeta.label}
         </Badge>
       </div>
     </button>
