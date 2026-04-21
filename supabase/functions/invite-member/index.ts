@@ -4,7 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SENDGRID_API_KEY   = Deno.env.get("SENDGRID_API_KEY")!;
 const SUPABASE_URL       = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY  = Deno.env.get("SUPABASE_ANON_KEY")!;
 const APP_URL            = Deno.env.get("APP_URL") ?? "https://lv-marketing-suite.vercel.app";
 const FROM_EMAIL         = "admin@lvbranding.com";
 const FROM_NAME          = "LV Branding";
@@ -14,6 +13,23 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function getUserFromAccessToken(token: string): { id: string; email: string | null } | null {
+  try {
+    const payloadB64 = token.split(".")[1];
+    if (!payloadB64) return null;
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
+    if (typeof payload?.sub !== "string") return null;
+
+    return {
+      id: payload.sub,
+      email: typeof payload.email === "string" ? payload.email : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function buildInviteEmail(opts: {
   inviteeEmail: string;
@@ -187,12 +203,11 @@ serve(async (req) => {
     });
   }
 
-  // Verify caller
-  const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data: { user }, error: authErr } = await anonClient.auth.getUser(
-    accessToken
-  );
-  if (authErr || !user) {
+  // Supabase's Edge gateway validates the JWT before invoking this function.
+  // Decode the accepted token instead of re-validating it with auth.getUser(),
+  // which can fail for projects using asymmetric JWT signing.
+  const user = getUserFromAccessToken(accessToken);
+  if (!user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401, headers: { ...cors, "Content-Type": "application/json" },
     });
