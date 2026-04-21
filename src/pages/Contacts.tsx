@@ -38,7 +38,7 @@ import { parseContactsCSV } from "@/lib/csvImport";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import BranchSelect from "@/components/branches/BranchSelect";
-import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
+import { branchMatchesFilter, useAccessibleBranches, type BranchFilterValue } from "@/hooks/useBranches";
 
 type SortKey = "score" | "name" | "company";
 type SortDir = 1 | -1;
@@ -62,15 +62,25 @@ const FILTER_TABS = [
 
 export default function Contacts() {
   const { toast } = useToast();
-  const { canAddContacts, canDeleteContacts, isMember, isManager } = usePermissions();
+  const { canAddContacts, canDeleteContacts, isMember, isManager, isBranchOnly } = usePermissions();
   const { log } = useActivityLog();
   const { org } = useOrg();
 
   const { data: allImported = [], isLoading } = useImportedContacts();
   const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
+  const { data: accessibleBranches = [], isBranchRestricted } = useAccessibleBranches();
+  const branchContext = isBranchRestricted && branchFilter === "all" && accessibleBranches.length === 1
+    ? accessibleBranches[0]
+    : null;
+  const effectiveBranchFilter = branchContext ? branchContext.id : branchFilter;
+  const contactBranchId =
+    effectiveBranchFilter !== "all" && effectiveBranchFilter !== "unassigned"
+      ? effectiveBranchFilter
+      : null;
+  const canUseHqProspecting = !isBranchOnly;
   const imported = useMemo(
-    () => allImported.filter((contact) => branchMatchesFilter(contact.branch_id, branchFilter)),
-    [allImported, branchFilter]
+    () => allImported.filter((contact) => branchMatchesFilter(contact.branch_id, effectiveBranchFilter)),
+    [allImported, effectiveBranchFilter]
   );
   const addContact    = useImportContact();
   const updateContact = useUpdateContact();
@@ -120,7 +130,7 @@ export default function Contacts() {
         apollo_id:  null,
         signals:    [],
         raw_data:   {},
-        branch_id:  branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
+        branch_id:  contactBranchId,
       }));
 
       const { error } = await supabase
@@ -325,7 +335,7 @@ export default function Contacts() {
       apollo_id:       null,
       signals:         c.signals,
       raw_data:        {},
-      branch_id:       branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
+      branch_id:       contactBranchId,
       pipeline_stage:  "lead",
       deal_value:      null,
       deal_probability: null,
@@ -374,7 +384,7 @@ export default function Contacts() {
       raw_data:        {},
       created_at:      new Date().toISOString(),
       updated_at:      new Date().toISOString(),
-      branch_id:       branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null,
+      branch_id:       contactBranchId,
       pipeline_stage:  "lead",
       deal_value:      null,
       deal_probability: null,
@@ -399,7 +409,10 @@ export default function Contacts() {
     } else {
       await addContact.mutateAsync({
         ...values,
-        branch_id: values.branch_id ?? (branchFilter !== "all" && branchFilter !== "unassigned" ? branchFilter : null),
+        branch_id:
+          values.branch_id && values.branch_id !== "unassigned"
+            ? values.branch_id
+            : contactBranchId,
         source:    "manual",
         source_id: null,
         apollo_id: null,
@@ -413,10 +426,10 @@ export default function Contacts() {
 
   // ── Stat helpers ────────────────────────────────────────────────────────
   const visibleStatic = useMemo(
-    () => branchFilter === "all" || branchFilter === "unassigned"
+    () => canUseHqProspecting && (effectiveBranchFilter === "all" || effectiveBranchFilter === "unassigned")
       ? STATIC_CONTACTS.filter((c) => !hiddenStaticIds.has(c.id))
       : [],
-    [hiddenStaticIds, branchFilter]
+    [canUseHqProspecting, hiddenStaticIds, effectiveBranchFilter]
   );
 
   const signalCount = useMemo(() => {
@@ -482,8 +495,12 @@ export default function Contacts() {
                     {imported.filter((c) => c.verification_status === "verified").length}
                   </span>
                 </TabsTrigger>
-                <TabsTrigger value="vibe" className="hidden sm:flex">Find Prospects</TabsTrigger>
-                <TabsTrigger value="apollo" className="hidden sm:flex">Apollo CRM</TabsTrigger>
+                {canUseHqProspecting && (
+                  <>
+                    <TabsTrigger value="vibe" className="hidden sm:flex">Find Prospects</TabsTrigger>
+                    <TabsTrigger value="apollo" className="hidden sm:flex">Apollo CRM</TabsTrigger>
+                  </>
+                )}
               </TabsList>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -563,10 +580,18 @@ export default function Contacts() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              <StatCard label="Total contacts" value={String(visibleStatic.length + imported.length)} sub={`${visibleStatic.length} Houston · ${imported.length} imported`} />
+              <StatCard
+                label="Total contacts"
+                value={String(visibleStatic.length + imported.length)}
+                sub={canUseHqProspecting ? `${visibleStatic.length} Houston · ${imported.length} imported` : `${imported.length} branch contacts`}
+              />
               <StatCard label="Growth signals" value={String(signalCount)} sub="New role · hiring · expansion" accent />
               <StatCard label="Industries"     value={String(industryCount)} sub="Unique sectors represented" />
-              <StatCard label="Imported"       value={String(imported.length)} sub="Via Vibe or Apollo" />
+              <StatCard
+                label="Imported"
+                value={String(imported.length)}
+                sub={canUseHqProspecting ? "Via Vibe, Apollo, CSV, or manual" : "Via CSV or manual"}
+              />
             </div>
 
             {/* Charts */}
@@ -630,7 +655,9 @@ export default function Contacts() {
                     <>
                       <Tag size={13} className="text-muted-foreground" />
                       Imported ({imported.length})
-                      <span className="text-[10px] font-normal text-muted-foreground">via Vibe Prospecting or Apollo</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        {canUseHqProspecting ? "via Vibe Prospecting, Apollo, CSV, or manual entry" : "via CSV or manual entry"}
+                      </span>
                     </>
                   )}
                 </h3>
@@ -1063,14 +1090,18 @@ export default function Contacts() {
           </TabsContent>
 
           {/* ── Vibe Prospecting ─────────────────────────────────── */}
-          <TabsContent value="vibe">
-            <ProspectSearchPanel />
-          </TabsContent>
+          {canUseHqProspecting && (
+            <TabsContent value="vibe">
+              <ProspectSearchPanel />
+            </TabsContent>
+          )}
 
           {/* ── Apollo CRM ───────────────────────────────────────── */}
-          <TabsContent value="apollo">
-            <ApolloPanel />
-          </TabsContent>
+          {canUseHqProspecting && (
+            <TabsContent value="apollo">
+              <ApolloPanel />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

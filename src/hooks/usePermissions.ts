@@ -35,7 +35,7 @@ export function usePermissions() {
     canAccessSkills:    features.skills    !== false,
     canAccessIntake:    features.intake    !== false,
     // Contacts
-    canAddContacts:      isAdmin,
+    canAddContacts:      isAdmin || isBranchOnly,
     canDeleteContacts:   isAdmin,
     canEditContacts:     true,           // all roles
     canResearchContacts: true,           // all roles

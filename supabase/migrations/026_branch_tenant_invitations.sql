@@ -142,6 +142,19 @@ CREATE POLICY "branch_members_contacts_update" ON public.contacts
   FOR UPDATE USING (public.can_access_branch_record(org_id, branch_id))
   WITH CHECK (public.can_access_branch_record(org_id, branch_id));
 
+CREATE POLICY "branch_members_contact_tag_defs_select" ON public.contact_tag_definitions
+  FOR SELECT USING (public.is_branch_member(org_id));
+
+CREATE POLICY "branch_members_contact_tag_defs_insert" ON public.contact_tag_definitions
+  FOR INSERT WITH CHECK (public.is_branch_member(org_id));
+
+CREATE POLICY "branch_members_contact_tag_defs_update" ON public.contact_tag_definitions
+  FOR UPDATE USING (public.is_branch_member(org_id))
+  WITH CHECK (public.is_branch_member(org_id));
+
+CREATE POLICY "branch_members_contact_tag_defs_delete" ON public.contact_tag_definitions
+  FOR DELETE USING (public.is_branch_member(org_id));
+
 CREATE POLICY "branch_members_campaigns" ON public.email_campaigns
   FOR ALL USING (public.can_access_branch_record(org_id, branch_id))
   WITH CHECK (public.can_access_branch_record(org_id, branch_id));
