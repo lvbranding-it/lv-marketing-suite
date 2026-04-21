@@ -77,7 +77,7 @@ export default function Contacts() {
     effectiveBranchFilter !== "all" && effectiveBranchFilter !== "unassigned"
       ? effectiveBranchFilter
       : null;
-  const canUseHqProspecting = !isBranchOnly;
+  const canUseHqProspecting = !isBranchOnly && (effectiveBranchFilter === "all" || effectiveBranchFilter === "unassigned");
   const imported = useMemo(
     () => allImported.filter((contact) => branchMatchesFilter(contact.branch_id, effectiveBranchFilter)),
     [allImported, effectiveBranchFilter]
