@@ -11,19 +11,24 @@ import LVLogo from "@/components/LVLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-const authSchema = z.object({
+const signInSchema = z.object({
   email: z.string().email("Invalid email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  full_name: z.string().optional(),
 });
 
-type AuthFormValues = z.infer<typeof authSchema>;
+const resetSchema = z.object({
+  email: z.string().email("Invalid email"),
+});
+
+type SignInValues = z.infer<typeof signInSchema>;
+type ResetValues = z.infer<typeof resetSchema>;
 
 export default function Auth() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "reset">("signin");
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -32,33 +37,44 @@ export default function Auth() {
     }
   }, [session, loading, navigate]);
 
-  const form = useForm<AuthFormValues>({
-    resolver: zodResolver(authSchema),
-    defaultValues: { email: "", password: "", full_name: "" },
+  const signInForm = useForm<SignInValues>({
+    resolver: zodResolver(signInSchema),
+    defaultValues: { email: "", password: "" },
   });
 
-  const onSubmit = async (values: AuthFormValues) => {
+  const resetForm = useForm<ResetValues>({
+    resolver: zodResolver(resetSchema),
+    defaultValues: { email: "" },
+  });
+
+  const onSignIn = async (values: SignInValues) => {
     setError(null);
     setSubmitting(true);
-
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email: values.email,
-          password: values.password,
-          options: { data: { full_name: values.full_name } },
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: values.email,
-          password: values.password,
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+      if (error) throw error;
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onReset = async (values: ResetValues) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+      if (error) throw error;
+      setResetSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reset email");
     } finally {
       setSubmitting(false);
     }
@@ -103,84 +119,133 @@ export default function Auth() {
             <p className="text-muted-foreground text-sm">Marketing Suite</p>
           </div>
 
-          <div>
-            <h2 className="text-2xl font-bold">
-              {mode === "signin" ? "Welcome back" : "Create account"}
-            </h2>
-            <p className="text-muted-foreground text-sm mt-1">
-              {mode === "signin"
-                ? "Sign in to your Marketing Suite"
-                : "Get started with LV Marketing Suite"}
-            </p>
-          </div>
-
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {mode === "signup" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="full_name">Full Name</Label>
-                <Input
-                  id="full_name"
-                  placeholder="Jane Smith"
-                  {...form.register("full_name")}
-                />
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                {...form.register("email")}
-              />
-              {form.formState.errors.email && (
-                <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                {...form.register("password")}
-              />
-              {form.formState.errors.password && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.password.message}
+          {mode === "signin" && (
+            <>
+              <div>
+                <h2 className="text-2xl font-bold">Welcome back</h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Sign in to your Marketing Suite
                 </p>
-              )}
-            </div>
+              </div>
 
-            {error && (
-              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-                {error}
+              <form onSubmit={signInForm.handleSubmit(onSignIn)} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@lvbranding.com"
+                    {...signInForm.register("email")}
+                  />
+                  {signInForm.formState.errors.email && (
+                    <p className="text-xs text-destructive">
+                      {signInForm.formState.errors.email.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    {...signInForm.register("password")}
+                  />
+                  {signInForm.formState.errors.password && (
+                    <p className="text-xs text-destructive">
+                      {signInForm.formState.errors.password.message}
+                    </p>
+                  )}
+                </div>
+
+                {error && (
+                  <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                    {error}
+                  </p>
+                )}
+
+                <Button type="submit" className="w-full" disabled={submitting}>
+                  {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+                  Sign In
+                </Button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Forgot your password?{" "}
+                <button
+                  className="text-primary font-medium hover:underline"
+                  onClick={() => {
+                    setMode("reset");
+                    setError(null);
+                    signInForm.reset();
+                  }}
+                >
+                  Reset it
+                </button>
               </p>
-            )}
+            </>
+          )}
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? (
-                <Loader2 size={14} className="mr-2 animate-spin" />
-              ) : null}
-              {mode === "signin" ? "Sign In" : "Create Account"}
-            </Button>
-          </form>
+          {mode === "reset" && (
+            <>
+              <div>
+                <h2 className="text-2xl font-bold">Reset password</h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Enter your email and we'll send a reset link.
+                </p>
+              </div>
 
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-            <button
-              className="text-primary font-medium hover:underline"
-              onClick={() => {
-                setMode(mode === "signin" ? "signup" : "signin");
-                setError(null);
-                form.reset();
-              }}
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
+              {resetSent ? (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg">
+                  Check your inbox — a reset link has been sent.
+                </div>
+              ) : (
+                <form onSubmit={resetForm.handleSubmit(onReset)} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reset-email">Email</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="you@lvbranding.com"
+                      {...resetForm.register("email")}
+                    />
+                    {resetForm.formState.errors.email && (
+                      <p className="text-xs text-destructive">
+                        {resetForm.formState.errors.email.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {error && (
+                    <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                      {error}
+                    </p>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={submitting}>
+                    {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+                    Send Reset Link
+                  </Button>
+                </form>
+              )}
+
+              <p className="text-center text-sm text-muted-foreground">
+                Remember it?{" "}
+                <button
+                  className="text-primary font-medium hover:underline"
+                  onClick={() => {
+                    setMode("signin");
+                    setError(null);
+                    setResetSent(false);
+                    resetForm.reset();
+                  }}
+                >
+                  Back to sign in
+                </button>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
