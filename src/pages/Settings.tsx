@@ -211,6 +211,93 @@ const ACTION_LABELS: Record<string, string> = {
   updated_branch_status: "Updated branch status",
 };
 
+type InviteMemberPayload = {
+  org_id: string;
+  email: string;
+  role: MemberRole;
+  inviter_name?: string;
+  invitee_name?: string;
+};
+
+const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+async function readFunctionError(response: Response) {
+  const fallback = `Failed to send invitation (${response.status})`;
+  const text = await response.text().catch(() => "");
+
+  if (!text) return fallback;
+  try {
+    const body = JSON.parse(text);
+    if (typeof body?.error === "string") return body.error;
+    if (typeof body?.message === "string") return body.message;
+  } catch {
+    return text;
+  }
+
+  return fallback;
+}
+
+async function getInviteAccessToken() {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    throw new Error("You're offline. Reconnect and try sending the invite again.");
+  }
+
+  let sessionResult;
+  try {
+    sessionResult = await supabase.auth.getSession();
+  } catch (error) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("You're offline. Reconnect and try sending the invite again.");
+    }
+
+    const message = error instanceof Error ? error.message : "Unknown auth error";
+    throw new Error(`Could not refresh your session: ${message}`);
+  }
+
+  if (sessionResult.error) {
+    throw new Error(`Could not refresh your session: ${sessionResult.error.message}`);
+  }
+
+  if (!sessionResult.data.session?.access_token) {
+    throw new Error("Your session expired. Please sign in again before sending an invite.");
+  }
+
+  return sessionResult.data.session.access_token;
+}
+
+async function inviteMember(payload: InviteMemberPayload) {
+  const accessToken = await getInviteAccessToken();
+
+  let response: Response;
+  try {
+    response = await fetch(`${FUNCTIONS_URL}/invite-member`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("You're offline. Reconnect and try sending the invite again.");
+    }
+
+    throw new Error("Network changed while sending the invite. Check your connection and try again.");
+  }
+
+  if (!response.ok) {
+    const message = await readFunctionError(response);
+    if (response.status === 401) {
+      throw new Error("Your session expired. Please sign in again before sending an invite.");
+    }
+    throw new Error(message);
+  }
+
+  return response.json().catch(() => ({ ok: true }));
+}
+
 function actionLabel(action: string, translate: (key: string) => string) {
   const translated = translate(`activity.${action}`);
   if (translated !== `activity.${action}`) return translated;
@@ -644,15 +731,12 @@ export default function Settings() {
       if (!org) throw new Error("No organization");
       const inviterName =
         (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "A team member";
-      const { error } = await supabase.functions.invoke("invite-member", {
-        body: {
-          org_id: org.id,
-          email: invite.invited_email,
-          role: invite.role,
-          inviter_name: inviterName,
-        },
+      await inviteMember({
+        org_id: org.id,
+        email: invite.invited_email.trim().toLowerCase(),
+        role: invite.role,
+        inviter_name: inviterName,
       });
-      if (error) throw error;
     },
     onSuccess: (_data, invite) => {
       queryClient.invalidateQueries({ queryKey: ["invitations"] });
@@ -670,22 +754,23 @@ export default function Settings() {
   const sendInviteMutation = useMutation({
     mutationFn: async () => {
       if (!org) throw new Error("No organization");
+      const email = inviteEmail.trim().toLowerCase();
+      if (!email) throw new Error("Email address is required");
+
       const inviterName =
         (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "A team member";
-      const { error } = await supabase.functions.invoke("invite-member", {
-        body: {
-          org_id: org.id,
-          email: inviteEmail,
-          role: inviteRole,
-          inviter_name: inviterName,
-          invitee_name: inviteeName || undefined,
-        },
+      await inviteMember({
+        org_id: org.id,
+        email,
+        role: inviteRole,
+        inviter_name: inviterName,
+        invitee_name: inviteeName.trim() || undefined,
       });
-      if (error) throw error;
+      return email;
     },
-    onSuccess: () => {
+    onSuccess: (email) => {
       queryClient.invalidateQueries({ queryKey: ["invitations"] });
-      toast({ description: `Invitation sent to ${inviteEmail}` });
+      toast({ description: `Invitation sent to ${email}` });
       setInviteEmail("");
       setInviteeName("");
       setInviteRole("member");

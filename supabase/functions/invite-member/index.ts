@@ -180,7 +180,8 @@ serve(async (req) => {
 
   // Require JWT
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
+  const accessToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401, headers: { ...cors, "Content-Type": "application/json" },
     });
@@ -189,7 +190,7 @@ serve(async (req) => {
   // Verify caller
   const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { data: { user }, error: authErr } = await anonClient.auth.getUser(
-    authHeader.replace("Bearer ", "")
+    accessToken
   );
   if (authErr || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -208,7 +209,8 @@ serve(async (req) => {
     });
   }
 
-  const { org_id, email, role, inviter_name } = body;
+  const { org_id, role, inviter_name } = body;
+  const email = body.email?.trim().toLowerCase();
   if (!org_id || !email || !role) {
     return new Response(JSON.stringify({ error: "Missing org_id, email, or role" }), {
       status: 400, headers: { ...cors, "Content-Type": "application/json" },
@@ -271,7 +273,7 @@ serve(async (req) => {
     .from("invitations")
     .update({ cancelled_at: new Date().toISOString() })
     .eq("org_id", org_id)
-    .eq("invited_email", email.toLowerCase())
+    .eq("invited_email", email)
     .is("accepted_at", null)
     .is("cancelled_at", null);
 
@@ -280,7 +282,7 @@ serve(async (req) => {
     .from("invitations")
     .insert({
       org_id,
-      invited_email: email.toLowerCase(),
+      invited_email: email,
       role,
       invited_by: user.id,
       invited_by_role: callerRole,
@@ -300,7 +302,7 @@ serve(async (req) => {
 
   // Send email via SendGrid
   const emailHtml = buildInviteEmail({
-    inviteeEmail: email.toLowerCase(),
+    inviteeEmail: email,
     inviteeName: body.invitee_name,
     inviterName: displayInviterName,
     orgName: org.name,
@@ -310,7 +312,7 @@ serve(async (req) => {
 
   const sgPayload = {
     personalizations: [{
-      to: [{ email: email.toLowerCase() }],
+      to: [{ email }],
       subject: `You've been invited to join LV Branding's Workspace`,
     }],
     from: { email: FROM_EMAIL, name: FROM_NAME },
