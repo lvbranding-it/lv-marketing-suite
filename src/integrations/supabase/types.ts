@@ -122,6 +122,8 @@ export type Database = {
           role: "regional_ceo" | "manager" | "crew";
           assigned_by: string | null;
           assigned_at: string;
+          invited_email: string | null;
+          display_name: string | null;
         };
         Insert: {
           branch_id: string;
@@ -130,6 +132,8 @@ export type Database = {
           role?: "regional_ceo" | "manager" | "crew";
           assigned_by?: string | null;
           assigned_at?: string;
+          invited_email?: string | null;
+          display_name?: string | null;
         };
         Update: {
           branch_id?: string;
@@ -138,6 +142,53 @@ export type Database = {
           role?: "regional_ceo" | "manager" | "crew";
           assigned_by?: string | null;
           assigned_at?: string;
+          invited_email?: string | null;
+          display_name?: string | null;
+        };
+        Relationships: [];
+      };
+      branch_invitations: {
+        Row: {
+          id: string;
+          org_id: string;
+          branch_id: string;
+          invited_email: string;
+          invitee_name: string | null;
+          role: "regional_ceo" | "manager" | "crew";
+          token: string;
+          invited_by: string | null;
+          accepted_at: string | null;
+          cancelled_at: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          branch_id: string;
+          invited_email: string;
+          invitee_name?: string | null;
+          role?: "regional_ceo" | "manager" | "crew";
+          token?: string;
+          invited_by?: string | null;
+          accepted_at?: string | null;
+          cancelled_at?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          branch_id?: string;
+          invited_email?: string;
+          invitee_name?: string | null;
+          role?: "regional_ceo" | "manager" | "crew";
+          token?: string;
+          invited_by?: string | null;
+          accepted_at?: string | null;
+          cancelled_at?: string | null;
+          expires_at?: string;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -955,6 +1006,7 @@ export type Tables<T extends keyof Database["public"]["Tables"]> =
 export type Organization = Tables<"organizations">;
 export type OrgBranch = Tables<"org_branches">;
 export type BranchTeamMember = Tables<"branch_team_members">;
+export type BranchInvitation = Tables<"branch_invitations">;
 export type BranchUsageEvent = Tables<"branch_usage_events">;
 export type Project = Tables<"projects">;
 export type SkillOutputRow = Tables<"skill_outputs">;

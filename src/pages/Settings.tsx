@@ -142,10 +142,28 @@ interface BranchTeamRow {
   role: BranchTeamRole;
   assigned_by: string | null;
   assigned_at: string;
+  invited_email: string | null;
+  display_name: string | null;
 }
 
-interface BranchTeamDraft {
-  userId: string;
+interface BranchInvitationRow {
+  id: string;
+  org_id: string;
+  branch_id: string;
+  invited_email: string;
+  invitee_name: string | null;
+  role: BranchTeamRole;
+  invited_by: string | null;
+  token: string;
+  accepted_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+interface BranchInviteDraft {
+  email: string;
+  name: string;
   role: BranchTeamRole;
 }
 
@@ -222,6 +240,15 @@ type InviteMemberPayload = {
   org_id: string;
   email: string;
   role: MemberRole;
+  inviter_name?: string;
+  invitee_name?: string;
+};
+
+type InviteBranchMemberPayload = {
+  org_id: string;
+  branch_id: string;
+  email: string;
+  role: BranchTeamRole;
   inviter_name?: string;
   invitee_name?: string;
 };
@@ -309,6 +336,39 @@ async function inviteMember(payload: InviteMemberPayload) {
   return response.json().catch(() => ({ ok: true }));
 }
 
+async function inviteBranchMember(payload: InviteBranchMemberPayload) {
+  const accessToken = await getInviteAccessToken();
+
+  let response: Response;
+  try {
+    response = await fetch(`${FUNCTIONS_URL}/invite-branch-member`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("You're offline. Reconnect and try sending the branch invite again.");
+    }
+
+    throw new Error("Network changed while sending the branch invite. Check your connection and try again.");
+  }
+
+  if (!response.ok) {
+    const message = await readFunctionError(response);
+    if (response.status === 401) {
+      throw new Error("Your session expired. Please sign in again before sending an invite.");
+    }
+    throw new Error(message);
+  }
+
+  return response.json().catch(() => ({ ok: true }));
+}
+
 function actionLabel(action: string, translate: (key: string) => string) {
   const translated = translate(`activity.${action}`);
   if (translated !== `activity.${action}`) return translated;
@@ -321,7 +381,7 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
-  const { org, role } = useOrg();
+  const { org, role, isBranchOnly } = useOrg();
   const perms = usePermissions();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -332,7 +392,7 @@ export default function Settings() {
   const [activityPage, setActivityPage] = useState(0);
   const [featurePanelUserId, setFeaturePanelUserId] = useState<string | null>(null);
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
-  const [branchTeamDrafts, setBranchTeamDrafts] = useState<Record<string, BranchTeamDraft>>({});
+  const [branchInviteDrafts, setBranchInviteDrafts] = useState<Record<string, BranchInviteDraft>>({});
   const [branchForm, setBranchForm] = useState<BranchFormState>({
     name: "",
     code: "",
@@ -366,7 +426,7 @@ export default function Settings() {
       if (error) throw error;
       return (data ?? []) as TeamMemberRow[];
     },
-    enabled: !!org,
+    enabled: !!org && !isBranchOnly,
   });
 
   // ── Pending invitations query ───────────────────────────────────────────────
@@ -385,7 +445,7 @@ export default function Settings() {
       if (error) throw error;
       return (data ?? []) as InvitationRow[];
     },
-    enabled: !!org,
+    enabled: !!org && !isBranchOnly,
   });
 
   // ── Activity log query ──────────────────────────────────────────────────────
@@ -437,6 +497,24 @@ export default function Settings() {
       return (data ?? []) as BranchTeamRow[];
     },
     enabled: !!org,
+  });
+
+  const { data: branchInvitations = [], isLoading: branchInvitationsLoading } = useQuery<BranchInvitationRow[]>({
+    queryKey: ["branch_invitations", org?.id],
+    queryFn: async () => {
+      if (!org) return [];
+      const { data, error } = await supabase
+        .from("branch_invitations")
+        .select("*")
+        .eq("org_id", org.id)
+        .is("accepted_at", null)
+        .is("cancelled_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as BranchInvitationRow[];
+    },
+    enabled: !!org && perms.canManageBranchTeam,
   });
 
   const [allActivity, setAllActivity] = useState<ActivityRow[]>([]);
@@ -600,39 +678,6 @@ export default function Settings() {
       toast({
         variant: "destructive",
         description: err instanceof Error ? err.message : t("branches.profileUpdateFailed"),
-      });
-    },
-  });
-
-  const addBranchTeamMemberMutation = useMutation({
-    mutationFn: async ({ branch, userId, role }: { branch: BranchRow; userId: string; role: BranchTeamRole }) => {
-      if (!org || !user) throw new Error("No organization");
-      const { error } = await supabase
-        .from("branch_team_members")
-        .upsert(
-          {
-            branch_id: branch.id,
-            org_id: org.id,
-            user_id: userId,
-            role,
-            assigned_by: user.id,
-          },
-          { onConflict: "branch_id,user_id" }
-        );
-      if (error) throw error;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["branch_team_members", org?.id] });
-      setBranchTeamDrafts((current) => ({
-        ...current,
-        [variables.branch.id]: { userId: "none", role: "crew" },
-      }));
-      toast({ description: t("branches.teamAdded") });
-    },
-    onError: (err) => {
-      toast({
-        variant: "destructive",
-        description: err instanceof Error ? err.message : t("branches.teamAddFailed"),
       });
     },
   });
@@ -835,6 +880,93 @@ export default function Settings() {
     },
   });
 
+  const sendBranchInviteMutation = useMutation({
+    mutationFn: async ({ branch, draft }: { branch: BranchRow; draft: BranchInviteDraft }) => {
+      if (!org) throw new Error("No organization");
+      const email = draft.email.trim().toLowerCase();
+      if (!email) throw new Error("Email address is required");
+
+      const inviterName =
+        (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "A team member";
+      await inviteBranchMember({
+        org_id: org.id,
+        branch_id: branch.id,
+        email,
+        role: draft.role,
+        inviter_name: inviterName,
+        invitee_name: draft.name.trim() || undefined,
+      });
+
+      return { branch, email };
+    },
+    onSuccess: ({ branch, email }) => {
+      queryClient.invalidateQueries({ queryKey: ["branch_invitations", org?.id] });
+      toast({ description: `Branch invitation sent to ${email}` });
+      setBranchInviteDrafts((current) => ({
+        ...current,
+        [branch.id]: { email: "", name: "", role: "crew" },
+      }));
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : "Failed to send branch invitation",
+      });
+      if (isExpiredSessionError(err)) {
+        signOut().finally(() => navigate("/auth", { replace: true }));
+      }
+    },
+  });
+
+  const cancelBranchInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { error } = await supabase
+        .from("branch_invitations")
+        .update({ cancelled_at: new Date().toISOString() } as never)
+        .eq("id", inviteId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["branch_invitations", org?.id] });
+      toast({ description: "Branch invitation cancelled." });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : "Failed to cancel branch invitation",
+      });
+    },
+  });
+
+  const resendBranchInviteMutation = useMutation({
+    mutationFn: async ({ branch, invite }: { branch: BranchRow; invite: BranchInvitationRow }) => {
+      if (!org) throw new Error("No organization");
+      const inviterName =
+        (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "A team member";
+      await inviteBranchMember({
+        org_id: org.id,
+        branch_id: branch.id,
+        email: invite.invited_email.trim().toLowerCase(),
+        role: invite.role,
+        inviter_name: inviterName,
+        invitee_name: invite.invitee_name ?? undefined,
+      });
+    },
+    onSuccess: (_data, { invite }) => {
+      queryClient.invalidateQueries({ queryKey: ["branch_invitations", org?.id] });
+      toast({ description: `Branch invitation resent to ${invite.invited_email}` });
+    },
+    onError: (err) => {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : "Failed to resend branch invitation",
+      });
+      if (isExpiredSessionError(err)) {
+        signOut().finally(() => navigate("/auth", { replace: true }));
+      }
+    },
+  });
+
   // ── Permission checks for remove ───────────────────────────────────────────
   function canRemoveMember(member: TeamMemberRow) {
     if (!user) return false;
@@ -848,19 +980,43 @@ export default function Settings() {
   }
 
   function memberDisplayName(userId: string) {
+    const branchMember = branchTeamRows.find((row) => row.user_id === userId);
     const member = members.find((row) => row.user_id === userId);
     if (userId === user?.id) {
-      return (user.user_metadata?.full_name as string | undefined) ?? user.email ?? userId.slice(0, 8);
+      return (
+        branchMember?.display_name ??
+        (user.user_metadata?.full_name as string | undefined) ??
+        user.email ??
+        userId.slice(0, 8)
+      );
     }
+    if (branchMember?.display_name) return branchMember.display_name;
+    if (branchMember?.invited_email) return branchMember.invited_email;
     return member?.invited_email ?? `${userId.slice(0, 8)}...`;
   }
 
+  function currentBranchRole(branchId: string) {
+    return branchTeamRows.find((row) => row.branch_id === branchId && row.user_id === user?.id)?.role ?? null;
+  }
+
+  function branchInviteRoleOptions(branchId: string) {
+    const localRole = currentBranchRole(branchId);
+    if (perms.isAdmin) return branchTeamRoleOptions;
+    if (localRole === "regional_ceo") return ["manager", "crew"] as BranchTeamRole[];
+    if (localRole === "manager") return ["crew"] as BranchTeamRole[];
+    return [] as BranchTeamRole[];
+  }
+
+  function canManageBranchTeamMember(branchId: string, targetRole: BranchTeamRole) {
+    if (perms.isAdmin) return true;
+    const localRole = currentBranchRole(branchId);
+    if (localRole === "regional_ceo") return targetRole !== "regional_ceo";
+    if (localRole === "manager") return targetRole === "crew";
+    return false;
+  }
+
   function canManageBranchTeam(branchId: string) {
-    return perms.isAdmin || branchTeamRows.some((row) =>
-      row.branch_id === branchId &&
-      row.user_id === user?.id &&
-      row.role === "regional_ceo"
-    );
+    return branchInviteRoleOptions(branchId).length > 0;
   }
 
   const displayRole = role as MemberRole | null;
@@ -878,7 +1034,9 @@ export default function Settings() {
             <TabsTrigger value="account">{t("settings.account")}</TabsTrigger>
             <TabsTrigger value="organization">{t("settings.organization")}</TabsTrigger>
             <TabsTrigger value="branches">{t("settings.branches")}</TabsTrigger>
-            <TabsTrigger value="team">{t("settings.team")}</TabsTrigger>
+            {!isBranchOnly && (
+              <TabsTrigger value="team">{t("settings.team")}</TabsTrigger>
+            )}
             {perms.canViewActivityLog && (
               <TabsTrigger value="activity">{t("settings.activity")}</TabsTrigger>
             )}
@@ -899,6 +1057,16 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
                 {displayRole && (
                   <RoleBadge role={displayRole} />
+                )}
+                {!displayRole && perms.branchRole && (
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                      branchTeamRoleClass(perms.branchRole)
+                    )}
+                  >
+                    {t(`branches.role.${perms.branchRole}`)}
+                  </span>
                 )}
               </div>
             </div>
@@ -1009,10 +1177,14 @@ export default function Settings() {
                       ? Math.min(100, Math.round((usageCents / budgetCents) * 100))
                       : 0;
                     const branchTeam = branchTeamRows.filter((row) => row.branch_id === branch.id);
-                    const assignedUserIds = new Set(branchTeam.map((row) => row.user_id));
-                    const availableMembers = members.filter((member) => !assignedUserIds.has(member.user_id));
-                    const teamDraft = branchTeamDrafts[branch.id] ?? { userId: "none", role: "crew" as BranchTeamRole };
+                    const branchPendingInvites = branchInvitations.filter((invite) => invite.branch_id === branch.id);
                     const canManageTeam = canManageBranchTeam(branch.id);
+                    const allowedBranchInviteRoles = branchInviteRoleOptions(branch.id);
+                    const inviteDraft = branchInviteDrafts[branch.id] ?? {
+                      email: "",
+                      name: "",
+                      role: allowedBranchInviteRoles[0] ?? "crew",
+                    };
                     const branchFlag = getBranchFlag(branch);
                     const localTime = formatBranchLocalTime(branch.timezone, language === "es" ? "es-ES" : "en-US");
 
@@ -1221,7 +1393,7 @@ export default function Settings() {
                                     {t(`branches.role.${teamMember.role}`)}
                                   </span>
                                 </div>
-                                {canManageTeam && canViewBranchGovernance && (
+                                {canManageTeam && canManageBranchTeamMember(branch.id, teamMember.role) && (
                                   <div className="flex shrink-0 items-center gap-1">
                                     <Select
                                       value={teamMember.role}
@@ -1238,7 +1410,7 @@ export default function Settings() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {branchTeamRoleOptions.map((roleOption) => (
+                                        {branchInviteRoleOptions(branch.id).map((roleOption) => (
                                           <SelectItem key={roleOption} value={roleOption}>
                                             {t(`branches.role.${roleOption}`)}
                                           </SelectItem>
@@ -1267,68 +1439,118 @@ export default function Settings() {
                         )}
 
                         {canManageTeam && (
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <Select
-                              value={teamDraft.userId}
-                              onValueChange={(value) =>
-                                setBranchTeamDrafts((current) => ({
-                                  ...current,
-                                  [branch.id]: { ...teamDraft, userId: value },
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-8 text-xs" aria-label={t("branches.selectMember")}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t("branches.selectMember")}</SelectItem>
-                                {availableMembers.map((member) => (
-                                  <SelectItem key={member.user_id} value={member.user_id}>
-                                    {memberDisplayName(member.user_id)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={teamDraft.role}
-                              onValueChange={(value) =>
-                                setBranchTeamDrafts((current) => ({
-                                  ...current,
-                                  [branch.id]: { ...teamDraft, role: value as BranchTeamRole },
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-8 text-xs" aria-label={t("branches.team")}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {branchTeamRoleOptions.map((roleOption) => (
-                                  <SelectItem key={roleOption} value={roleOption}>
-                                    {t(`branches.role.${roleOption}`)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 w-full gap-1.5 text-xs sm:col-span-2"
-                              disabled={teamDraft.userId === "none" || addBranchTeamMemberMutation.isPending}
-                              onClick={() =>
-                                addBranchTeamMemberMutation.mutate({
-                                  branch,
-                                  userId: teamDraft.userId,
-                                  role: teamDraft.role,
-                                })
-                              }
-                            >
-                              {addBranchTeamMemberMutation.isPending ? (
-                                <Loader2 size={12} className="animate-spin" />
-                              ) : (
-                                <UserPlus size={12} />
+                          <div className="space-y-2 rounded-md border border-dashed border-border p-2">
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Input
+                                value={inviteDraft.name}
+                                placeholder="Name"
+                                className="h-8 text-xs"
+                                onChange={(event) =>
+                                  setBranchInviteDrafts((current) => ({
+                                    ...current,
+                                    [branch.id]: { ...inviteDraft, name: event.target.value },
+                                  }))
+                                }
+                              />
+                              <Input
+                                type="email"
+                                value={inviteDraft.email}
+                                placeholder="email@company.com"
+                                className="h-8 text-xs"
+                                onChange={(event) =>
+                                  setBranchInviteDrafts((current) => ({
+                                    ...current,
+                                    [branch.id]: { ...inviteDraft, email: event.target.value },
+                                  }))
+                                }
+                              />
+                              <Select
+                                value={inviteDraft.role}
+                                onValueChange={(value) =>
+                                  setBranchInviteDrafts((current) => ({
+                                    ...current,
+                                    [branch.id]: { ...inviteDraft, role: value as BranchTeamRole },
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs" aria-label={t("branches.team")}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {allowedBranchInviteRoles.map((roleOption) => (
+                                    <SelectItem key={roleOption} value={roleOption}>
+                                      {t(`branches.role.${roleOption}`)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-full gap-1.5 text-xs"
+                                disabled={sendBranchInviteMutation.isPending || !inviteDraft.email.trim()}
+                                onClick={() => sendBranchInviteMutation.mutate({ branch, draft: inviteDraft })}
+                              >
+                                {sendBranchInviteMutation.isPending ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <UserPlus size={12} />
+                                )}
+                                {t("settings.sendInvite")}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {canManageTeam && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                {t("settings.pendingInvitations")}
+                              </p>
+                              {branchInvitationsLoading && (
+                                <Loader2 size={11} className="animate-spin text-muted-foreground" />
                               )}
-                              {t("branches.addTeamMember")}
-                            </Button>
+                            </div>
+                            {branchPendingInvites.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">{t("settings.noPendingInvitations")}</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {branchPendingInvites.map((invite) => (
+                                  <div
+                                    key={invite.id}
+                                    className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-medium">{invite.invited_email}</p>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {t(`branches.role.${invite.role}`)} · {format(new Date(invite.expires_at), "MMM d")}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        disabled={resendBranchInviteMutation.isPending}
+                                        onClick={() => resendBranchInviteMutation.mutate({ branch, invite })}
+                                      >
+                                        <RefreshCw size={11} />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                        disabled={cancelBranchInviteMutation.isPending}
+                                        onClick={() => cancelBranchInviteMutation.mutate(invite.id)}
+                                      >
+                                        <Trash2 size={11} />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1371,6 +1593,7 @@ export default function Settings() {
           </TabsContent>
 
           {/* ── Team Tab ── */}
+          {!isBranchOnly && (
           <TabsContent value="team" className="mt-6 space-y-8">
             {/* Team Members */}
             <div className="space-y-3">
@@ -1675,6 +1898,7 @@ export default function Settings() {
               </>
             )}
           </TabsContent>
+          )}
 
           {/* ── Activity Tab ── */}
           {perms.canViewActivityLog && (

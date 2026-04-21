@@ -8,10 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
 type InviteDetails = {
+  invite_type: "org" | "branch";
   invited_email: string;
   role: string;
   org_name: string;
   org_id: string;
+  branch_id?: string;
+  branch_name?: string;
+  branch_country?: string;
+  branch_country_flag?: string | null;
 };
 
 type PageState = "loading" | "ready" | "invalid" | "already_accepted" | "expired" | "success";
@@ -21,6 +26,8 @@ const ROLE_LABELS: Record<string, string> = {
   admin:   "Admin",
   manager: "Manager",
   member:  "Member",
+  regional_ceo: "Regional CEO",
+  crew: "Team Member",
 };
 
 export default function AcceptInvite() {
@@ -54,10 +61,15 @@ export default function AcceptInvite() {
       }
       // Edge function returns flat fields: { ok, invited_email, role, org_name, org_id }
       const inv: InviteDetails = {
+        invite_type:    data.invite_type    ?? data.invitation?.invite_type    ?? "org",
         invited_email: data.invited_email ?? data.invitation?.invited_email ?? "",
         role:          data.role          ?? data.invitation?.role          ?? "member",
         org_name:      data.org_name      ?? data.invitation?.org_name      ?? "LV Branding's Workspace",
         org_id:        data.org_id        ?? data.invitation?.org_id        ?? "",
+        branch_id:     data.branch_id     ?? data.invitation?.branch_id,
+        branch_name:   data.branch_name   ?? data.invitation?.branch_name,
+        branch_country: data.branch_country ?? data.invitation?.branch_country,
+        branch_country_flag: data.branch_country_flag ?? data.invitation?.branch_country_flag,
       };
       setInvite(inv);
       setEmail(inv.invited_email);
@@ -163,7 +175,9 @@ export default function AcceptInvite() {
         <div className="w-full max-w-md text-center space-y-4">
           <CheckCircle2 className="mx-auto text-emerald-500" size={40} />
           <h1 className="text-xl font-bold">Welcome aboard!</h1>
-          <p className="text-sm text-muted-foreground">You've joined {invite?.org_name}. Redirecting…</p>
+          <p className="text-sm text-muted-foreground">
+            You've joined {invite?.invite_type === "branch" ? invite.branch_name : invite?.org_name}. Redirecting…
+          </p>
         </div>
       </div>
     );
@@ -198,10 +212,18 @@ export default function AcceptInvite() {
           </div>
           <h1 className="text-xl font-bold mt-3">You've been invited!</h1>
           {invite && (
-            <p className="text-sm text-muted-foreground">
-              Join <strong>{invite.org_name}</strong> as a{" "}
-              <span className="text-primary font-semibold">{ROLE_LABELS[invite.role] ?? invite.role}</span>
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Join <strong>{invite.invite_type === "branch" ? invite.branch_name : invite.org_name}</strong> as a{" "}
+                <span className="text-primary font-semibold">{ROLE_LABELS[invite.role] ?? invite.role}</span>
+              </p>
+              {invite.invite_type === "branch" && (
+                <p className="text-xs text-muted-foreground">
+                  {invite.branch_country_flag ? `${invite.branch_country_flag} ` : ""}
+                  {invite.branch_country}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
