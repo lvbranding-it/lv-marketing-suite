@@ -582,7 +582,7 @@ export default function Settings() {
       values,
     }: {
       branch: BranchRow;
-      values: Partial<Pick<BranchRow, "country_flag" | "notification_banner">>;
+      values: Partial<Pick<BranchRow, "city" | "country_flag" | "notification_banner">>;
     }) => {
       if (!org) throw new Error("No organization");
       const { error } = await supabase
@@ -866,6 +866,7 @@ export default function Settings() {
   const displayRole = role as MemberRole | null;
   const branchStatusOptions: BranchStatus[] = ["planning", "active", "paused", "archived"];
   const branchTeamRoleOptions: BranchTeamRole[] = ["regional_ceo", "manager", "crew"];
+  const canViewBranchGovernance = perms.isAdmin;
 
   return (
     <AppShell>
@@ -949,23 +950,23 @@ export default function Settings() {
 
           {/* ── Branches Tab ── */}
           <TabsContent value="branches" className="mt-6 space-y-6">
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Store size={15} className="text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">{t("branches.title")}</h3>
+            {canViewBranchGovernance && (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Store size={15} className="text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">{t("branches.title")}</h3>
+                    </div>
+                    <p className="max-w-2xl text-sm text-muted-foreground">
+                      {t("branches.subtitle")}
+                    </p>
                   </div>
-                  <p className="max-w-2xl text-sm text-muted-foreground">
-                    {t("branches.subtitle")}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 text-primary">
-                    <Eye size={12} />
-                    {t("branches.hqMonitored")}
-                  </Badge>
-                  {perms.isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 text-primary">
+                      <Eye size={12} />
+                      {t("branches.hqMonitored")}
+                    </Badge>
                     <Button
                       size="sm"
                       className="gap-1.5 text-white hover:opacity-90"
@@ -975,17 +976,17 @@ export default function Settings() {
                       <Plus size={13} />
                       {t("branches.add")}
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-primary" />
-                  <span>{t("branches.hqMonitoredHelp")}</span>
+                <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-primary" />
+                    <span>{t("branches.hqMonitoredHelp")}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-3">
               {branchesLoading ? (
@@ -1040,16 +1041,39 @@ export default function Settings() {
                             </span>
                           </div>
                         </div>
-                        <Badge variant="outline" className="shrink-0 gap-1 border-primary/30 text-primary">
-                          <Eye size={11} />
-                          {t("branches.hqMonitored")}
-                        </Badge>
+                        {canViewBranchGovernance && (
+                          <Badge variant="outline" className="shrink-0 gap-1 border-primary/30 text-primary">
+                            <Eye size={11} />
+                            {t("branches.hqMonitored")}
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-md bg-muted/40 p-2">
                           <p className="text-muted-foreground">{t("branches.region")}</p>
                           <p className="mt-0.5 font-medium">{branch.region}</p>
+                        </div>
+                        <div className="rounded-md bg-muted/40 p-2">
+                          <p className="text-muted-foreground">{t("branches.city")}</p>
+                          {perms.isAdmin ? (
+                            <Input
+                              defaultValue={branch.city ?? ""}
+                              placeholder={t("branches.noCity")}
+                              className="mt-1 h-7 px-2 text-xs"
+                              onBlur={(event) => {
+                                const nextCity = event.target.value.trim() || null;
+                                if (nextCity !== (branch.city ?? null)) {
+                                  updateBranchProfileMutation.mutate({
+                                    branch,
+                                    values: { city: nextCity },
+                                  });
+                                }
+                              }}
+                            />
+                          ) : (
+                            <p className="mt-0.5 font-medium">{branch.city || t("branches.noCity")}</p>
+                          )}
                         </div>
                         <div className="rounded-md bg-muted/40 p-2">
                           <p className="text-muted-foreground">{t("branches.primaryLanguage")}</p>
@@ -1114,20 +1138,20 @@ export default function Settings() {
                         )}
                       </div>
 
-                      <div className="rounded-md border border-border p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-medium text-muted-foreground">
-                              30-day AI usage
-                            </p>
-                            <p className="text-sm font-semibold">
-                              ${(usageCents / 100).toFixed(2)}
-                              <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                                {usage?.units ?? 0} tokens
-                              </span>
-                            </p>
-                          </div>
-                          {perms.isAdmin ? (
+                      {canViewBranchGovernance && (
+                        <div className="rounded-md border border-border p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground">
+                                30-day AI usage
+                              </p>
+                              <p className="text-sm font-semibold">
+                                ${(usageCents / 100).toFixed(2)}
+                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                                  {usage?.units ?? 0} tokens
+                                </span>
+                              </p>
+                            </div>
                             <div className="w-28">
                               <Label className="sr-only" htmlFor={`budget-${branch.id}`}>
                                 Monthly AI budget
@@ -1151,24 +1175,20 @@ export default function Settings() {
                                 }}
                               />
                             </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              {budgetCents ? `$${(budgetCents / 100).toFixed(0)} budget` : "No budget"}
-                            </span>
+                          </div>
+                          {budgetCents > 0 && (
+                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  budgetPct >= 90 ? "bg-destructive" : "bg-primary"
+                                )}
+                                style={{ width: `${budgetPct}%` }}
+                              />
+                            </div>
                           )}
                         </div>
-                        {budgetCents > 0 && (
-                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={cn(
-                                "h-full rounded-full",
-                                budgetPct >= 90 ? "bg-destructive" : "bg-primary"
-                              )}
-                              style={{ width: `${budgetPct}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
+                      )}
 
                       <div className="rounded-md border border-border p-3 space-y-3">
                         <div className="flex items-center justify-between gap-2">
@@ -1201,7 +1221,7 @@ export default function Settings() {
                                     {t(`branches.role.${teamMember.role}`)}
                                   </span>
                                 </div>
-                                {canManageTeam && (
+                                {canManageTeam && canViewBranchGovernance && (
                                   <div className="flex shrink-0 items-center gap-1">
                                     <Select
                                       value={teamMember.role}
@@ -1318,7 +1338,7 @@ export default function Settings() {
                           <p className="text-[11px] text-muted-foreground">{t("branches.timezone")}</p>
                           <p className="text-xs font-medium">{branch.timezone}</p>
                         </div>
-                        {perms.isAdmin ? (
+                        {canViewBranchGovernance ? (
                           <Select
                             value={branch.status}
                             disabled={updateBranchStatusMutation.isPending}
@@ -1340,11 +1360,7 @@ export default function Settings() {
                               ))}
                             </SelectContent>
                           </Select>
-                        ) : (
-                          <Badge variant="outline">
-                            {t(`branches.status.${branch.status}`)}
-                          </Badge>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   );
