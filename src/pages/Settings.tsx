@@ -35,6 +35,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -224,6 +232,7 @@ export default function Settings() {
   const [inviteRole, setInviteRole] = useState<"manager" | "member">("member");
   const [activityPage, setActivityPage] = useState(0);
   const [featurePanelUserId, setFeaturePanelUserId] = useState<string | null>(null);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [branchTeamDrafts, setBranchTeamDrafts] = useState<Record<string, BranchTeamDraft>>({});
   const [branchForm, setBranchForm] = useState<BranchFormState>({
     name: "",
@@ -386,6 +395,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["org_branches", org?.id] });
       queryClient.invalidateQueries({ queryKey: ["activity_log", org?.id] });
       toast({ description: t("branches.created") });
+      setBranchDialogOpen(false);
       setBranchForm({
         name: "",
         code: "",
@@ -813,10 +823,23 @@ export default function Settings() {
                     {t("branches.subtitle")}
                   </p>
                 </div>
-                <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 text-primary">
-                  <Eye size={12} />
-                  {t("branches.hqMonitored")}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 text-primary">
+                    <Eye size={12} />
+                    {t("branches.hqMonitored")}
+                  </Badge>
+                  {perms.isAdmin && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5 text-white hover:opacity-90"
+                      style={{ backgroundColor: "#CB2039" }}
+                      onClick={() => setBranchDialogOpen(true)}
+                    >
+                      <Plus size={13} />
+                      {t("branches.add")}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
@@ -826,141 +849,6 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-
-            {perms.isAdmin && (
-              <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Plus size={14} className="text-muted-foreground" />
-                  <h3 className="text-sm font-semibold">{t("branches.add")}</h3>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-name" className="text-xs">
-                      {t("branches.branchName")}
-                    </Label>
-                    <Input
-                      id="branch-name"
-                      value={branchForm.name}
-                      placeholder={t("branches.namePlaceholder")}
-                      onChange={(event) =>
-                        setBranchForm((current) => ({ ...current, name: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-code" className="text-xs">
-                      {t("branches.code")}
-                    </Label>
-                    <Input
-                      id="branch-code"
-                      value={branchForm.code}
-                      placeholder={t("branches.codePlaceholder")}
-                      onChange={(event) =>
-                        setBranchForm((current) => ({ ...current, code: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-country" className="text-xs">
-                      {t("branches.country")}
-                    </Label>
-                    <Input
-                      id="branch-country"
-                      value={branchForm.country}
-                      placeholder={t("branches.countryPlaceholder")}
-                      onChange={(event) =>
-                        setBranchForm((current) => ({ ...current, country: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-city" className="text-xs">
-                      {t("branches.city")}
-                    </Label>
-                    <Input
-                      id="branch-city"
-                      value={branchForm.city}
-                      placeholder={t("branches.cityPlaceholder")}
-                      onChange={(event) =>
-                        setBranchForm((current) => ({ ...current, city: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-timezone" className="text-xs">
-                      {t("branches.timezone")}
-                    </Label>
-                    <Input
-                      id="branch-timezone"
-                      value={branchForm.timezone}
-                      onChange={(event) =>
-                        setBranchForm((current) => ({ ...current, timezone: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">{t("branches.primaryLanguage")}</Label>
-                    <Select
-                      value={branchForm.primaryLanguage}
-                      onValueChange={(value) =>
-                        setBranchForm((current) => ({
-                          ...current,
-                          primaryLanguage: value as Language,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="es">{t("branches.language.es")}</SelectItem>
-                        <SelectItem value="en">{t("branches.language.en")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="branch-budget" className="text-xs">
-                      Monthly AI budget ($)
-                    </Label>
-                    <Input
-                      id="branch-budget"
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={branchForm.monthlyBudgetDollars}
-                      placeholder="0 = no limit"
-                      onChange={(event) =>
-                        setBranchForm((current) => ({
-                          ...current,
-                          monthlyBudgetDollars: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  className="gap-2 text-white hover:opacity-90"
-                  style={{ backgroundColor: "#CB2039" }}
-                  disabled={addBranchMutation.isPending || !branchForm.name.trim()}
-                  onClick={() => addBranchMutation.mutate()}
-                >
-                  {addBranchMutation.isPending ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Plus size={14} />
-                  )}
-                  {t("branches.add")}
-                </Button>
-              </div>
-            )}
 
             <div className="space-y-3">
               {branchesLoading ? (
@@ -1660,6 +1548,159 @@ export default function Settings() {
           )}
         </Tabs>
       </div>
+
+      <Dialog open={branchDialogOpen} onOpenChange={setBranchDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t("branches.add")}</DialogTitle>
+            <DialogDescription>
+              {t("branches.subtitle")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="branch-name" className="text-xs">
+                {t("branches.branchName")}
+              </Label>
+              <Input
+                id="branch-name"
+                value={branchForm.name}
+                placeholder={t("branches.namePlaceholder")}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, name: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="branch-code" className="text-xs">
+                {t("branches.code")}
+              </Label>
+              <Input
+                id="branch-code"
+                value={branchForm.code}
+                placeholder={t("branches.codePlaceholder")}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, code: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="branch-country" className="text-xs">
+                {t("branches.country")}
+              </Label>
+              <Input
+                id="branch-country"
+                value={branchForm.country}
+                placeholder={t("branches.countryPlaceholder")}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, country: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="branch-city" className="text-xs">
+                {t("branches.city")}
+              </Label>
+              <Input
+                id="branch-city"
+                value={branchForm.city}
+                placeholder={t("branches.cityPlaceholder")}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, city: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="branch-timezone" className="text-xs">
+                {t("branches.timezone")}
+              </Label>
+              <Input
+                id="branch-timezone"
+                value={branchForm.timezone}
+                onChange={(event) =>
+                  setBranchForm((current) => ({ ...current, timezone: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("branches.primaryLanguage")}</Label>
+              <Select
+                value={branchForm.primaryLanguage}
+                onValueChange={(value) =>
+                  setBranchForm((current) => ({
+                    ...current,
+                    primaryLanguage: value as Language,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="es">{t("branches.language.es")}</SelectItem>
+                  <SelectItem value="en">{t("branches.language.en")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="branch-budget" className="text-xs">
+                Monthly AI budget ($)
+              </Label>
+              <Input
+                id="branch-budget"
+                type="number"
+                min={0}
+                step="1"
+                value={branchForm.monthlyBudgetDollars}
+                placeholder="0 = no limit"
+                onChange={(event) =>
+                  setBranchForm((current) => ({
+                    ...current,
+                    monthlyBudgetDollars: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-primary" />
+              <span>{t("branches.hqMonitoredHelp")}</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBranchDialogOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              className="gap-2 text-white hover:opacity-90"
+              style={{ backgroundColor: "#CB2039" }}
+              disabled={addBranchMutation.isPending || !branchForm.name.trim()}
+              onClick={() => addBranchMutation.mutate()}
+            >
+              {addBranchMutation.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              {t("branches.add")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
