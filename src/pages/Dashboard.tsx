@@ -58,10 +58,12 @@ export default function Dashboard() {
   const { data: recentOutputs = [], isLoading: outputsLoading } = useSkillOutputs({ limit: 5 });
   const { data: accessibleBranches = [], isBranchRestricted } = useAccessibleBranches();
   const selectedBranch = accessibleBranches.find((branch) => branch.id === branchFilter) ?? null;
+  const branchContext = selectedBranch ?? (isBranchRestricted && accessibleBranches.length === 1 ? accessibleBranches[0] : null);
+  const effectiveBranchFilter = branchContext && branchFilter === "all" ? branchContext.id : branchFilter;
   const showBranchSelector = !isBranchRestricted || accessibleBranches.length > 1;
 
-  const visibleProjects = projects.filter((p) => branchMatchesFilter(p.branch_id, branchFilter));
-  const visibleOutputs = recentOutputs.filter((o) => branchMatchesFilter(o.branch_id, branchFilter));
+  const visibleProjects = projects.filter((p) => branchMatchesFilter(p.branch_id, effectiveBranchFilter));
+  const visibleOutputs = recentOutputs.filter((o) => branchMatchesFilter(o.branch_id, effectiveBranchFilter));
   const activeProjects = visibleProjects.filter((p) => p.status === "active");
   const hasContext = projects.some((p) => p.context_complete);
 
@@ -86,48 +88,46 @@ export default function Dashboard() {
       />
 
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-8 max-w-6xl mx-auto">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          {selectedBranch ? (
-            <div className="rounded-lg border border-border bg-card p-4 sm:min-w-[360px] sm:max-w-xl">
+        <div className="flex flex-col items-end gap-3">
+          {branchContext ? (
+            <div className="w-full rounded-lg border border-border bg-card p-4 sm:w-auto sm:min-w-[360px] sm:max-w-xl">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  {getBranchFlag(selectedBranch) && (
+                  {getBranchFlag(branchContext) && (
                     <span className="text-xl leading-none" aria-hidden="true">
-                      {getBranchFlag(selectedBranch)}
+                      {getBranchFlag(branchContext)}
                     </span>
                   )}
                   <h2 className="truncate text-sm font-semibold text-foreground">
-                    {selectedBranch.name}
+                    {branchContext.name}
                   </h2>
-                  {selectedBranch.code && (
+                  {branchContext.code && (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                      {selectedBranch.code}
+                      {branchContext.code}
                     </span>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <MapPin size={11} />
-                    {[selectedBranch.city, selectedBranch.country].filter(Boolean).join(", ")}
+                    {[branchContext.city, branchContext.country].filter(Boolean).join(", ")}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Clock size={11} />
-                    {formatBranchLocalTime(selectedBranch.timezone)}
+                    {formatBranchLocalTime(branchContext.timezone)}
                   </span>
                 </div>
               </div>
-              {selectedBranch.notification_banner?.trim() && (
+              {branchContext.notification_banner?.trim() && (
                 <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
                   <div className="flex items-start gap-2">
                     <Megaphone size={14} className="mt-0.5 shrink-0 text-primary" />
-                    <p className="leading-relaxed">{selectedBranch.notification_banner}</p>
+                    <p className="leading-relaxed">{branchContext.notification_banner}</p>
                   </div>
                 </div>
               )}
             </div>
-          ) : (
-            <div />
-          )}
+          ) : null}
 
           {showBranchSelector && (
             <div className="flex justify-end">
