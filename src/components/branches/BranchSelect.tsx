@@ -8,7 +8,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  getBranchFlag,
   useAccessibleBranches,
   type BranchFilterValue,
 } from "@/hooks/useBranches";
@@ -61,7 +60,6 @@ export default function BranchSelect({
           ) : null}
           {branches.map((branch) => (
             <SelectItem key={branch.id} value={branch.id}>
-              {getBranchFlag(branch) ? `${getBranchFlag(branch)} ` : ""}
               {branch.name}
               {branch.code ? ` (${branch.code})` : ""}
             </SelectItem>

@@ -56,8 +56,9 @@ export default function Dashboard() {
   const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: recentOutputs = [], isLoading: outputsLoading } = useSkillOutputs({ limit: 5 });
-  const { data: accessibleBranches = [] } = useAccessibleBranches();
+  const { data: accessibleBranches = [], isBranchRestricted } = useAccessibleBranches();
   const selectedBranch = accessibleBranches.find((branch) => branch.id === branchFilter) ?? null;
+  const showBranchSelector = !isBranchRestricted || accessibleBranches.length > 1;
 
   const visibleProjects = projects.filter((p) => branchMatchesFilter(p.branch_id, branchFilter));
   const visibleOutputs = recentOutputs.filter((o) => branchMatchesFilter(o.branch_id, branchFilter));
@@ -85,13 +86,9 @@ export default function Dashboard() {
       />
 
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-8 max-w-6xl mx-auto">
-        <div className="flex justify-end">
-          <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
-        </div>
-
-        {selectedBranch && (
-          <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          {selectedBranch ? (
+            <div className="rounded-lg border border-border bg-card p-4 sm:min-w-[360px] sm:max-w-xl">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   {getBranchFlag(selectedBranch) && (
@@ -119,17 +116,25 @@ export default function Dashboard() {
                   </span>
                 </div>
               </div>
-            </div>
-            {selectedBranch.notification_banner?.trim() && (
-              <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
-                <div className="flex items-start gap-2">
-                  <Megaphone size={14} className="mt-0.5 shrink-0 text-primary" />
-                  <p className="leading-relaxed">{selectedBranch.notification_banner}</p>
+              {selectedBranch.notification_banner?.trim() && (
+                <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+                  <div className="flex items-start gap-2">
+                    <Megaphone size={14} className="mt-0.5 shrink-0 text-primary" />
+                    <p className="leading-relaxed">{selectedBranch.notification_banner}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          ) : (
+            <div />
+          )}
+
+          {showBranchSelector && (
+            <div className="flex justify-end">
+              <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
+            </div>
+          )}
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
