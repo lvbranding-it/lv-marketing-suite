@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Shield,
   Users,
@@ -265,6 +266,10 @@ async function getInviteAccessToken() {
   return sessionResult.data.session.access_token;
 }
 
+function isExpiredSessionError(error: unknown) {
+  return error instanceof Error && error.message.includes("session expired");
+}
+
 async function inviteMember(payload: InviteMemberPayload) {
   const accessToken = await getInviteAccessToken();
 
@@ -307,7 +312,8 @@ function actionLabel(action: string, translate: (key: string) => string) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
   const { org, role } = useOrg();
   const perms = usePermissions();
@@ -747,6 +753,9 @@ export default function Settings() {
         variant: "destructive",
         description: err instanceof Error ? err.message : "Failed to resend invitation",
       });
+      if (isExpiredSessionError(err)) {
+        signOut().finally(() => navigate("/auth", { replace: true }));
+      }
     },
   });
 
@@ -780,6 +789,9 @@ export default function Settings() {
         variant: "destructive",
         description: err instanceof Error ? err.message : "Failed to send invitation",
       });
+      if (isExpiredSessionError(err)) {
+        signOut().finally(() => navigate("/auth", { replace: true }));
+      }
     },
   });
 

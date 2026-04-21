@@ -14,23 +14,6 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function getUserFromAccessToken(token: string): { id: string; email: string | null } | null {
-  try {
-    const payloadB64 = token.split(".")[1];
-    if (!payloadB64) return null;
-
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-    if (typeof payload?.sub !== "string") return null;
-
-    return {
-      id: payload.sub,
-      email: typeof payload.email === "string" ? payload.email : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function buildInviteEmail(opts: {
   inviteeEmail: string;
   inviteeName?: string;
@@ -198,22 +181,22 @@ serve(async (req) => {
   const authHeader = req.headers.get("Authorization");
   const accessToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!accessToken) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...cors, "Content-Type": "application/json" },
-    });
-  }
-
-  // Supabase's Edge gateway validates the JWT before invoking this function.
-  // Decode the accepted token instead of re-validating it with auth.getUser(),
-  // which can fail for projects using asymmetric JWT signing.
-  const user = getUserFromAccessToken(accessToken);
-  if (!user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    return new Response(JSON.stringify({ error: "Missing authorization token" }), {
       status: 401, headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 
   const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+  // This function is deployed with gateway JWT verification disabled because
+  // the gateway rejects ES256 user tokens. Verify the caller with Supabase Auth
+  // inside the function instead.
+  const { data: { user }, error: authErr } = await db.auth.getUser(accessToken);
+  if (authErr || !user) {
+    return new Response(JSON.stringify({ error: "Invalid authorization token" }), {
+      status: 401, headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
 
   let body: { org_id: string; email: string; role: string; inviter_name?: string; invitee_name?: string };
   try {
