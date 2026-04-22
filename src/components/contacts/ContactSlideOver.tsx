@@ -42,7 +42,7 @@ import { useContactTagDefinitions, useCreateTagDefinition, pickTagColor } from "
 interface Props {
   contact: ImportedContact | null;
   onClose: () => void;
-  onUpdate?: () => void;
+  onUpdate?: (updates?: Partial<ImportedContact>) => void;
 }
 
 function getInitials(first: string | null, last: string | null) {
@@ -184,6 +184,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
   const [crmNotes, setCrmNotes] = useState<string>("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [stageValue, setStageValue] = useState<PipelineStage>("lead");
 
   // Must be declared after `tags` state to avoid Rolldown TDZ ordering issue
   const tagSuggestions = tagDefs.map((d) => d.name).filter((n) => !tags.includes(n));
@@ -209,6 +210,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
     setDealProb(contact.deal_probability != null ? String(contact.deal_probability) : "");
     setCrmNotes(contact.crm_notes ?? "");
     setTags(contact.tags ?? []);
+    setStageValue(contact.pipeline_stage ?? "lead");
     setResearchText(contact.research_result ?? "");
     setVerification(null);
     setResearchVerifying(false);
@@ -261,13 +263,29 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
 
   if (!contact) return null;
 
-  const stage = PIPELINE_STAGES.find((s) => s.key === contact.pipeline_stage) ?? PIPELINE_STAGES[0];
   const initials = getInitials(contact.first_name, contact.last_name);
   const avatarBg = getInitialsBg(contact.first_name ?? contact.last_name ?? "A");
 
   const handleStageChange = (val: string) => {
-    updateStage.mutate({ id: contact.id, pipeline_stage: val as PipelineStage });
-    onUpdate?.();
+    const nextStage = val as PipelineStage;
+    const previousStage = stageValue;
+
+    setStageValue(nextStage);
+    onUpdate?.({ pipeline_stage: nextStage });
+
+    updateStage.mutate(
+      { id: contact.id, pipeline_stage: nextStage },
+      {
+        onError: (error) => {
+          setStageValue(previousStage);
+          onUpdate?.({ pipeline_stage: previousStage });
+          toast({
+            variant: "destructive",
+            description: error instanceof Error ? error.message : "Could not update contact status.",
+          });
+        },
+      }
+    );
   };
 
   const saveDeal = () => {
@@ -370,7 +388,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
               {/* Pipeline stage selector */}
               <div className="mt-2">
                 <Select
-                  value={contact.pipeline_stage ?? "lead"}
+                  value={stageValue}
                   onValueChange={handleStageChange}
                 >
                   <SelectTrigger className="h-7 text-xs w-full sm:w-40">

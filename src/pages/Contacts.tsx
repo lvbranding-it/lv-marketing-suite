@@ -1132,6 +1132,10 @@ export default function Contacts() {
       <ContactSlideOver
         contact={slideOverContact}
         onClose={() => setSlideOverContact(null)}
+        onUpdate={(updates) => {
+          if (!updates) return;
+          setSlideOverContact((prev) => (prev ? { ...prev, ...updates } : prev));
+        }}
       />
 
       <ContactFormModal
