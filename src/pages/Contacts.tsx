@@ -349,6 +349,14 @@ export default function Contacts() {
     toast({ description: `${c.first} ${c.last} added to pipeline.` });
   };
 
+  // ── Add existing imported contact to Pipeline ───────────────────────────
+  const handleAddImportedToPipeline = async (c: ImportedContact, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await updateContact.mutateAsync({ id: c.id, pipeline_stage: "lead" });
+    const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.company || "Contact";
+    toast({ description: `${name} added to pipeline.` });
+  };
+
   // ── Form open/close helpers ─────────────────────────────────────────────
   const openAdd = () => { setEditTarget(null); setFormOpen(true); };
 
@@ -492,7 +500,7 @@ export default function Contacts() {
                 <TabsTrigger value="pipeline">
                   Pipeline
                   <span className="ml-1.5 text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                    {imported.filter((c) => c.verification_status === "verified").length}
+                    {imported.filter((c) => !!c.pipeline_stage).length}
                   </span>
                 </TabsTrigger>
                 {canUseHqProspecting && (
@@ -785,6 +793,18 @@ export default function Contacts() {
                                 </div>
                               </PopoverContent>
                             </Popover>
+                            {!c.pipeline_stage && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-emerald-600"
+                                onClick={(e) => handleAddImportedToPipeline(c, e)}
+                                title="Add to pipeline"
+                                disabled={updateContact.isPending}
+                              >
+                                <PlusCircle size={12} />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1084,7 +1104,7 @@ export default function Contacts() {
           {/* ── Pipeline ─────────────────────────────────────────── */}
           <TabsContent value="pipeline">
             <PipelineView
-              contacts={imported.filter((c) => c.verification_status === "verified" || !c.verification_status)}
+              contacts={imported.filter((c) => !!c.pipeline_stage)}
               onSelect={setSlideOverContact}
             />
           </TabsContent>
