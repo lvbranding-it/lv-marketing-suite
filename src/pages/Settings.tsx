@@ -795,7 +795,7 @@ export default function Settings() {
         .eq("user_id", userId)
         .single();
       const existing = ((current as any)?.feature_access as Record<string, boolean>) ??
-        { campaigns: true, contacts: true, projects: true, skills: true, intake: true };
+        { campaigns: true, contacts: true, projects: true, skills: true, intake: true, workspace: true };
       const updated = { ...existing, [feature]: value };
       const { error } = await supabase
         .from("team_members")
@@ -1747,6 +1747,7 @@ export default function Settings() {
                               { key: "campaigns", label: "Campaigns", icon: "📧" },
                               { key: "contacts",  label: "Contacts",  icon: "👥" },
                               { key: "projects",  label: "Projects",  icon: "📁" },
+                              { key: "workspace", label: "Workspace", icon: "📓" },
                               { key: "skills",    label: "Skills",    icon: "⚡" },
                               { key: "intake",    label: "Intake",    icon: "📋" },
                             ].map(({ key, label, icon }) => {

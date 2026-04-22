@@ -14,7 +14,7 @@ export function usePermissions() {
 
   // Admins always have full feature access regardless of feature_access column
   const features = isAdmin || isBranchOnly
-    ? { campaigns: true, contacts: true, projects: true, skills: true, intake: true }
+    ? { campaigns: true, contacts: true, projects: true, skills: true, intake: true, workspace: true }
     : featureAccess;
 
   return {
@@ -32,6 +32,7 @@ export function usePermissions() {
     canAccessCampaigns: features.campaigns !== false,
     canAccessContacts:  features.contacts  !== false,
     canAccessProjects:  features.projects  !== false,
+    canAccessWorkspace: features.workspace !== false,
     canAccessSkills:    features.skills    !== false,
     canAccessIntake:    features.intake    !== false,
     // Contacts

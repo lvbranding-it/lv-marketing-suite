@@ -945,6 +945,87 @@ export type Database = {
         };
         Relationships: [];
       };
+      workspace_pages: {
+        Row: {
+          id: string;
+          org_id: string;
+          parent_id: string | null;
+          title: string;
+          icon: string | null;
+          cover_color: string | null;
+          position: number;
+          is_archived: boolean;
+          metadata: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          parent_id?: string | null;
+          title?: string;
+          icon?: string | null;
+          cover_color?: string | null;
+          position?: number;
+          is_archived?: boolean;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          parent_id?: string | null;
+          title?: string;
+          icon?: string | null;
+          cover_color?: string | null;
+          position?: number;
+          is_archived?: boolean;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      workspace_blocks: {
+        Row: {
+          id: string;
+          org_id: string;
+          page_id: string;
+          type: "paragraph" | "heading" | "subheading" | "bullet" | "todo" | "quote" | "divider";
+          content: Json;
+          position: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          page_id: string;
+          type?: "paragraph" | "heading" | "subheading" | "bullet" | "todo" | "quote" | "divider";
+          content?: Json;
+          position?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          page_id?: string;
+          type?: "paragraph" | "heading" | "subheading" | "todo" | "bullet" | "quote" | "divider";
+          content?: Json;
+          position?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       branch_usage_events: {
         Row: {
           id: string;
@@ -1008,6 +1089,8 @@ export type OrgBranch = Tables<"org_branches">;
 export type BranchTeamMember = Tables<"branch_team_members">;
 export type BranchInvitation = Tables<"branch_invitations">;
 export type BranchUsageEvent = Tables<"branch_usage_events">;
+export type WorkspacePage = Tables<"workspace_pages">;
+export type WorkspaceBlock = Tables<"workspace_blocks">;
 export type Project = Tables<"projects">;
 export type SkillOutputRow = Tables<"skill_outputs">;
 export type TeamMember = Tables<"team_members">;

@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Zap,
   FolderOpen,
+  BookOpen,
   History,
   Users,
   Settings,
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/skills", labelKey: "nav.skills", icon: Zap },
   { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
+  { to: "/workspace", labelKey: "nav.workspace", icon: BookOpen },
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
   { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
@@ -98,6 +100,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             if (to === "/campaigns")    return perms.canAccessCampaigns;
             if (to === "/contacts")     return perms.canAccessContacts;
             if (to === "/projects")     return perms.canAccessProjects;
+            if (to === "/workspace")    return perms.canAccessWorkspace;
             if (to === "/skills")       return perms.canAccessSkills;
             if (to === "/intake")       return perms.canAccessIntake;
             return true;

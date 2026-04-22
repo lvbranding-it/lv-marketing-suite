@@ -25,6 +25,7 @@ import OutputDetail from "@/pages/OutputDetail";
 const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const CampaignComposer = lazy(() => import("@/pages/CampaignComposer"));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail"));
+const Workspace = lazy(() => import("@/pages/Workspace"));
 const Unsubscribe   = lazy(() => import("@/pages/Unsubscribe"));
 const AcceptInvite  = lazy(() => import("@/pages/AcceptInvite"));
 const PhotoSessions        = lazy(() => import("@/pages/PhotoSessions"));
@@ -94,6 +95,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ProjectDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspace"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><Workspace /></Suspense>
           </ProtectedRoute>
         }
       />

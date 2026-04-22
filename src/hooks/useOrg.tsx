@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import type { BranchTeamMember, Organization } from "@/integrations/supabase/types";
 
-const DEFAULT_FEATURES = { campaigns: true, contacts: true, projects: true, skills: true, intake: true };
+const DEFAULT_FEATURES = { campaigns: true, contacts: true, projects: true, skills: true, intake: true, workspace: true };
 type OrgRole = "owner" | "admin" | "manager" | "member";
 type BranchRole = "regional_ceo" | "manager" | "crew";
 
