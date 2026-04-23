@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import confetti from "canvas-confetti";
-import { ChevronRight, ChevronLeft, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
+import { ChevronRight, ChevronLeft, Loader2, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +55,20 @@ function fireConfetti() {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function IntakeForm() {
   const { orgId } = useParams<{ orgId: string }>();
+  const [searchParams]            = useSearchParams();
+
+  // ── Personalized (CRM-sourced) link params ────────────────────────────────
+  const contactId      = searchParams.get("cid");
+  const prefillName    = searchParams.get("n") ?? "";
+  const prefillEmail   = searchParams.get("e") ?? "";
+  const prefillRole    = searchParams.get("r") ?? "";
+  const prefillCompany = searchParams.get("c") ?? "";
+  const prefillWebsite = searchParams.get("w") ?? "";
+  const prefillIndustry = searchParams.get("i") ?? "";
+  const prefillSize    = searchParams.get("s") ?? "";
+  const isPersonalized = !!contactId;
+  const prefillFirstName = prefillName.split(" ")[0] || "there";
+
   const [step, setStep]           = useState(0);
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [animating, setAnimating] = useState(false);
@@ -109,6 +123,21 @@ export default function IntakeForm() {
     }
   }, [step]);
 
+  // Pre-fill form fields from CRM params (runs once on mount)
+  useEffect(() => {
+    if (!isPersonalized) return;
+    form1.reset({
+      contact_name:  prefillName    || undefined,
+      contact_email: prefillEmail   || undefined,
+      contact_role:  prefillRole    || undefined,
+      company_name:  prefillCompany || undefined,
+      website:       prefillWebsite || undefined,
+    });
+    if (prefillIndustry) form2.setValue("industry",     prefillIndustry);
+    if (prefillSize)     form2.setValue("company_size", prefillSize);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const goTo = (next: number, dir: "forward" | "backward") => {
     if (animating) return;
     setDirection(dir);
@@ -146,6 +175,7 @@ export default function IntakeForm() {
         contact_role:  data.contact_role || null,
         company_name:  data.company_name,
         form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
+        ...(contactId ? { contact_id: contactId } : {}),
       });
       if (dbErr) throw dbErr;
       goTo(5, "forward");
@@ -227,7 +257,7 @@ export default function IntakeForm() {
         <div className={cn("w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-220", base)}>
 
           {/* ── Welcome ── */}
-          {step === 0 && (
+          {step === 0 && !isPersonalized && (
             <div className="p-10 text-center">
               <div className="text-6xl mb-5">🎉</div>
               <h1 className="text-3xl font-bold text-gray-900 mb-3 leading-tight">{t.welcome.title}</h1>
@@ -237,6 +267,40 @@ export default function IntakeForm() {
               </p>
               <Button size="lg" onClick={() => goTo(1, "forward")} className="bg-rose-500 hover:bg-rose-600 text-white px-8 py-3 text-base rounded-xl shadow-md">
                 {t.welcome.button}
+                <ArrowRight size={18} className="ml-2" />
+              </Button>
+              <p className="text-xs text-gray-300 mt-4">{t.welcome.finePrint}</p>
+            </div>
+          )}
+
+          {/* ── Personalized Welcome (CRM link) ── */}
+          {step === 0 && isPersonalized && (
+            <div className="p-10 text-center">
+              <div className="text-6xl mb-5">✨</div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-3 leading-tight">
+                {lang === "es"
+                  ? `¡Hola, ${prefillFirstName}! 👋`
+                  : `Hey, ${prefillFirstName}! 👋`}
+              </h1>
+              <p className="text-gray-600 text-base leading-relaxed mb-2 font-medium">
+                {lang === "es"
+                  ? "¡Estamos muy emocionados de continuar este camino juntos!"
+                  : "We're so excited to continue this journey together!"}
+              </p>
+              <p className="text-gray-400 text-sm mb-4 leading-relaxed">
+                {lang === "es"
+                  ? "Ya pre-llenamos lo que sabemos sobre ti."
+                  : "We've already pre-filled what we know about you."}
+              </p>
+              <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5 rounded-full mb-8">
+                <Sparkles size={11} />
+                {lang === "es"
+                  ? "Solo revisa, actualiza lo que haya cambiado y completa el resto."
+                  : "Just review, update anything that's changed, and fill in the rest."}
+              </div>
+              <div />
+              <Button size="lg" onClick={() => goTo(1, "forward")} className="bg-rose-500 hover:bg-rose-600 text-white px-8 py-3 text-base rounded-xl shadow-md">
+                {lang === "es" ? "Revisar y completar" : "Review & Complete"}
                 <ArrowRight size={18} className="ml-2" />
               </Button>
               <p className="text-xs text-gray-300 mt-4">{t.welcome.finePrint}</p>
@@ -259,6 +323,14 @@ export default function IntakeForm() {
           {/* ── Step 1 – About You ── */}
           {step === 1 && (
             <div className="p-8 space-y-5">
+              {isPersonalized && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700 -mt-1">
+                  <Sparkles size={12} className="text-emerald-500 shrink-0" />
+                  {lang === "es"
+                    ? "Pre-llenado desde tu perfil — actualiza cualquier campo que haya cambiado."
+                    : "Pre-filled from your profile — update any field that's changed."}
+                </div>
+              )}
               <Field label={t.fields.contact_name.label} required error={form1.formState.errors.contact_name?.message}>
                 <Input placeholder={t.fields.contact_name.placeholder} className="h-11" {...form1.register("contact_name")} />
               </Field>
@@ -281,7 +353,11 @@ export default function IntakeForm() {
           {step === 2 && (
             <div className="p-8 space-y-5">
               <Field label={t.fields.industry.label} required error={form2.formState.errors.industry?.message}>
-                <Select key={`industry-${lang}`} onValueChange={(v) => form2.setValue("industry", v)}>
+                <Select
+                  key={`industry-${lang}`}
+                  value={form2.watch("industry") || undefined}
+                  onValueChange={(v) => form2.setValue("industry", v, { shouldValidate: true })}
+                >
                   <SelectTrigger className="h-11"><SelectValue placeholder={t.fields.industry.placeholder} /></SelectTrigger>
                   <SelectContent>
                     {OPTION_VALUES.industry.map((val, i) => (
@@ -291,7 +367,11 @@ export default function IntakeForm() {
                 </Select>
               </Field>
               <Field label={t.fields.company_size.label} required error={form2.formState.errors.company_size?.message}>
-                <Select key={`company_size-${lang}`} onValueChange={(v) => form2.setValue("company_size", v)}>
+                <Select
+                  key={`company_size-${lang}`}
+                  value={form2.watch("company_size") || undefined}
+                  onValueChange={(v) => form2.setValue("company_size", v, { shouldValidate: true })}
+                >
                   <SelectTrigger className="h-11"><SelectValue placeholder={t.fields.company_size.placeholder} /></SelectTrigger>
                   <SelectContent>
                     {OPTION_VALUES.company_size.map((val, i) => (

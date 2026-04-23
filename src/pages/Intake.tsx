@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -6,6 +6,7 @@ import {
   Copy, Check, ExternalLink, Trash2, Eye, Mail,
   Calendar, Building2, ClipboardList, ChevronDown,
   FolderPlus, Loader2, CheckCircle2, ArrowRight, AlertCircle,
+  Search, X, UserCheck,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -21,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import { useImportedContacts, type ImportedContact } from "@/hooks/useContacts";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateProject, useUpdateProject } from "@/hooks/useProjects";
 import { runSkillStream } from "@/lib/claude";
@@ -39,6 +41,7 @@ interface IntakeSubmission {
   contact_role: string | null;
   company_name: string | null;
   form_data: Record<string, unknown>;
+  contact_id: string | null;
 }
 
 type ConvertState = "idle" | "creating" | "generating" | "done" | "error";
@@ -116,6 +119,76 @@ export default function Intake() {
   const [streamedText, setStreamedText] = useState("");
   const [convertError, setConvertError] = useState("");
   const [newProjectId, setNewProjectId] = useState<string | null>(null);
+
+  // ── Personalized link state ──────────────────────────────────────────────────
+  const [contactQuery, setContactQuery]             = useState("");
+  const [pickedContact, setPickedContact]           = useState<ImportedContact | null>(null);
+  const [showDropdown, setShowDropdown]             = useState(false);
+  const [clientLinkCopied, setClientLinkCopied]     = useState(false);
+  const dropdownRef                                 = useRef<HTMLDivElement>(null);
+
+  const { data: allContacts = [] } = useImportedContacts();
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filteredContacts = allContacts
+    .filter((c) => {
+      if (!contactQuery.trim()) return false;
+      const q = contactQuery.toLowerCase();
+      const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.toLowerCase();
+      return name.includes(q) || (c.company ?? "").toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q);
+    })
+    .slice(0, 8);
+
+  const buildPersonalizedLink = (c: ImportedContact) => {
+    if (!org) return "";
+    const p = new URLSearchParams();
+    p.set("cid", c.id);
+    const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+    if (name)               p.set("n", name);
+    if (c.email)            p.set("e", c.email);
+    if (c.title)            p.set("r", c.title);
+    if (c.company)          p.set("c", c.company);
+    if (c.website)          p.set("w", c.website);
+    if (c.industry)         p.set("i", c.industry);
+    if (c.employees_range)  p.set("s", c.employees_range);
+    return `${window.location.origin}/intake/${org.id}?${p.toString()}`;
+  };
+
+  const personalizedLink = pickedContact ? buildPersonalizedLink(pickedContact) : "";
+
+  const copyClientLink = () => {
+    if (!personalizedLink) return;
+    navigator.clipboard.writeText(personalizedLink);
+    setClientLinkCopied(true);
+    setTimeout(() => setClientLinkCopied(false), 2000);
+    toast({ description: "Personalized link copied!" });
+  };
+
+  const emailClient = () => {
+    if (!pickedContact || !personalizedLink) return;
+    const first = pickedContact.first_name ?? "there";
+    const subject = encodeURIComponent("Your Client Brief — LV Branding");
+    const body = encodeURIComponent(
+      `Hi ${first},\n\nWe're excited to kick off this next chapter together! We've put together a quick form to capture some details about your business — it only takes about 5 minutes, and we've already pre-filled what we know.\n\nClick below to get started:\n${personalizedLink}\n\nLooking forward to it!\n\nWarm regards,\nLV Branding`
+    );
+    window.open(`mailto:${pickedContact.email ?? ""}?subject=${subject}&body=${body}`);
+  };
+
+  const clearPicked = () => {
+    setPickedContact(null);
+    setContactQuery("");
+    setShowDropdown(false);
+  };
 
   const intakeUrl = org ? `${window.location.origin}/intake/${org.id}` : "";
 
@@ -305,6 +378,112 @@ export default function Intake() {
           </div>
         </div>
 
+        {/* ── Personalized link ──────────────────────────────────────────────── */}
+        <div className="bg-white border border-border rounded-2xl p-6">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <UserCheck size={16} className="text-rose-500" />
+              Send to an Existing Client
+            </h2>
+            <p className="text-sm text-gray-500">
+              Pick a contact from your CRM to generate a personalized intake link — their info is pre-filled and they get a warm, client-specific welcome.
+            </p>
+          </div>
+
+          {/* Contact search */}
+          <div className="relative" ref={dropdownRef}>
+            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-rose-300 transition-colors">
+              <Search size={13} className="text-gray-400 shrink-0" />
+              <input
+                className="flex-1 text-sm outline-none bg-transparent placeholder:text-gray-400"
+                placeholder="Search by name, company or email…"
+                value={contactQuery}
+                onChange={(e) => {
+                  setContactQuery(e.target.value);
+                  setPickedContact(null);
+                  setShowDropdown(true);
+                }}
+                onFocus={() => { if (contactQuery) setShowDropdown(true); }}
+              />
+              {(pickedContact || contactQuery) && (
+                <button onClick={clearPicked} className="text-gray-300 hover:text-gray-500 transition-colors">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Dropdown */}
+            {showDropdown && filteredContacts.length > 0 && (
+              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                {filteredContacts.map((c) => {
+                  const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.company || "—";
+                  const initial = (c.first_name?.[0] ?? c.company?.[0] ?? "?").toUpperCase();
+                  return (
+                    <button
+                      key={c.id}
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setPickedContact(c);
+                        setContactQuery(name);
+                        setShowDropdown(false);
+                      }}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 text-xs font-bold flex items-center justify-center shrink-0">
+                        {initial}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
+                        <p className="text-xs text-gray-400 truncate">{[c.company, c.email].filter(Boolean).join(" · ")}</p>
+                      </div>
+                      {c.pipeline_stage && (
+                        <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground shrink-0 capitalize">
+                          {c.pipeline_stage}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Generated link + actions */}
+          {pickedContact && (
+            <div className="mt-4 space-y-3">
+              <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-700 text-sm font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {(pickedContact.first_name?.[0] ?? pickedContact.company?.[0] ?? "?").toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-emerald-800">
+                    {`${pickedContact.first_name ?? ""} ${pickedContact.last_name ?? ""}`.trim() || pickedContact.company}
+                    {pickedContact.company && pickedContact.first_name && (
+                      <span className="font-normal text-emerald-600"> · {pickedContact.company}</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-emerald-600 truncate font-mono mt-0.5 break-all">{personalizedLink}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={copyClientLink} className="gap-1.5 flex-1">
+                  {clientLinkCopied ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                  {clientLinkCopied ? "Copied!" : "Copy Link"}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={emailClient}
+                  disabled={!pickedContact.email}
+                  className="gap-1.5 flex-1 bg-rose-500 hover:bg-rose-600 text-white"
+                >
+                  <Mail size={13} />
+                  Email Client
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Stats ──────────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-4">
           {(["new", "reviewed", "converted"] as const).map((s) => {
@@ -360,7 +539,14 @@ export default function Intake() {
                     className="border-b border-border/50 last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <p className="font-medium text-foreground">{sub.contact_name ?? "—"}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-medium text-foreground">{sub.contact_name ?? "—"}</p>
+                        {sub.contact_id && (
+                          <span title="Submitted via personalized CRM link" className="inline-flex items-center gap-0.5 text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">
+                            <UserCheck size={9} /> CRM
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Mail size={10} />{sub.contact_email ?? "—"}
                       </p>
@@ -542,6 +728,12 @@ export default function Intake() {
           {convertState === "idle" && selected && (
             <ScrollArea className="flex-1 px-6 py-5">
               <div className="space-y-5">
+                {selected.contact_id && (
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
+                    <UserCheck size={13} className="text-emerald-500 shrink-0" />
+                    Submitted via a personalized link from your CRM
+                  </div>
+                )}
                 <DetailSection title="Contact & Company">
                   <DetailRow label="Full Name"    value={selected.contact_name} />
                   <DetailRow label="Email"        value={selected.contact_email} />
