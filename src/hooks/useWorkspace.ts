@@ -11,6 +11,20 @@ export interface WorkspaceBlockContent {
   checked?: boolean;
 }
 
+interface WorkspaceBlockDraft {
+  type?: WorkspaceBlockType;
+  content?: WorkspaceBlockContent;
+}
+
+interface CreateWorkspacePageValues {
+  title?: string;
+  parent_id?: string | null;
+  icon?: string | null;
+  cover_color?: string | null;
+  metadata?: Json;
+  blocks?: WorkspaceBlockDraft[];
+}
+
 const PAGE_GAP = 1000;
 const BLOCK_GAP = 1000;
 
@@ -31,6 +45,24 @@ function nextPosition<T extends { parent_id?: string | null; page_id?: string; p
 ) {
   const siblings = (items ?? []).filter(predicate);
   return siblings.length ? Math.max(...siblings.map((item) => item.position)) + PAGE_GAP : 0;
+}
+
+function pageAndDescendantIds(pages: WorkspacePage[] | undefined, pageId: string) {
+  const childrenByParent = new Map<string, WorkspacePage[]>();
+  (pages ?? []).forEach((page) => {
+    if (!page.parent_id) return;
+    childrenByParent.set(page.parent_id, [...(childrenByParent.get(page.parent_id) ?? []), page]);
+  });
+
+  const ids = new Set([pageId]);
+  const visit = (id: string) => {
+    (childrenByParent.get(id) ?? []).forEach((child) => {
+      ids.add(child.id);
+      visit(child.id);
+    });
+  };
+  visit(pageId);
+  return ids;
 }
 
 export function useWorkspacePages() {
@@ -100,7 +132,7 @@ export function useCreateWorkspacePage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (values: { title?: string; parent_id?: string | null }) => {
+    mutationFn: async (values: CreateWorkspacePageValues) => {
       if (!org || !user) throw new Error("Not authenticated");
       const cached = queryClient.getQueryData<WorkspacePage[]>(["workspace_pages", org.id]);
       const parentId = values.parent_id ?? null;
@@ -112,6 +144,9 @@ export function useCreateWorkspacePage() {
           org_id: org.id,
           parent_id: parentId,
           title: values.title?.trim() || "Untitled",
+          icon: values.icon ?? null,
+          cover_color: values.cover_color ?? null,
+          metadata: values.metadata ?? {},
           position,
           created_by: user.id,
         })
@@ -119,14 +154,19 @@ export function useCreateWorkspacePage() {
         .single();
       if (error) throw error;
       const page = data as WorkspacePage;
-      const { error: blockError } = await supabase.from("workspace_blocks").insert({
-        org_id: org.id,
-        page_id: page.id,
-        type: "paragraph",
-        content: { text: "" } as Json,
-        position: 0,
-        created_by: user.id,
-      });
+      const initialBlocks = values.blocks?.length
+        ? values.blocks
+        : [{ type: "paragraph" as WorkspaceBlockType, content: { text: "" } }];
+      const { error: blockError } = await supabase.from("workspace_blocks").insert(
+        initialBlocks.map((block, index) => ({
+          org_id: org.id,
+          page_id: page.id,
+          type: block.type ?? "paragraph",
+          content: (block.content ?? { text: "" }) as Json,
+          position: index * BLOCK_GAP,
+          created_by: user.id,
+        }))
+      );
       if (blockError) throw blockError;
       return page;
     },
@@ -137,6 +177,7 @@ export function useCreateWorkspacePage() {
 }
 
 export function useUpdateWorkspacePage() {
+  const { org } = useOrg();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -150,10 +191,27 @@ export function useUpdateWorkspacePage() {
       if (error) throw error;
       return data as WorkspacePage;
     },
+    onMutate: async (updates) => {
+      if (!org) return;
+      await queryClient.cancelQueries({ queryKey: ["workspace_pages", org.id] });
+      const previous = queryClient.getQueryData<WorkspacePage[]>(["workspace_pages", org.id]);
+      queryClient.setQueryData<WorkspacePage[]>(["workspace_pages", org.id], (current) =>
+        (current ?? []).map((item) => (item.id === updates.id ? { ...item, ...updates } : item))
+      );
+      return { previous, orgId: org.id };
+    },
+    onError: (_error, _updates, context) => {
+      if (context?.orgId) {
+        queryClient.setQueryData(["workspace_pages", context.orgId], context.previous);
+      }
+    },
     onSuccess: (page) => {
       queryClient.setQueryData<WorkspacePage[]>(["workspace_pages", page.org_id], (current) =>
         (current ?? []).map((item) => (item.id === page.id ? page : item))
       );
+    },
+    onSettled: (page) => {
+      if (page?.org_id) queryClient.invalidateQueries({ queryKey: ["workspace_pages", page.org_id] });
     },
   });
 }
@@ -167,10 +225,21 @@ export function useDeleteWorkspacePage() {
       if (error) throw error;
       return page;
     },
-    onSuccess: (page) => {
+    onMutate: async (page) => {
+      await queryClient.cancelQueries({ queryKey: ["workspace_pages", page.org_id] });
+      const previous = queryClient.getQueryData<WorkspacePage[]>(["workspace_pages", page.org_id]);
+      const removing = pageAndDescendantIds(previous, page.id);
       queryClient.setQueryData<WorkspacePage[]>(["workspace_pages", page.org_id], (current) =>
-        (current ?? []).filter((item) => item.id !== page.id && item.parent_id !== page.id)
+        (current ?? []).filter((item) => !removing.has(item.id))
       );
+      return { previous };
+    },
+    onError: (_error, page, context) => {
+      queryClient.setQueryData(["workspace_pages", page.org_id], context?.previous);
+    },
+    onSuccess: (page) => {
+      queryClient.invalidateQueries({ queryKey: ["workspace_pages", page.org_id] });
+      queryClient.invalidateQueries({ queryKey: ["workspace_blocks"] });
     },
   });
 }
