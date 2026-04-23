@@ -6,13 +6,16 @@ import {
   Copy, Check, ExternalLink, Trash2, Eye, Mail,
   Calendar, Building2, ClipboardList, ChevronDown,
   FolderPlus, Loader2, CheckCircle2, ArrowRight, AlertCircle,
-  Search, X, UserCheck,
+  Search, X, UserCheck, Send,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -177,11 +180,41 @@ export default function Intake() {
   const emailClient = () => {
     if (!pickedContact || !personalizedLink) return;
     const first = pickedContact.first_name ?? "there";
-    const subject = encodeURIComponent("Your Client Brief — LV Branding");
-    const body = encodeURIComponent(
-      `Hi ${first},\n\nWe're excited to kick off this next chapter together! We've put together a quick form to capture some details about your business — it only takes about 5 minutes, and we've already pre-filled what we know.\n\nClick below to get started:\n${personalizedLink}\n\nLooking forward to it!\n\nWarm regards,\nLV Branding`
+    setEmailSubject("Your Client Brief — LV Branding");
+    setEmailMessage(
+      `Hi ${first},\n\nWe're thrilled to be working with you on this next chapter! To help us hit the ground running, we've put together a quick brief — it takes about 5 minutes, and we've already pre-filled what we know.\n\nLooking forward to bringing your vision to life!`
     );
-    window.open(`mailto:${pickedContact.email ?? ""}?subject=${subject}&body=${body}`);
+    setEmailSenderName("");
+    setEmailSentTo(null);
+    setShowEmailPreview(true);
+  };
+
+  const sendEmail = async () => {
+    if (!pickedContact || !personalizedLink) return;
+    setSendingEmail(true);
+    try {
+      const toName = `${pickedContact.first_name ?? ""} ${pickedContact.last_name ?? ""}`.trim() || pickedContact.company || undefined;
+      const { error } = await supabase.functions.invoke("send-intake-invite", {
+        body: {
+          to_email:    pickedContact.email,
+          to_name:     toName,
+          subject:     emailSubject,
+          message:     emailMessage,
+          sender_name: emailSenderName.trim() || "The LV Branding Team",
+          intake_link: personalizedLink,
+        },
+      });
+      if (error) throw error;
+      setEmailSentTo(pickedContact.email ?? "");
+      toast({ description: `Email sent to ${pickedContact.email}!` });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        description: err instanceof Error ? err.message : "Failed to send email.",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const clearPicked = () => {
@@ -189,6 +222,14 @@ export default function Intake() {
     setContactQuery("");
     setShowDropdown(false);
   };
+
+  // ── Email preview panel state ─────────────────────────────────────────────
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [emailSubject, setEmailSubject]         = useState("");
+  const [emailMessage, setEmailMessage]         = useState("");
+  const [emailSenderName, setEmailSenderName]   = useState("");
+  const [sendingEmail, setSendingEmail]         = useState(false);
+  const [emailSentTo, setEmailSentTo]           = useState<string | null>(null);
 
   const intakeUrl = org ? `${window.location.origin}/intake/${org.id}` : "";
 
@@ -773,6 +814,112 @@ export default function Intake() {
           )}
         </DialogContent>
       </Dialog>
+      {/* ── Email preview dialog ─────────────────────────────────────────────── */}
+      <Dialog open={showEmailPreview} onOpenChange={(open) => { if (!open) setShowEmailPreview(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail size={15} className="text-rose-500" />
+              Email Preview
+            </DialogTitle>
+            <DialogDescription>
+              Review and edit before sending to <strong>{pickedContact?.email}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailSentTo ? (
+            /* ── Success state ── */
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle2 size={30} className="text-green-500" />
+              </div>
+              <p className="font-semibold text-foreground">Email sent!</p>
+              <p className="text-sm text-muted-foreground">
+                The personalized brief was sent to <strong>{emailSentTo}</strong>.
+              </p>
+              <Button className="mt-2" onClick={() => setShowEmailPreview(false)}>Done</Button>
+            </div>
+          ) : (
+            /* ── Compose state ── */
+            <div className="space-y-4 pt-1">
+
+              {/* To / From pill */}
+              <div className="bg-muted/50 rounded-lg px-4 py-3 text-sm space-y-1.5">
+                <div className="flex gap-2">
+                  <span className="text-muted-foreground w-11 shrink-0 text-xs pt-0.5">To</span>
+                  <span className="font-medium text-foreground">
+                    {[`${pickedContact?.first_name ?? ""} ${pickedContact?.last_name ?? ""}`.trim(), pickedContact?.email].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-muted-foreground w-11 shrink-0 text-xs pt-0.5">From</span>
+                  <span className="text-muted-foreground">LV Branding &lt;admin@lvbranding.com&gt;</span>
+                </div>
+              </div>
+
+              {/* Subject */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Subject</Label>
+                <Input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Subject line…"
+                />
+              </div>
+
+              {/* Message */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Message</Label>
+                <Textarea
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  rows={7}
+                  className="resize-none text-sm leading-relaxed"
+                  placeholder="Write your message…"
+                />
+              </div>
+
+              {/* Sender name */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">
+                  Your name <span className="text-muted-foreground font-normal">(signature)</span>
+                </Label>
+                <Input
+                  value={emailSenderName}
+                  onChange={(e) => setEmailSenderName(e.target.value)}
+                  placeholder="e.g. Luis — leave blank for 'The LV Branding Team'"
+                />
+              </div>
+
+              {/* Link note */}
+              <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2.5 text-xs text-rose-700">
+                <ExternalLink size={11} className="shrink-0 mt-0.5" />
+                <span>
+                  A <strong>"Complete Your Brief →"</strong> button with the personalized intake link is added automatically.
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={() => setShowEmailPreview(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={sendEmail}
+                  disabled={sendingEmail || !emailSubject.trim() || !emailMessage.trim() || !pickedContact?.email}
+                  className="gap-1.5 bg-rose-500 hover:bg-rose-600 text-white"
+                >
+                  {sendingEmail
+                    ? <><Loader2 size={13} className="animate-spin" /> Sending…</>
+                    : <><Send size={13} /> Send Email</>
+                  }
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </AppShell>
   );
 }
