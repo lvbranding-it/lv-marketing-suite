@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
+import type { Json, WorkspaceAsset, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
 
 export type WorkspaceBlockType = WorkspaceBlock["type"];
+export type WorkspaceAssetCategory = WorkspaceAsset["category"];
 
 export interface WorkspaceBlockContent {
   text?: string;
@@ -25,8 +26,38 @@ interface CreateWorkspacePageValues {
   blocks?: WorkspaceBlockDraft[];
 }
 
+interface UploadWorkspaceAssetValues {
+  pageId: string;
+  file: File;
+  category: WorkspaceAssetCategory;
+}
+
 const PAGE_GAP = 1000;
 const BLOCK_GAP = 1000;
+export const WORKSPACE_ASSET_BUCKET = "workspace-assets";
+export const WORKSPACE_ASSET_MAX_BYTES = 50 * 1024 * 1024;
+export const WORKSPACE_ASSET_ACCEPT = [
+  "image/*",
+  "application/pdf",
+  "application/json",
+  "text/plain",
+  "text/csv",
+  "text/calendar",
+  "text/css",
+  ".ics",
+  ".csv",
+  ".json",
+  ".css",
+  ".ase",
+  ".fig",
+  ".pdf",
+  ".svg",
+  ".sketchpalette",
+  ".zip",
+  ".docx",
+  ".pptx",
+  ".xlsx",
+].join(",");
 
 export function getBlockContent(block: WorkspaceBlock): WorkspaceBlockContent {
   if (!block.content || typeof block.content !== "object" || Array.isArray(block.content)) {
@@ -63,6 +94,20 @@ function pageAndDescendantIds(pages: WorkspacePage[] | undefined, pageId: string
   };
   visit(pageId);
   return ids;
+}
+
+function sanitizeFileName(name: string) {
+  return name
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 120) || "workspace-asset";
+}
+
+function workspaceAssetPath(orgId: string, pageId: string, fileName: string) {
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${orgId}/${pageId}/${unique}-${sanitizeFileName(fileName)}`;
 }
 
 export function useWorkspacePages() {
@@ -123,6 +168,103 @@ export function useWorkspaceBlockSearch(query: string) {
       return (data ?? []) as WorkspaceBlock[];
     },
     enabled: !!org && normalized.length >= 2,
+  });
+}
+
+export function useWorkspaceAssets(pageId: string | null) {
+  return useQuery({
+    queryKey: ["workspace_assets", pageId],
+    queryFn: async () => {
+      if (!pageId) return [];
+      const { data, error } = await supabase
+        .from("workspace_assets")
+        .select("*")
+        .eq("page_id", pageId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as WorkspaceAsset[];
+    },
+    enabled: !!pageId,
+  });
+}
+
+export function useWorkspaceAssetSignedUrl(storagePath: string | null | undefined) {
+  return useQuery({
+    queryKey: ["workspace_asset_url", storagePath],
+    queryFn: async () => {
+      if (!storagePath) return null;
+      const { data, error } = await supabase.storage
+        .from(WORKSPACE_ASSET_BUCKET)
+        .createSignedUrl(storagePath, 3600);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    enabled: !!storagePath,
+    staleTime: 1000 * 60 * 45,
+  });
+}
+
+export function useUploadWorkspaceAsset() {
+  const { org } = useOrg();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ pageId, file, category }: UploadWorkspaceAssetValues) => {
+      if (!org || !user) throw new Error("Not authenticated");
+      if (file.size > WORKSPACE_ASSET_MAX_BYTES) throw new Error("Files must be 50 MB or smaller.");
+
+      const storagePath = workspaceAssetPath(org.id, pageId, file.name);
+      const { error: uploadError } = await supabase.storage
+        .from(WORKSPACE_ASSET_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data, error } = await supabase
+        .from("workspace_assets")
+        .insert({
+          org_id: org.id,
+          page_id: pageId,
+          category,
+          file_name: file.name,
+          file_size: file.size,
+          mime_type: file.type || null,
+          storage_path: storagePath,
+          metadata: {},
+          created_by: user.id,
+        })
+        .select()
+        .single();
+      if (error) {
+        await supabase.storage.from(WORKSPACE_ASSET_BUCKET).remove([storagePath]);
+        throw error;
+      }
+      return data as WorkspaceAsset;
+    },
+    onSuccess: (asset) => {
+      queryClient.invalidateQueries({ queryKey: ["workspace_assets", asset.page_id] });
+    },
+  });
+}
+
+export function useDeleteWorkspaceAsset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (asset: WorkspaceAsset) => {
+      await supabase.storage.from(WORKSPACE_ASSET_BUCKET).remove([asset.storage_path]);
+      const { error } = await supabase.from("workspace_assets").delete().eq("id", asset.id);
+      if (error) throw error;
+      return asset;
+    },
+    onSuccess: (asset) => {
+      queryClient.invalidateQueries({ queryKey: ["workspace_assets", asset.page_id] });
+      queryClient.removeQueries({ queryKey: ["workspace_asset_url", asset.storage_path] });
+    },
   });
 }
 

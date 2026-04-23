@@ -1,23 +1,30 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   BookOpen,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
+  Download,
   FileText,
+  FileImage,
+  FileUp,
   FolderTree,
   GripVertical,
   Heading1,
   Heading2,
   Info,
+  Layers3,
   List,
   Loader2,
   MoreHorizontal,
   MoveRight,
+  Palette,
+  Paperclip,
   Plus,
   Quote,
   Search,
@@ -30,6 +37,7 @@ import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -54,10 +62,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { Json, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
+import type { Json, WorkspaceAsset, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
 import {
   blockText,
   getBlockContent,
+  useDeleteWorkspaceAsset,
   useCreateWorkspaceBlock,
   useCreateWorkspacePage,
   useDeleteWorkspaceBlock,
@@ -65,11 +74,17 @@ import {
   useReorderWorkspaceBlocks,
   useUpdateWorkspaceBlock,
   useUpdateWorkspacePage,
+  useUploadWorkspaceAsset,
+  useWorkspaceAssetSignedUrl,
+  useWorkspaceAssets,
   useWorkspaceBlockSearch,
   useWorkspaceBlocks,
   useWorkspacePages,
+  WORKSPACE_ASSET_ACCEPT,
+  WORKSPACE_ASSET_MAX_BYTES,
   type WorkspaceBlockContent,
   type WorkspaceBlockType,
+  type WorkspaceAssetCategory,
 } from "@/hooks/useWorkspace";
 
 type PageNode = WorkspacePage & { children: PageNode[] };
@@ -170,6 +185,21 @@ const PAGE_TEMPLATES: Array<{
   },
 ];
 
+const ASSET_CATEGORIES: Array<{
+  value: WorkspaceAssetCategory;
+  label: string;
+  hint: string;
+  icon: typeof Paperclip;
+}> = [
+  { value: "logo", label: "Logos", hint: "Brand marks and lockups", icon: FileImage },
+  { value: "photo", label: "Photos", hint: "Campaign and client images", icon: FileImage },
+  { value: "pdf", label: "PDFs", hint: "Briefs, decks, and specs", icon: FileText },
+  { value: "palette", label: "Palettes", hint: "Colors, schemas, CSS, JSON", icon: Palette },
+  { value: "design_system", label: "Design systems", hint: "Guides and component docs", icon: Layers3 },
+  { value: "calendar", label: "Calendars", hint: "Task calendars and schedules", icon: CalendarDays },
+  { value: "reference", label: "References", hint: "Any useful support file", icon: Paperclip },
+];
+
 function buildPageTree(pages: WorkspacePage[]) {
   const nodes = new Map<string, PageNode>();
   const roots: PageNode[] = [];
@@ -238,6 +268,17 @@ function useDebouncedValue<T>(value: T, delay = 250) {
 function relativeTime(date: string | null | undefined) {
   if (!date) return "No updates yet";
   return `${formatDistanceToNow(new Date(date), { addSuffix: true })}`;
+}
+
+function formatFileSize(bytes: number) {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function assetCategoryMeta(category: WorkspaceAssetCategory) {
+  return ASSET_CATEGORIES.find((item) => item.value === category) ?? ASSET_CATEGORIES[ASSET_CATEGORIES.length - 1];
 }
 
 export default function Workspace() {
@@ -1073,6 +1114,8 @@ function DocumentEditor({
         </div>
       )}
 
+      <WorkspaceAssetsPanel pageId={page.id} />
+
       {blocksLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((item) => <Skeleton key={item} className="h-10 w-full" />)}
@@ -1118,6 +1161,263 @@ function DocumentEditor({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [category, setCategory] = useState<WorkspaceAssetCategory>("reference");
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const { data: assets = [], isLoading } = useWorkspaceAssets(pageId);
+  const uploadAsset = useUploadWorkspaceAsset();
+  const deleteAsset = useDeleteWorkspaceAsset();
+  const grouped = ASSET_CATEGORIES.map((item) => ({
+    ...item,
+    assets: assets.filter((asset) => asset.category === item.value),
+  })).filter((item) => item.assets.length > 0);
+
+  const handleFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (!list.length) return;
+    const oversized = list.filter((file) => file.size > WORKSPACE_ASSET_MAX_BYTES);
+    if (oversized.length) {
+      toast({
+        title: "Some files are too large",
+        description: `${oversized.map((file) => file.name).join(", ")} exceed the 50 MB limit.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
+    setProgress(0);
+    try {
+      for (const [index, file] of list.entries()) {
+        await uploadAsset.mutateAsync({ pageId, file, category });
+        setProgress(Math.round(((index + 1) / list.length) * 100));
+      }
+      toast({
+        title: "Workspace assets uploaded",
+        description: `${list.length} file${list.length === 1 ? "" : "s"} added to this page.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      setProgress(0);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    if (event.dataTransfer.files.length) handleFiles(event.dataTransfer.files);
+  };
+
+  const SelectedIcon = assetCategoryMeta(category).icon;
+
+  return (
+    <section className="mb-8 rounded-md border border-border bg-muted/10">
+      <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Paperclip size={15} className="text-primary" />
+            <h3 className="text-sm font-semibold">Reference library</h3>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Attach logos, photos, PDFs, palettes, design systems, task calendars, and source context to this page.
+          </p>
+        </div>
+        <Badge variant="secondary" className="w-fit rounded-md font-medium">
+          {assets.length} file{assets.length === 1 ? "" : "s"}
+        </Badge>
+      </div>
+
+      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {ASSET_CATEGORIES.map((item) => {
+              const Icon = item.icon;
+              const active = item.value === category;
+              return (
+                <button
+                  key={item.value}
+                  onClick={() => setCategory(item.value)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Icon size={13} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {isLoading ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-24 w-full" />)}
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed border-border bg-background/70 px-4 py-8 text-center">
+              <FileUp size={20} className="mb-2 text-muted-foreground" />
+              <p className="text-sm font-medium">No reference files yet.</p>
+              <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                Upload the assets this page depends on so strategy, brand, and delivery context stay together.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {grouped.map((group) => (
+                <div key={group.value} className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <group.icon size={13} />
+                    {group.label}
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{group.assets.length}</span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {group.assets.map((asset) => (
+                      <WorkspaceAssetCard
+                        key={asset.id}
+                        asset={asset}
+                        deleting={deleteAsset.isPending}
+                        onDelete={() => deleteAsset.mutate(asset, {
+                          onError: (error) => toast({
+                            title: "Asset was not deleted",
+                            description: error instanceof Error ? error.message : "Please try again.",
+                            variant: "destructive",
+                          }),
+                        })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            "flex min-h-52 cursor-pointer flex-col justify-between rounded-md border border-dashed bg-background p-4 transition-colors",
+            dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
+            uploading && "pointer-events-none opacity-70"
+          )}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={WORKSPACE_ASSET_ACCEPT}
+            className="sr-only"
+            onChange={(event) => event.target.files && handleFiles(event.target.files)}
+          />
+          <div className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+              {uploading ? <Loader2 size={18} className="animate-spin" /> : <SelectedIcon size={18} />}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">
+                {uploading ? "Uploading assets" : `Upload ${assetCategoryMeta(category).label.toLowerCase()}`}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Drag files here or click to choose. Images, PDFs, JSON, CSS, CSV, ICS, Office docs, and ZIP files up to 50 MB.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {uploading ? (
+              <>
+                <Progress value={progress} className="h-1.5" />
+                <p className="text-xs text-muted-foreground">{progress}% uploaded</p>
+              </>
+            ) : (
+              <Button type="button" size="sm" variant="outline" className="pointer-events-none w-full">
+                <FileUp size={13} />
+                Choose files
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceAssetCard({
+  asset,
+  deleting,
+  onDelete,
+}: {
+  asset: WorkspaceAsset;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  const { data: signedUrl } = useWorkspaceAssetSignedUrl(asset.storage_path);
+  const meta = assetCategoryMeta(asset.category);
+  const Icon = meta.icon;
+  const isImage = asset.mime_type?.startsWith("image/");
+
+  return (
+    <div className="group overflow-hidden rounded-md border border-border bg-background">
+      <div className="flex h-24 items-center justify-center bg-muted/40">
+        {isImage && signedUrl ? (
+          <img src={signedUrl} alt={asset.file_name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-background text-muted-foreground shadow-sm">
+            <Icon size={18} />
+          </div>
+        )}
+      </div>
+      <div className="space-y-2 p-2.5">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium" title={asset.file_name}>{asset.file_name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{meta.label} · {formatFileSize(asset.file_size)}</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {signedUrl ? (
+            <Button size="sm" variant="outline" className="h-7 flex-1 px-2 text-xs" asChild>
+              <a href={signedUrl} target="_blank" rel="noreferrer">
+                <Download size={12} />
+                Open
+              </a>
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="h-7 flex-1 px-2 text-xs" disabled>
+              <Download size={12} />
+              Open
+            </Button>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            disabled={deleting}
+            aria-label={`Delete ${asset.file_name}`}
+          >
+            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

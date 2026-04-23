@@ -1026,6 +1026,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      workspace_assets: {
+        Row: {
+          id: string;
+          org_id: string;
+          page_id: string;
+          category: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          file_name: string;
+          file_size: number;
+          mime_type: string | null;
+          storage_path: string;
+          metadata: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          page_id: string;
+          category?: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          file_name: string;
+          file_size?: number;
+          mime_type?: string | null;
+          storage_path: string;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          page_id?: string;
+          category?: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          file_name?: string;
+          file_size?: number;
+          mime_type?: string | null;
+          storage_path?: string;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       branch_usage_events: {
         Row: {
           id: string;
@@ -1091,6 +1136,7 @@ export type BranchInvitation = Tables<"branch_invitations">;
 export type BranchUsageEvent = Tables<"branch_usage_events">;
 export type WorkspacePage = Tables<"workspace_pages">;
 export type WorkspaceBlock = Tables<"workspace_blocks">;
+export type WorkspaceAsset = Tables<"workspace_assets">;
 export type Project = Tables<"projects">;
 export type SkillOutputRow = Tables<"skill_outputs">;
 export type TeamMember = Tables<"team_members">;
