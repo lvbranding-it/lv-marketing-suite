@@ -6,6 +6,15 @@ import { useOrg } from "@/hooks/useOrg";
 // Cast through `any` to bypass stale type-check errors until types are regenerated.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
+const CONTEST_PHOTOS_BUCKET = "contest-photos";
+
+export function normalizeContestPhotoUrl(url: string | null | undefined) {
+  if (!url) return url ?? null;
+  return url.replace(
+    `/storage/v1/object/${CONTEST_PHOTOS_BUCKET}/`,
+    `/storage/v1/object/public/${CONTEST_PHOTOS_BUCKET}/`
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,6 +24,7 @@ export interface Contest {
   slug: string;
   title: string;
   description: string | null;
+  voting_instructions: string | null;
   client_name: string | null;
   client_logo_url: string | null;
   brand_color: string;
@@ -65,7 +75,10 @@ export function useContests() {
         .eq("org_id", org.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Contest[];
+      return ((data ?? []) as Contest[]).map((contest) => ({
+        ...contest,
+        client_logo_url: normalizeContestPhotoUrl(contest.client_logo_url),
+      }));
     },
     enabled: !!org,
   });
@@ -82,7 +95,10 @@ export function useContest(id: string | undefined) {
         .eq("id", id)
         .single();
       if (error) throw error;
-      return data as Contest;
+      return {
+        ...(data as Contest),
+        client_logo_url: normalizeContestPhotoUrl((data as Contest).client_logo_url),
+      };
     },
     enabled: !!id,
   });
@@ -101,7 +117,10 @@ export function useContestBySlug(slug: string | undefined) {
         .eq("slug", slug)
         .single();
       if (error) throw error;
-      return data as Contest;
+      return {
+        ...(data as Contest),
+        client_logo_url: normalizeContestPhotoUrl((data as Contest).client_logo_url),
+      };
     },
     enabled: !!slug,
   });
@@ -120,7 +139,10 @@ export function useContestants(contestId: string | undefined) {
         .eq("contest_id", contestId)
         .order("display_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Contestant[];
+      return ((data ?? []) as Contestant[]).map((contestant) => ({
+        ...contestant,
+        photo_url: normalizeContestPhotoUrl(contestant.photo_url),
+      }));
     },
     enabled: !!contestId,
   });
@@ -253,13 +275,21 @@ export function useDeleteContestant() {
 
 // ── Photo upload ──────────────────────────────────────────────────────────────
 
-export async function uploadContestantPhoto(file: File): Promise<string> {
+async function uploadContestAsset(file: File, folder: "contestants" | "logos"): Promise<string> {
   const ext  = file.name.split(".").pop() ?? "jpg";
-  const path = `${crypto.randomUUID()}.${ext}`;
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
-    .from("contest-photos")
+    .from(CONTEST_PHOTOS_BUCKET)
     .upload(path, file, { upsert: false });
   if (error) throw error;
-  const { data } = supabase.storage.from("contest-photos").getPublicUrl(path);
-  return data.publicUrl;
+  const { data } = supabase.storage.from(CONTEST_PHOTOS_BUCKET).getPublicUrl(path);
+  return normalizeContestPhotoUrl(data.publicUrl) ?? data.publicUrl;
+}
+
+export function uploadContestantPhoto(file: File): Promise<string> {
+  return uploadContestAsset(file, "contestants");
+}
+
+export function uploadContestLogo(file: File): Promise<string> {
+  return uploadContestAsset(file, "logos");
 }

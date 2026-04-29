@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public.contests (
   slug                 TEXT        NOT NULL UNIQUE,
   title                TEXT        NOT NULL,
   description          TEXT,
+  voting_instructions  TEXT,
   client_name          TEXT,
   client_logo_url      TEXT,
   brand_color          TEXT        NOT NULL DEFAULT '#CB2039',
@@ -201,7 +202,7 @@ CREATE POLICY "vote_verifications_service_role_all"
 
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('contest-photos', 'contest-photos', true)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 CREATE POLICY "contest_photos_public_read"
   ON storage.objects FOR SELECT

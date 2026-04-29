@@ -222,19 +222,20 @@ export default function VotingPage() {
       style={{ background: `linear-gradient(160deg, ${brandAccent}12 0%, white 45%, ${brandColor}08 100%)` }}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="px-5 py-4 flex items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          {contest.client_logo_url
-            ? <img src={contest.client_logo_url} alt={contest.client_name ?? ""} className="h-9 w-auto object-contain" />
-            : (
-              <div className="flex items-center gap-2">
-                <LVLogo size={28} />
-                <span className="text-sm font-bold text-gray-800">{contest.client_name ?? "LV Branding"}</span>
-              </div>
-            )
-          }
-        </div>
-        <div className="flex items-center gap-2">
+      <header className="px-5 py-5 border-b border-gray-100 bg-white/85 backdrop-blur-sm sticky top-0 z-10">
+        <div className="mx-auto max-w-2xl flex flex-col items-center gap-3 text-center">
+          <div className="flex min-h-16 items-center justify-center">
+            {contest.client_logo_url
+              ? <img src={contest.client_logo_url} alt={contest.client_name ?? ""} className="max-h-20 max-w-[240px] object-contain sm:max-h-24 sm:max-w-[320px]" />
+              : (
+                <div className="flex flex-col items-center gap-2">
+                  <LVLogo size={54} />
+                  <span className="text-base font-bold text-gray-800">{contest.client_name ?? "LV Branding"}</span>
+                </div>
+              )
+            }
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
           {isOpen && (
             <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -251,13 +252,20 @@ export default function VotingPage() {
               <Clock size={10} /> Voting Closed
             </span>
           )}
+          </div>
         </div>
       </header>
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="px-5 pt-8 pb-4 text-center max-w-2xl mx-auto w-full">
+      <div className="px-5 pt-8 pb-5 text-center max-w-2xl mx-auto w-full">
         <h1 className="text-3xl font-bold text-gray-900 leading-tight mb-2">{contest.title}</h1>
         {contest.description && <p className="text-gray-500 text-base">{contest.description}</p>}
+        {contest.voting_instructions && (
+          <div className="mt-5 rounded-2xl border border-gray-200 bg-white/85 px-5 py-4 text-left shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">How to vote</p>
+            <p className="text-sm leading-6 text-gray-600 whitespace-pre-line">{contest.voting_instructions}</p>
+          </div>
+        )}
         {contest.results_public && totalVotes > 0 && (
           <p className="text-xs text-gray-400 mt-2">{totalVotes.toLocaleString()} vote{totalVotes !== 1 ? "s" : ""} cast</p>
         )}
@@ -312,7 +320,7 @@ export default function VotingPage() {
                 style={isSelected ? { borderColor: brandColor, boxShadow: `0 0 0 3px ${brandColor}25` } : {}}
               >
                 {/* Photo */}
-                <div className="h-44 bg-gray-100 relative overflow-hidden">
+                <div className="aspect-video bg-gray-100 relative overflow-hidden">
                   {c.photo_url
                     ? <img src={c.photo_url} alt={c.name} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-gray-200"><Trophy size={48} /></div>

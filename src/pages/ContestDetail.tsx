@@ -20,7 +20,7 @@ import {
 import {
   useContest, useContestants, useVoteCounts,
   useUpdateContest, useCreateContestant, useUpdateContestant, useDeleteContestant,
-  uploadContestantPhoto, slugify,
+  normalizeContestPhotoUrl, uploadContestantPhoto, uploadContestLogo, slugify,
   type Contest, type Contestant,
 } from "@/hooks/useContests";
 import { useToast } from "@/hooks/use-toast";
@@ -78,9 +78,9 @@ function ContestantDialog({
     if (!name.trim()) return;
     try {
       if (isEdit) {
-        await update.mutateAsync({ id: existing.id, name: name.trim(), description: desc || null, photo_url: photoUrl || null });
+        await update.mutateAsync({ id: existing.id, name: name.trim(), description: desc || null, photo_url: normalizeContestPhotoUrl(photoUrl) || null });
       } else {
-        await create.mutateAsync({ contest_id: contestId, name: name.trim(), description: desc || null, photo_url: photoUrl || null, display_order: 0 });
+        await create.mutateAsync({ contest_id: contestId, name: name.trim(), description: desc || null, photo_url: normalizeContestPhotoUrl(photoUrl) || null, display_order: 0 });
       }
       toast({ description: isEdit ? "Contestant updated." : "Contestant added." });
       onOpenChange(false);
@@ -111,7 +111,7 @@ function ContestantDialog({
                 <Input
                   placeholder="Paste image URL…"
                   value={photoUrl}
-                  onChange={(e) => setPhotoUrl(e.target.value)}
+                  onChange={(e) => setPhotoUrl(normalizeContestPhotoUrl(e.target.value) ?? "")}
                   className="text-xs"
                 />
                 <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 text-xs"
@@ -151,9 +151,12 @@ function ContestantDialog({
 function SetupTab({ contest }: { contest: Contest }) {
   const { toast }   = useToast();
   const update      = useUpdateContest();
+  const logoRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [form, setForm] = useState({
     title:           contest.title,
     description:     contest.description ?? "",
+    voting_instructions: contest.voting_instructions ?? "",
     client_name:     contest.client_name ?? "",
     client_logo_url: contest.client_logo_url ?? "",
     brand_color:     contest.brand_color,
@@ -171,8 +174,9 @@ function SetupTab({ contest }: { contest: Contest }) {
         id:              contest.id,
         title:           form.title,
         description:     form.description || null,
+        voting_instructions: form.voting_instructions || null,
         client_name:     form.client_name || null,
-        client_logo_url: form.client_logo_url || null,
+        client_logo_url: normalizeContestPhotoUrl(form.client_logo_url) || null,
         brand_color:     form.brand_color,
         brand_accent:    form.brand_accent,
         voting_opens_at:  form.voting_opens_at  ? new Date(form.voting_opens_at).toISOString()  : null,
@@ -188,6 +192,19 @@ function SetupTab({ contest }: { contest: Contest }) {
   };
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleLogo = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const url = await uploadContestLogo(file);
+      set("client_logo_url", url);
+      toast({ description: "Logo uploaded." });
+    } catch (err) {
+      toast({ variant: "destructive", description: err instanceof Error ? err.message : "Logo upload failed" });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -205,9 +222,44 @@ function SetupTab({ contest }: { contest: Contest }) {
           <Textarea rows={2} className="resize-none text-sm" value={form.description}
             onChange={(e) => set("description", e.target.value)} />
         </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <Label>Voting instructions</Label>
+          <Textarea
+            rows={3}
+            className="resize-none text-sm"
+            placeholder="Tell voters how to choose an entry, enter their email, and confirm their vote."
+            value={form.voting_instructions}
+            onChange={(e) => set("voting_instructions", e.target.value)}
+          />
+        </div>
         <div className="space-y-1.5">
-          <Label>Client logo URL</Label>
-          <Input placeholder="https://…" value={form.client_logo_url} onChange={(e) => set("client_logo_url", e.target.value)} />
+          <Label>Client logo</Label>
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-16 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+              {form.client_logo_url
+                ? <img src={form.client_logo_url} alt="" className="max-h-full max-w-full object-contain" />
+                : <Upload size={18} className="text-gray-300" />
+              }
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <Input placeholder="https://…" value={form.client_logo_url} onChange={(e) => set("client_logo_url", normalizeContestPhotoUrl(e.target.value) ?? "")} />
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs"
+                  onClick={() => logoRef.current?.click()} disabled={uploadingLogo}>
+                  <Upload size={12} />
+                  {uploadingLogo ? "Uploading..." : "Upload from computer"}
+                </Button>
+                {form.client_logo_url && (
+                  <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-muted-foreground"
+                    onClick={() => set("client_logo_url", "")}>
+                    <X size={12} /> Remove
+                  </Button>
+                )}
+              </div>
+              <input ref={logoRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLogo(f); e.currentTarget.value = ""; }} />
+            </div>
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label>URL slug</Label>
@@ -462,17 +514,42 @@ function VotesTab({ contest }: { contest: Contest }) {
 // ── Embed tab ─────────────────────────────────────────────────────────────────
 
 function EmbedTab({ contest }: { contest: Contest }) {
-  const [copied, setCopied] = useState<"link" | "embed" | null>(null);
+  const [copied, setCopied] = useState<"link" | "embed" | "simple" | null>(null);
+  const [embedOptions, setEmbedOptions] = useState({
+    layout: "full",
+    photos: true,
+    branding: true,
+    transparent: false,
+  });
 
   const votingUrl  = `${window.location.origin}/vote/${contest.slug}`;
-  const embedSrc   = `${window.location.origin}/embed/${contest.slug}`;
-  const embedCode  = `<iframe src="${embedSrc}" width="100%" height="480" frameborder="0" style="border:none;border-radius:12px;" title="${contest.title} Results"></iframe>`;
+  const embedParams = new URLSearchParams();
+  if (embedOptions.layout === "compact") embedParams.set("layout", "compact");
+  if (!embedOptions.photos) embedParams.set("photos", "false");
+  if (!embedOptions.branding) embedParams.set("branding", "false");
+  if (embedOptions.transparent) embedParams.set("bg", "transparent");
+  const embedQuery = embedParams.toString();
+  const embedSrc   = `${window.location.origin}/embed/${contest.slug}${embedQuery ? `?${embedQuery}` : ""}`;
+  const iframeId   = `lv-contest-${contest.slug}`;
+  const titleAttr  = `${contest.title} Results`.replace(/"/g, "&quot;");
+  const simpleEmbedCode = `<iframe src="${embedSrc}" width="100%" height="520" loading="lazy" style="width:100%;max-width:100%;min-height:360px;border:0;border-radius:12px;display:block;overflow:hidden;" title="${titleAttr}"></iframe>`;
+  const embedCode  = `<iframe id="${iframeId}" src="${embedSrc}" width="100%" height="520" loading="lazy" style="width:100%;max-width:100%;min-height:360px;border:0;border-radius:12px;display:block;overflow:hidden;" title="${titleAttr}"></iframe>
+<script>
+  window.addEventListener("message", function(event) {
+    if (!event.data || event.data.type !== "lv-contest-widget-height" || event.data.slug !== "${contest.slug}") return;
+    var iframe = document.getElementById("${iframeId}");
+    if (iframe && event.data.height) iframe.style.height = Math.max(360, event.data.height) + "px";
+  });
+</script>`;
 
-  const copy = (text: string, which: "link" | "embed") => {
+  const copy = (text: string, which: "link" | "embed" | "simple") => {
     navigator.clipboard.writeText(text);
     setCopied(which);
     setTimeout(() => setCopied(null), 2000);
   };
+
+  const setEmbed = (k: keyof typeof embedOptions, v: string | boolean) =>
+    setEmbedOptions((opts) => ({ ...opts, [k]: v }));
 
   return (
     <div className="space-y-6">
@@ -495,8 +572,32 @@ function EmbedTab({ contest }: { contest: Contest }) {
       <div className="space-y-2">
         <Label className="text-sm font-semibold">Results Widget (Embed)</Label>
         <p className="text-xs text-muted-foreground">
-          Paste this into any page on your client's website to show live vote counts. Updates every 30 seconds.
+          Paste this into any page on your client's website to show live vote counts. The smart version auto-resizes in most Wix, WordPress, and custom HTML blocks.
         </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-muted/30 p-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Layout</Label>
+            <Select value={embedOptions.layout} onValueChange={(v) => setEmbed("layout", v)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full">Full leaderboard</SelectItem>
+                <SelectItem value="compact">Compact</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+            <Label className="text-xs">Show photos</Label>
+            <Switch checked={embedOptions.photos} onCheckedChange={(v) => setEmbed("photos", v)} />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+            <Label className="text-xs">LV Branding footer</Label>
+            <Switch checked={embedOptions.branding} onCheckedChange={(v) => setEmbed("branding", v)} />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+            <Label className="text-xs">Transparent background</Label>
+            <Switch checked={embedOptions.transparent} onCheckedChange={(v) => setEmbed("transparent", v)} />
+          </div>
+        </div>
         <div className="relative">
           <pre className="bg-gray-900 text-gray-100 text-xs rounded-xl p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed">
             {embedCode}
@@ -511,6 +612,10 @@ function EmbedTab({ contest }: { contest: Contest }) {
             <a href={embedSrc} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={11} /> Preview Widget
             </a>
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+            onClick={() => copy(simpleEmbedCode, "simple")}>
+            {copied === "simple" ? <><Check size={11} className="text-green-500" /> Copied fallback</> : <><Copy size={11} /> Copy iframe only</>}
           </Button>
         </div>
       </div>

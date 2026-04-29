@@ -56,6 +56,7 @@ function CreateDialog({
         slug:                slug.trim(),
         title:               title.trim(),
         description:         null,
+        voting_instructions: null,
         client_name:         client.trim() || null,
         client_logo_url:     null,
         brand_color:         "#CB2039",

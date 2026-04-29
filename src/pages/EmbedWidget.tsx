@@ -5,7 +5,7 @@
  * Fully inline-styled so it works standalone inside any client iframe.
  */
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 
 // Lightweight standalone Supabase client (anon key — public read only)
@@ -39,6 +39,11 @@ interface VoteCountRow {
 
 export default function EmbedWidget() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const compact = searchParams.get("layout") === "compact";
+  const showPhotos = searchParams.get("photos") !== "false";
+  const showBranding = searchParams.get("branding") !== "false";
+  const transparent = searchParams.get("bg") === "transparent";
 
   const [contest, setContest] = useState<ContestRow | null>(null);
   const [contestants, setContestants] = useState<ContestantRow[]>([]);
@@ -109,6 +114,27 @@ export default function EmbedWidget() {
     return () => clearInterval(interval);
   }, [load]);
 
+  useEffect(() => {
+    const sendHeight = () => {
+      window.parent?.postMessage(
+        {
+          type: "lv-contest-widget-height",
+          slug,
+          height: document.documentElement.scrollHeight,
+        },
+        "*"
+      );
+    };
+
+    sendHeight();
+    const timeout = window.setTimeout(sendHeight, 150);
+    window.addEventListener("resize", sendHeight);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("resize", sendHeight);
+    };
+  }, [slug, contestants, total, loading, error, compact, showPhotos, showBranding]);
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   const brand   = contest?.brand_color  ?? "#CB2039";
   const accent  = contest?.brand_accent ?? "#1A1A2E";
@@ -120,7 +146,7 @@ export default function EmbedWidget() {
   // ── Render states ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={styles.root(accent)}>
+      <div style={styles.root(accent, transparent)}>
         <div style={styles.loading}>Loading results…</div>
       </div>
     );
@@ -128,7 +154,7 @@ export default function EmbedWidget() {
 
   if (error || !contest) {
     return (
-      <div style={styles.root(accent)}>
+      <div style={styles.root(accent, transparent)}>
         <div style={styles.errorMsg}>{error ?? "Contest not found."}</div>
       </div>
     );
@@ -136,7 +162,7 @@ export default function EmbedWidget() {
 
   if (!contest.results_public && contest.status !== "closed" && contest.status !== "winner_announced") {
     return (
-      <div style={styles.root(accent)}>
+      <div style={styles.root(accent, transparent)}>
         <div style={styles.errorMsg}>Results for this contest are not public yet.</div>
       </div>
     );
@@ -145,9 +171,9 @@ export default function EmbedWidget() {
   const isWinnerAnnounced = contest.status === "winner_announced";
 
   return (
-    <div style={styles.root(accent)}>
+    <div style={styles.root(accent, transparent)}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={styles.header(compact)}>
         <span style={styles.trophy}>🏆</span>
         <h2 style={styles.title(brand)}>{contest.title}</h2>
       </div>
@@ -169,13 +195,13 @@ export default function EmbedWidget() {
             const isFirst   = i === 0;
 
             return (
-              <div key={c.id} style={styles.row(isWinner, brand)}>
+              <div key={c.id} style={styles.row(isWinner, brand, compact)}>
                 {/* Rank + photo */}
                 <div style={styles.left}>
                   <span style={styles.rank(isFirst, brand)}>
                     {isWinner ? "👑" : `#${i + 1}`}
                   </span>
-                  {c.photo_url && (
+                  {showPhotos && c.photo_url && (
                     <img
                       src={c.photo_url}
                       alt={c.name}
@@ -203,17 +229,19 @@ export default function EmbedWidget() {
       <div style={styles.footer}>
         <span>{total.toLocaleString()} vote{total !== 1 ? "s" : ""}</span>
         {timeAgo && <span style={styles.timeAgo}>{timeAgo}</span>}
-        <span>
-          Powered by{" "}
-          <a
-            href="https://www.lvbranding.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={styles.footerLink(brand)}
-          >
-            LV Branding
-          </a>
-        </span>
+        {showBranding && (
+          <span>
+            Powered by{" "}
+            <a
+              href="https://www.lvbranding.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.footerLink(brand)}
+            >
+              LV Branding
+            </a>
+          </span>
+        )}
       </div>
     </div>
   );
@@ -222,18 +250,20 @@ export default function EmbedWidget() {
 // ── Inline style helpers (keeps this self-contained for iframe use) ────────
 
 const styles = {
-  root: (accent: string) =>
+  root: (accent: string, transparent: boolean) =>
     ({
       fontFamily:
         "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-      background: "#ffffff",
+      background: transparent ? "transparent" : "#ffffff",
       border: `1px solid ${accent}22`,
       borderRadius: "12px",
       padding: "16px",
-      minWidth: "240px",
+      width: "100%",
+      minWidth: 0,
       maxWidth: "100%",
       boxSizing: "border-box",
       color: "#111827",
+      overflow: "hidden",
     } as React.CSSProperties),
 
   loading: {
@@ -250,12 +280,12 @@ const styles = {
     padding: "24px 0",
   },
 
-  header: {
+  header: (compact: boolean) => ({
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    marginBottom: "12px",
-  },
+    marginBottom: compact ? "8px" : "12px",
+  } as React.CSSProperties),
 
   trophy: {
     fontSize: "18px",
@@ -296,11 +326,11 @@ const styles = {
     gap: "10px",
   },
 
-  row: (isWinner: boolean, brand: string) =>
+  row: (isWinner: boolean, brand: string, compact: boolean) =>
     ({
       background: isWinner ? `${brand}08` : "#F9FAFB",
       borderRadius: "8px",
-      padding: "10px 12px",
+      padding: compact ? "8px 10px" : "10px 12px",
       border: isWinner ? `1px solid ${brand}30` : "1px solid #E5E7EB",
     } as React.CSSProperties),
 
@@ -309,6 +339,7 @@ const styles = {
     alignItems: "center",
     gap: "8px",
     marginBottom: "6px",
+    minWidth: 0,
   },
 
   rank: (isFirst: boolean, brand: string) =>
@@ -342,6 +373,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "8px",
+    minWidth: 0,
   },
 
   barTrack: {
