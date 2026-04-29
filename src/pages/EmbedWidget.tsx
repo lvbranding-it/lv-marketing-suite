@@ -222,10 +222,7 @@ export default function EmbedWidget() {
         </div>
       )}
 
-      <div style={styles.header(compact)}>
-        <span style={styles.trophy}>🏆</span>
-        <h3 style={styles.title(brand)}>Leaderboard</h3>
-      </div>
+      <h3 style={styles.resultsHeading(compact)}>Here are the results.</h3>
 
       {isWinnerAnnounced && contest.winner_contestant_id && (
         <div style={styles.winnerBanner(brand)}>
@@ -238,35 +235,17 @@ export default function EmbedWidget() {
         <p style={styles.empty}>No contestants yet.</p>
       ) : (
         <div style={styles.list}>
-          {contestants.map((c, i) => {
+          {contestants.map((c) => {
             const pct       = total > 0 ? Math.round((c.vote_count / total) * 100) : 0;
             const isWinner  = c.id === contest.winner_contestant_id;
-            const isFirst   = i === 0;
 
             return (
-              <div key={c.id} style={styles.row(isWinner, brand, compact)}>
-                {/* Rank + photo */}
-                <div style={styles.left}>
-                  <span style={styles.rank(isFirst, brand)}>
-                    {isWinner ? "👑" : `#${i + 1}`}
-                  </span>
-                  {showPhotos && c.photo_url && (
-                    <img
-                      src={c.photo_url}
-                      alt={c.name}
-                      style={styles.photo}
-                    />
-                  )}
-                  <span style={styles.name(isWinner)}>{c.name}</span>
-                </div>
-
-                {/* Bar + pct */}
-                <div style={styles.barWrap}>
-                  <div style={styles.barTrack}>
-                    <div style={styles.barFill(pct, brand)} />
-                  </div>
-                  <span style={styles.pct(brand)}>{pct}%</span>
-                  <span style={styles.votes}>{c.vote_count.toLocaleString()}</span>
+              <div key={c.id} style={styles.resultBar(brand, accent, isWinner, compact)}>
+                <div style={styles.resultFill(pct)} />
+                <div style={styles.resultText(compact)}>
+                  <span>{c.name}</span>
+                  <span aria-hidden="true"> - </span>
+                  <strong>{pct}%</strong>
                 </div>
               </div>
             );
@@ -390,6 +369,15 @@ const styles = {
     whiteSpace: "pre-line" as const,
   },
 
+  resultsHeading: (compact: boolean) => ({
+    margin: compact ? "4px 0 16px" : "8px 0 22px",
+    color: "#111827",
+    fontSize: compact ? "24px" : "30px",
+    fontWeight: 400,
+    lineHeight: 1.2,
+    textAlign: "center" as const,
+  } as React.CSSProperties),
+
   header: (compact: boolean) => ({
     display: "flex",
     alignItems: "center",
@@ -433,8 +421,45 @@ const styles = {
   list: {
     display: "flex",
     flexDirection: "column" as const,
-    gap: "10px",
+    gap: "14px",
   },
+
+  resultBar: (brand: string, accent: string, isWinner: boolean, compact: boolean) => ({
+    position: "relative" as const,
+    minHeight: compact ? "50px" : "64px",
+    borderRadius: "10px",
+    overflow: "hidden",
+    background: brand,
+    border: `1px solid ${accent}55`,
+    boxShadow: isWinner
+      ? `0 0 0 2px ${brand}40, inset 0 0 0 1px rgba(255,255,255,0.16)`
+      : "inset 0 0 0 1px rgba(255,255,255,0.12)",
+  } as React.CSSProperties),
+
+  resultFill: (pct: number) => ({
+    position: "absolute" as const,
+    inset: "0 auto 0 0",
+    width: `${Math.max(0, Math.min(100, pct))}%`,
+    background: "rgba(255,255,255,0.16)",
+  } as React.CSSProperties),
+
+  resultText: (compact: boolean) => ({
+    position: "relative" as const,
+    zIndex: 1,
+    minHeight: compact ? "50px" : "64px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap" as const,
+    gap: "2px",
+    padding: compact ? "10px 14px" : "12px 18px",
+    color: "#FFFFFF",
+    fontSize: compact ? "18px" : "24px",
+    fontWeight: 400,
+    lineHeight: 1.2,
+    textAlign: "center" as const,
+    letterSpacing: "0",
+  } as React.CSSProperties),
 
   row: (isWinner: boolean, brand: string, compact: boolean) =>
     ({

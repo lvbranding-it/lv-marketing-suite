@@ -374,6 +374,12 @@ verify_jwt = false
 [functions.invite-branch-member]
 verify_jwt = false
 
+[functions.contest-vote]
+verify_jwt = false
+
+[functions.contest-verify]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
