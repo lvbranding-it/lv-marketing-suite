@@ -426,7 +426,7 @@ const styles = {
 
   resultBar: (brand: string, accent: string, isWinner: boolean, compact: boolean) => ({
     position: "relative" as const,
-    minHeight: compact ? "50px" : "64px",
+    minHeight: compact ? "38px" : "46px",
     borderRadius: "10px",
     overflow: "hidden",
     background: brand,
@@ -446,15 +446,15 @@ const styles = {
   resultText: (compact: boolean) => ({
     position: "relative" as const,
     zIndex: 1,
-    minHeight: compact ? "50px" : "64px",
+    minHeight: compact ? "38px" : "46px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap" as const,
     gap: "2px",
-    padding: compact ? "10px 14px" : "12px 18px",
+    padding: compact ? "7px 12px" : "8px 14px",
     color: "#FFFFFF",
-    fontSize: compact ? "18px" : "24px",
+    fontSize: compact ? "15px" : "18px",
     fontWeight: 400,
     lineHeight: 1.2,
     textAlign: "center" as const,
