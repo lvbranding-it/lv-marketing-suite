@@ -56,12 +56,6 @@ serve(async (req) => {
     return json({ error: "This verification link has expired. Please vote again." }, 410);
   }
 
-  // ── Mark token as used ────────────────────────────────────────────────────
-  await db
-    .from("vote_verifications")
-    .update({ used_at: new Date().toISOString() })
-    .eq("id", verif.id);
-
   // ── Upsert the verified vote ──────────────────────────────────────────────
   // (upsert handles the rare case of duplicate confirmation clicks)
   const now = new Date().toISOString();
@@ -78,6 +72,18 @@ serve(async (req) => {
   if (voteErr) {
     console.error("vote upsert error:", voteErr);
     return json({ error: "Failed to record vote" }, 500);
+  }
+
+  // ── Mark token as used only after the vote is safely recorded ─────────────
+  const { error: usedErr } = await db
+    .from("vote_verifications")
+    .update({ used_at: now })
+    .eq("id", verif.id)
+    .is("used_at", null);
+
+  if (usedErr) {
+    console.error("verification update error:", usedErr);
+    return json({ error: "Vote recorded, but failed to finalize verification" }, 500);
   }
 
   // ── Fetch contestant name for the confirmation message ────────────────────

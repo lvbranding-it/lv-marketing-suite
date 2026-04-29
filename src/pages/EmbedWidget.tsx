@@ -32,6 +32,11 @@ interface ContestantRow {
   vote_count: number;
 }
 
+interface VoteCountRow {
+  contestant_id: string;
+  vote_count: number | string;
+}
+
 export default function EmbedWidget() {
   const { slug } = useParams<{ slug: string }>();
 
@@ -60,7 +65,9 @@ export default function EmbedWidget() {
 
     setContest(c);
 
-    if (!c.results_public) {
+    const canShowResults = c.results_public || c.status === "closed" || c.status === "winner_announced";
+
+    if (!canShowResults) {
       setLoading(false);
       return;
     }
@@ -77,16 +84,13 @@ export default function EmbedWidget() {
       return;
     }
 
-    // ── Fetch verified votes ───────────────────────────────────────────────
+    // ── Fetch aggregate verified vote counts ───────────────────────────────
     const { data: votes } = await supabase
-      .from("votes")
-      .select("contestant_id")
-      .eq("contest_id", c.id)
-      .not("verified_at", "is", null);
+      .rpc("get_contest_vote_counts", { _contest_id: c.id });
 
     const counts: Record<string, number> = {};
-    votes?.forEach((v) => {
-      counts[v.contestant_id] = (counts[v.contestant_id] ?? 0) + 1;
+    (votes as VoteCountRow[] | null)?.forEach((v) => {
+      counts[v.contestant_id] = Number(v.vote_count ?? 0);
     });
 
     const withCounts: ContestantRow[] = cs
@@ -130,7 +134,7 @@ export default function EmbedWidget() {
     );
   }
 
-  if (!contest.results_public) {
+  if (!contest.results_public && contest.status !== "closed" && contest.status !== "winner_announced") {
     return (
       <div style={styles.root(accent)}>
         <div style={styles.errorMsg}>Results for this contest are not public yet.</div>

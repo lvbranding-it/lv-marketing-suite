@@ -8,20 +8,18 @@ import { OrgProvider } from "@/hooks/useOrg";
 import { LanguageProvider } from "@/hooks/useLanguage";
 
 // Pages
-import Auth from "@/pages/Auth";
-import Dashboard from "@/pages/Dashboard";
-import SkillsLibrary from "@/pages/SkillsLibrary";
-import SkillRunnerPage from "@/pages/SkillRunnerPage";
-import Projects from "@/pages/Projects";
-import ProjectDetail from "@/pages/ProjectDetail";
-import History from "@/pages/History";
-import Settings from "@/pages/Settings";
-import Contacts from "@/pages/Contacts";
-import Intake from "@/pages/Intake";
-import IntakeForm from "@/pages/IntakeForm";
-import OutputDetail from "@/pages/OutputDetail";
-
-// Lazy pages
+const Auth                 = lazy(() => import("@/pages/Auth"));
+const Dashboard            = lazy(() => import("@/pages/Dashboard"));
+const SkillsLibrary        = lazy(() => import("@/pages/SkillsLibrary"));
+const SkillRunnerPage      = lazy(() => import("@/pages/SkillRunnerPage"));
+const Projects             = lazy(() => import("@/pages/Projects"));
+const ProjectDetail        = lazy(() => import("@/pages/ProjectDetail"));
+const History              = lazy(() => import("@/pages/History"));
+const Settings             = lazy(() => import("@/pages/Settings"));
+const Contacts             = lazy(() => import("@/pages/Contacts"));
+const Intake               = lazy(() => import("@/pages/Intake"));
+const IntakeForm           = lazy(() => import("@/pages/IntakeForm"));
+const OutputDetail         = lazy(() => import("@/pages/OutputDetail"));
 const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const CampaignComposer = lazy(() => import("@/pages/CampaignComposer"));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail"));
@@ -57,8 +55,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/auth" element={<Auth />} />
-      <Route path="/intake/:orgId" element={<IntakeForm />} />
+      <Route path="/auth" element={<Suspense fallback={null}><Auth /></Suspense>} />
+      <Route path="/intake/:orgId" element={<Suspense fallback={null}><IntakeForm /></Suspense>} />
       <Route path="/unsubscribe"   element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />
       <Route path="/accept-invite" element={<Suspense fallback={null}><AcceptInvite /></Suspense>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -66,7 +64,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <Suspense fallback={null}><Dashboard /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -74,7 +72,7 @@ function AppRoutes() {
         path="/skills"
         element={
           <ProtectedRoute>
-            <SkillsLibrary />
+            <Suspense fallback={null}><SkillsLibrary /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -82,7 +80,7 @@ function AppRoutes() {
         path="/skills/:skillId"
         element={
           <ProtectedRoute>
-            <SkillRunnerPage />
+            <Suspense fallback={null}><SkillRunnerPage /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -90,7 +88,7 @@ function AppRoutes() {
         path="/projects"
         element={
           <ProtectedRoute>
-            <Projects />
+            <Suspense fallback={null}><Projects /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -98,7 +96,7 @@ function AppRoutes() {
         path="/projects/:projectId"
         element={
           <ProtectedRoute>
-            <ProjectDetail />
+            <Suspense fallback={null}><ProjectDetail /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -114,7 +112,7 @@ function AppRoutes() {
         path="/contacts"
         element={
           <ProtectedRoute>
-            <Contacts />
+            <Suspense fallback={null}><Contacts /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -146,7 +144,7 @@ function AppRoutes() {
         path="/outputs/:outputId"
         element={
           <ProtectedRoute>
-            <OutputDetail />
+            <Suspense fallback={null}><OutputDetail /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -154,7 +152,7 @@ function AppRoutes() {
         path="/history"
         element={
           <ProtectedRoute>
-            <History />
+            <Suspense fallback={null}><History /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -162,7 +160,7 @@ function AppRoutes() {
         path="/settings"
         element={
           <ProtectedRoute>
-            <Settings />
+            <Suspense fallback={null}><Settings /></Suspense>
           </ProtectedRoute>
         }
       />
@@ -170,7 +168,7 @@ function AppRoutes() {
         path="/intake"
         element={
           <ProtectedRoute>
-            <Intake />
+            <Suspense fallback={null}><Intake /></Suspense>
           </ProtectedRoute>
         }
       />

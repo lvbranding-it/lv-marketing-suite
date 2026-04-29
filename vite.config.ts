@@ -10,7 +10,11 @@ export default defineConfig({
       overlay: false,
     },
   },
-  plugins: [react()],
+  plugins: [
+    react({
+      useAtYourOwnRisk_mutateSwcOptions: () => {},
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

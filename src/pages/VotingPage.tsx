@@ -83,18 +83,38 @@ function VerifyPage({ slug }: { slug: string }) {
   );
 }
 
+function formatCountdown(target: Date, now: Date) {
+  const remaining = Math.max(0, target.getTime() - now.getTime());
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
 // ── Main voting page ──────────────────────────────────────────────────────────
 
 export default function VotingPage() {
   const { slug } = useParams<{ slug: string }>();
-  const [searchParams] = useSearchParams();
   const isVerify = window.location.pathname.includes("/verify");
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   const { data: contest, isLoading: contestLoading } = useContestBySlug(slug);
   const { data: contestants = [], isLoading: cLoading } = useContestants(contest?.id);
+  const opensAt = contest?.voting_opens_at ? new Date(contest.voting_opens_at) : null;
+  const closesAt = contest?.voting_closes_at ? new Date(contest.voting_closes_at) : null;
+  const hasStarted = !opensAt || opensAt <= currentTime;
+  const hasNotClosed = !closesAt || closesAt >= currentTime;
+  const isOpen = contest?.status === "active" && hasStarted && hasNotClosed;
+  const isUpcoming = contest?.status === "active" && !hasStarted;
+  const isClosed = contest?.status === "closed" || contest?.status === "winner_announced" || (contest?.status === "active" && !hasNotClosed);
   const { data: counts = {} } = useVoteCounts(
     contest?.id,
-    contest?.status === "active" && contest?.results_public
+    isOpen && contest?.results_public
   );
 
   const [selected, setSelected]   = useState<string | null>(null);
@@ -103,14 +123,19 @@ export default function VotingPage() {
   const [errMsg, setErrMsg]       = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   if (isVerify && slug) return <VerifyPage slug={slug} />;
 
   const isLoading = contestLoading || cLoading;
   const brandColor  = contest?.brand_color  ?? "#CB2039";
   const brandAccent = contest?.brand_accent ?? "#1A1A2E";
   const totalVotes  = Object.values(counts).reduce((s, n) => s + n, 0);
-  const isOpen      = contest?.status === "active";
-  const isClosed    = contest?.status === "closed" || contest?.status === "winner_announced";
+  const countdownTarget = isUpcoming ? opensAt : isOpen ? closesAt : null;
+  const countdownLabel = isUpcoming ? "Voting opens in" : "Voting closes in";
 
   const winner = contest?.winner_contestant_id
     ? contestants.find((c) => c.id === contest.winner_contestant_id)
@@ -216,6 +241,11 @@ export default function VotingPage() {
               Voting Open
             </span>
           )}
+          {isUpcoming && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full">
+              <Clock size={10} /> Opens Soon
+            </span>
+          )}
           {isClosed && (
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
               <Clock size={10} /> Voting Closed
@@ -230,6 +260,13 @@ export default function VotingPage() {
         {contest.description && <p className="text-gray-500 text-base">{contest.description}</p>}
         {contest.results_public && totalVotes > 0 && (
           <p className="text-xs text-gray-400 mt-2">{totalVotes.toLocaleString()} vote{totalVotes !== 1 ? "s" : ""} cast</p>
+        )}
+        {countdownTarget && (
+          <div className="inline-flex items-center gap-2 mt-4 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold shadow-sm">
+            <Clock size={14} style={{ color: brandColor }} />
+            <span className="text-gray-500">{countdownLabel}</span>
+            <span style={{ color: brandColor }}>{formatCountdown(countdownTarget, currentTime)}</span>
+          </div>
         )}
       </div>
 
@@ -367,6 +404,13 @@ export default function VotingPage() {
             <Clock size={28} className="mx-auto text-gray-300 mb-2" />
             <p className="font-medium text-gray-600">Voting is closed</p>
             <p className="text-sm text-gray-400 mt-1">Results will be announced soon.</p>
+          </div>
+        )}
+        {isUpcoming && (
+          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
+            <Clock size={28} className="mx-auto text-amber-400 mb-2" />
+            <p className="font-medium text-amber-800">Voting has not opened yet</p>
+            <p className="text-sm text-amber-600 mt-1">Come back when the countdown reaches zero.</p>
           </div>
         )}
       </div>

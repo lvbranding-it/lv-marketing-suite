@@ -134,14 +134,11 @@ export function useVoteCounts(contestId: string | undefined, liveRefresh = false
     queryFn: async () => {
       if (!contestId) return {};
       const { data, error } = await db
-        .from("votes")
-        .select("contestant_id")
-        .eq("contest_id", contestId)
-        .not("verified_at", "is", null);
+        .rpc("get_contest_vote_counts", { _contest_id: contestId });
       if (error) throw error;
       const counts: Record<string, number> = {};
       for (const row of data ?? []) {
-        counts[row.contestant_id] = (counts[row.contestant_id] ?? 0) + 1;
+        counts[row.contestant_id] = Number(row.vote_count ?? 0);
       }
       return counts;
     },

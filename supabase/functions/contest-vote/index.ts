@@ -188,28 +188,33 @@ serve(async (req) => {
     contestSlug:    contest.slug,
   });
 
-  if (SENDGRID_API_KEY) {
-    try {
-      const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SENDGRID_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email }] }],
-          from:    { email: FROM_EMAIL, name: FROM_NAME },
-          subject: `Confirm your vote — ${contest.title}`,
-          content: [{ type: "text/html", value: html }],
-        }),
-      });
-      if (sgRes.status !== 202) {
-        const err = await sgRes.text();
-        console.error("SendGrid error:", sgRes.status, err);
-      }
-    } catch (e) {
-      console.error("SendGrid fetch error:", e);
+  if (!SENDGRID_API_KEY) {
+    console.error("SENDGRID_API_KEY is not configured");
+    return json({ error: "Verification email is not configured" }, 500);
+  }
+
+  try {
+    const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email }] }],
+        from:    { email: FROM_EMAIL, name: FROM_NAME },
+        subject: `Confirm your vote — ${contest.title}`,
+        content: [{ type: "text/html", value: html }],
+      }),
+    });
+    if (sgRes.status !== 202) {
+      const err = await sgRes.text();
+      console.error("SendGrid error:", sgRes.status, err);
+      return json({ error: "Failed to send verification email" }, 502);
     }
+  } catch (e) {
+    console.error("SendGrid fetch error:", e);
+    return json({ error: "Failed to send verification email" }, 502);
   }
 
   return json({
