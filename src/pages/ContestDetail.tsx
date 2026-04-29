@@ -517,6 +517,7 @@ function EmbedTab({ contest }: { contest: Contest }) {
   const [copied, setCopied] = useState<"link" | "embed" | "simple" | null>(null);
   const [embedOptions, setEmbedOptions] = useState({
     layout: "full",
+    info: true,
     photos: true,
     branding: true,
     transparent: false,
@@ -525,6 +526,7 @@ function EmbedTab({ contest }: { contest: Contest }) {
   const votingUrl  = `${window.location.origin}/vote/${contest.slug}`;
   const embedParams = new URLSearchParams();
   if (embedOptions.layout === "compact") embedParams.set("layout", "compact");
+  if (!embedOptions.info) embedParams.set("info", "false");
   if (!embedOptions.photos) embedParams.set("photos", "false");
   if (!embedOptions.branding) embedParams.set("branding", "false");
   if (embedOptions.transparent) embedParams.set("bg", "transparent");
@@ -532,13 +534,13 @@ function EmbedTab({ contest }: { contest: Contest }) {
   const embedSrc   = `${window.location.origin}/embed/${contest.slug}${embedQuery ? `?${embedQuery}` : ""}`;
   const iframeId   = `lv-contest-${contest.slug}`;
   const titleAttr  = `${contest.title} Results`.replace(/"/g, "&quot;");
-  const simpleEmbedCode = `<iframe src="${embedSrc}" width="100%" height="520" loading="lazy" style="width:100%;max-width:100%;min-height:360px;border:0;border-radius:12px;display:block;overflow:hidden;" title="${titleAttr}"></iframe>`;
-  const embedCode  = `<iframe id="${iframeId}" src="${embedSrc}" width="100%" height="520" loading="lazy" style="width:100%;max-width:100%;min-height:360px;border:0;border-radius:12px;display:block;overflow:hidden;" title="${titleAttr}"></iframe>
+  const simpleEmbedCode = `<iframe src="${embedSrc}" width="100%" height="320" loading="lazy" style="width:100%;max-width:620px;min-height:220px;border:0;border-radius:14px;display:block;overflow:hidden;margin:0 auto;" title="${titleAttr}"></iframe>`;
+  const embedCode  = `<iframe id="${iframeId}" src="${embedSrc}" width="100%" height="320" loading="lazy" style="width:100%;max-width:620px;min-height:220px;border:0;border-radius:14px;display:block;overflow:hidden;margin:0 auto;" title="${titleAttr}"></iframe>
 <script>
   window.addEventListener("message", function(event) {
     if (!event.data || event.data.type !== "lv-contest-widget-height" || event.data.slug !== "${contest.slug}") return;
     var iframe = document.getElementById("${iframeId}");
-    if (iframe && event.data.height) iframe.style.height = Math.max(360, event.data.height) + "px";
+    if (iframe && event.data.height) iframe.style.height = Math.max(220, event.data.height) + "px";
   });
 </script>`;
 
@@ -584,6 +586,10 @@ function EmbedTab({ contest }: { contest: Contest }) {
                 <SelectItem value="compact">Compact</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+            <Label className="text-xs">Show event info</Label>
+            <Switch checked={embedOptions.info} onCheckedChange={(v) => setEmbed("info", v)} />
           </div>
           <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
             <Label className="text-xs">Show photos</Label>
