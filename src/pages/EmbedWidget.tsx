@@ -219,7 +219,6 @@ export default function EmbedWidget() {
           </div>
           <h2 style={styles.eventTitle(brand)}>{contest.title}</h2>
           {contest.description && <p style={styles.description}>{contest.description}</p>}
-          {contest.voting_instructions && <p style={styles.instructions}>{contest.voting_instructions}</p>}
         </div>
       )}
 
@@ -388,19 +387,6 @@ const styles = {
     fontSize: "13px",
     lineHeight: 1.55,
     margin: "8px 0 0",
-    whiteSpace: "pre-line" as const,
-  },
-
-  instructions: {
-    color: "#6B7280",
-    background: "#F9FAFB",
-    border: "1px solid #E5E7EB",
-    borderRadius: "8px",
-    fontSize: "12px",
-    lineHeight: 1.55,
-    margin: "10px 0 0",
-    padding: "9px 10px",
-    textAlign: "left" as const,
     whiteSpace: "pre-line" as const,
   },
 
