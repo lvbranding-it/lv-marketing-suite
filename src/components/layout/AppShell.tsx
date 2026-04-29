@@ -21,6 +21,7 @@ import {
   Crown,
   RefreshCw,
   FolderDown,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
   { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
+  { to: "/contests",  labelKey: "nav.contests", icon: Trophy },
   { to: "/photo-sessions", labelKey: "nav.photoSessions", icon: Camera },
   { to: "/files", labelKey: "nav.fileDrop", icon: FolderDown },
   { to: "/history", labelKey: "nav.history", icon: History },

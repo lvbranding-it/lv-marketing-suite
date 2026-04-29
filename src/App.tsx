@@ -33,6 +33,10 @@ const PhotoSessionDetail   = lazy(() => import("@/pages/PhotoSessionDetail"));
 const ClientPhotoSelection = lazy(() => import("@/pages/ClientPhotoSelection"));
 const FileDrop             = lazy(() => import("@/pages/FileDrop"));
 const ClientUpload         = lazy(() => import("@/pages/ClientUpload"));
+const Contests             = lazy(() => import("@/pages/Contests"));
+const ContestDetail        = lazy(() => import("@/pages/ContestDetail"));
+const VotingPage           = lazy(() => import("@/pages/VotingPage"));
+const EmbedWidget          = lazy(() => import("@/pages/EmbedWidget"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -205,6 +209,37 @@ function AppRoutes() {
       <Route
         path="/upload/:token"
         element={<Suspense fallback={null}><ClientUpload /></Suspense>}
+      />
+      {/* Contests — admin (protected) */}
+      <Route
+        path="/contests"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><Contests /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contests/:id"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><ContestDetail /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      {/* Voting — public pages (no auth) */}
+      <Route
+        path="/vote/:slug"
+        element={<Suspense fallback={null}><VotingPage /></Suspense>}
+      />
+      <Route
+        path="/vote/:slug/verify"
+        element={<Suspense fallback={null}><VotingPage /></Suspense>}
+      />
+      {/* Embed widget — public iframe results (no auth) */}
+      <Route
+        path="/embed/:slug"
+        element={<Suspense fallback={null}><EmbedWidget /></Suspense>}
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
