@@ -327,7 +327,7 @@ const styles = {
   root: (accent: string, transparent: boolean) =>
     ({
       fontFamily:
-        "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+        "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
       background: transparent ? "transparent" : "#ffffff",
       border: `1px solid ${accent}22`,
       borderRadius: "14px",
@@ -524,7 +524,7 @@ const styles = {
     width: "100%",
     minHeight: "34px",
     color: "#111827",
-    fontSize: isWinner ? "13px" : "12px",
+    fontSize: isWinner ? "12px" : "11px",
     fontWeight: isWinner ? 800 : 700,
     lineHeight: 1.25,
     textAlign: "center" as const,
@@ -633,8 +633,8 @@ const styles = {
     gap: "2px",
     padding: compact ? "7px 12px" : "8px 14px",
     color: "#FFFFFF",
-    fontSize: compact ? "15px" : "18px",
-    fontWeight: 400,
+    fontSize: compact ? "13px" : "14px",
+    fontWeight: 500,
     lineHeight: 1.2,
     textAlign: "center" as const,
     letterSpacing: "0",
