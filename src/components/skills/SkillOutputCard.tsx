@@ -1,4 +1,4 @@
-import { Star, Trash2, ExternalLink, FileDown } from "lucide-react";
+import { Star, Trash2, ExternalLink, FileDown, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,10 @@ import { es } from "date-fns/locale";
 interface SkillOutputCardProps {
   output: SkillOutputRow;
   onDownloadPdf?: (output: SkillOutputRow) => void;
+  onDownloadWord?: (output: SkillOutputRow) => void;
 }
 
-export default function SkillOutputCard({ output, onDownloadPdf }: SkillOutputCardProps) {
+export default function SkillOutputCard({ output, onDownloadPdf, onDownloadWord }: SkillOutputCardProps) {
   const navigate = useNavigate();
   const { language, t } = useLanguage();
   const updateOutput = useUpdateSkillOutput();
@@ -50,6 +51,11 @@ export default function SkillOutputCard({ output, onDownloadPdf }: SkillOutputCa
   const handleDownloadPdf = (e: React.MouseEvent) => {
     e.stopPropagation();
     onDownloadPdf?.(output);
+  };
+
+  const handleDownloadWord = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDownloadWord?.(output);
   };
 
   return (
@@ -109,6 +115,17 @@ export default function SkillOutputCard({ output, onDownloadPdf }: SkillOutputCa
               title="Download print-ready PDF"
             >
               <FileDown size={13} />
+            </Button>
+          )}
+          {onDownloadWord && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={handleDownloadWord}
+              title="Download Word document"
+            >
+              <FileText size={13} />
             </Button>
           )}
         </div>

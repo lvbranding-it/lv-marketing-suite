@@ -11,7 +11,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { SKILLS } from "@/data/skills";
 import { useLanguage } from "@/hooks/useLanguage";
 import { localizeSkill } from "@/data/skillTranslations";
-import PrintableOutput, { prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
+import PrintableOutput, { downloadOutputWordDocument, prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
 import type { SkillOutputRow } from "@/integrations/supabase/types";
 
 export default function History() {
@@ -44,6 +44,11 @@ export default function History() {
   const handleDownloadPdf = (output: SkillOutputRow) => {
     setPrintOutput(output);
     window.setTimeout(() => prepareOutputPdfDownload(output), 0);
+  };
+
+  const handleDownloadWord = (output: SkillOutputRow) => {
+    setPrintOutput(output);
+    window.setTimeout(() => downloadOutputWordDocument(output), 0);
   };
 
   return (
@@ -116,7 +121,12 @@ export default function History() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {filtered.map((output) => (
-              <SkillOutputCard key={output.id} output={output} onDownloadPdf={handleDownloadPdf} />
+              <SkillOutputCard
+                key={output.id}
+                output={output}
+                onDownloadPdf={handleDownloadPdf}
+                onDownloadWord={handleDownloadWord}
+              />
             ))}
           </div>
         )}

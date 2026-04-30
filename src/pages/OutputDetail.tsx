@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle, FileDown,
+  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle, FileDown, FileText,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { MarkdownContent } from "@/components/ui/markdown-content";
@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import SaveOutputDialog from "@/components/skills/SaveOutputDialog";
-import PrintableOutput, { prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
+import PrintableOutput, { downloadOutputWordDocument, prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
 import { useLanguage } from "@/hooks/useLanguage";
 import { localizeContextField, localizeSkill, translateSkillOption } from "@/data/skillTranslations";
 
@@ -96,6 +96,11 @@ export default function OutputDetail() {
   const handleDownloadPdf = () => {
     if (!output) return;
     prepareOutputPdfDownload(output);
+  };
+
+  const handleDownloadWord = () => {
+    if (!output) return;
+    downloadOutputWordDocument(output);
   };
 
   const handleStar = () => {
@@ -234,6 +239,9 @@ export default function OutputDetail() {
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDownloadPdf} title="Download print-ready PDF">
                 <FileDown size={14} className="text-muted-foreground" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDownloadWord} title="Download Word document">
+                <FileText size={14} className="text-muted-foreground" />
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
                 <Trash2 size={14} />
