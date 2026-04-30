@@ -487,7 +487,7 @@ export default function VotingPage() {
                   onClick={() => { setPhase("pick"); setSelected(null); setErrMsg(""); }}
                   disabled={submitting}
                 >
-                  Choose someone else
+                  I want to change my vote
                 </Button>
                 <Button
                   type="button"
