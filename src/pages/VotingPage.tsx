@@ -122,7 +122,7 @@ export default function VotingPage() {
 
   const [selected, setSelected]   = useState<string | null>(null);
   const [email, setEmail]         = useState("");
-  const [phase, setPhase]         = useState<"pick" | "email" | "pending">("pick");
+  const [phase, setPhase]         = useState<"pick" | "email" | "pending" | "duplicate">("pick");
   const [errMsg, setErrMsg]       = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -171,8 +171,22 @@ export default function VotingPage() {
           }),
         }
       );
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Something went wrong");
+      const raw = await res.text();
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
+      if (!res.ok || !data.ok) {
+        const message = data.error ?? "Something went wrong";
+        if (res.status === 409 || /already voted/i.test(message)) {
+          setErrMsg("This email has already voted in this contest.");
+          setPhase("duplicate");
+          return;
+        }
+        throw new Error(message);
+      }
       setPhase("pending");
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : "Failed to submit vote");
@@ -216,6 +230,40 @@ export default function VotingPage() {
           >
             Didn't receive it? Try again
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "duplicate") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${brandAccent}15 0%, white 50%, ${brandColor}10 100%)` }}>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-10 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertCircle size={42} className="text-amber-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-3">You already voted</h1>
+          <p className="text-gray-500">
+            {errMsg || "This email has already been used to vote in this contest."}
+          </p>
+          <p className="text-gray-400 text-sm mt-3">
+            To keep the contest fair, each email can only submit one confirmed vote.
+          </p>
+          <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button
+              variant="outline"
+              onClick={() => { setPhase("pick"); setSelected(null); setEmail(""); setErrMsg(""); }}
+            >
+              Back to contest
+            </Button>
+            <Button
+              className="text-white"
+              style={{ background: brandColor }}
+              onClick={() => { setPhase(selected ? "email" : "pick"); setEmail(""); setErrMsg(""); }}
+            >
+              Use a different email
+            </Button>
+          </div>
         </div>
       </div>
     );
