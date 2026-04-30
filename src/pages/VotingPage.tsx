@@ -3,6 +3,9 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Loader2, Clock, Trophy, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import LVLogo from "@/components/LVLogo";
 import { useContestBySlug, useContestants, useVoteCounts } from "@/hooks/useContests";
 import { cn } from "@/lib/utils";
@@ -119,7 +122,7 @@ export default function VotingPage() {
 
   const [selected, setSelected]   = useState<string | null>(null);
   const [email, setEmail]         = useState("");
-  const [phase, setPhase]         = useState<"pick" | "email" | "pending" | "error">("pick");
+  const [phase, setPhase]         = useState<"pick" | "email" | "pending">("pick");
   const [errMsg, setErrMsg]       = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -136,6 +139,9 @@ export default function VotingPage() {
   const totalVotes  = Object.values(counts).reduce((s, n) => s + n, 0);
   const countdownTarget = isUpcoming ? opensAt : isOpen ? closesAt : null;
   const countdownLabel = isUpcoming ? "Voting opens in" : "Voting closes in";
+  const selectedContestant = selected
+    ? contestants.find((c) => c.id === selected) ?? null
+    : null;
 
   const winner = contest?.winner_contestant_id
     ? contestants.find((c) => c.id === contest.winner_contestant_id)
@@ -170,7 +176,6 @@ export default function VotingPage() {
       setPhase("pending");
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : "Failed to submit vote");
-      setPhase("error");
     } finally {
       setSubmitting(false);
     }
@@ -308,7 +313,7 @@ export default function VotingPage() {
             return (
               <button
                 key={c.id}
-                disabled={!isOpen || phase === "email"}
+                disabled={!isOpen}
                 onClick={() => { if (isOpen) { setSelected(c.id); setPhase("email"); setErrMsg(""); } }}
                 className={cn(
                   "text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 w-full",
@@ -360,49 +365,32 @@ export default function VotingPage() {
           })}
         </div>
 
-        {/* ── Email step ─────────────────────────────────────────────────────── */}
-        {phase === "email" && selected && isOpen && (
-          <div className="mt-6 bg-white rounded-2xl border-2 p-6 shadow-lg"
-            style={{ borderColor: brandColor }}>
-            <p className="font-semibold text-gray-900 mb-1">
-              Almost there! Enter your email to confirm your vote.
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              We'll send you a quick verification link. One vote per email address.
-            </p>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleVote()}
-                className="flex-1 h-11"
-                autoFocus
-              />
+        {/* ── Selected vote review shortcut ───────────────────────────────── */}
+        {selectedContestant && isOpen && phase === "pick" && (
+          <div
+            className="mt-6 rounded-2xl border-2 bg-white p-4 shadow-lg sm:flex sm:items-center sm:justify-between sm:gap-4"
+            style={{ borderColor: brandColor }}
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your selected vote</p>
+              <p className="truncate text-lg font-bold text-gray-900">{selectedContestant.name}</p>
+            </div>
+            <div className="mt-3 flex gap-2 sm:mt-0">
               <Button
-                onClick={handleVote}
-                disabled={submitting || !email.trim()}
-                className="h-11 px-5 gap-1.5 shrink-0"
-                style={{ background: brandColor, color: "#fff" }}
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                onClick={() => { setSelected(null); setEmail(""); setErrMsg(""); }}
               >
-                {submitting
-                  ? <Loader2 size={14} className="animate-spin" />
-                  : <><ArrowRight size={14} /> Cast Vote</>
-                }
+                Change
+              </Button>
+              <Button
+                className="flex-1 gap-1.5 text-white sm:flex-none"
+                style={{ background: brandColor }}
+                onClick={() => { setPhase("email"); setErrMsg(""); }}
+              >
+                Review vote <ArrowRight size={14} />
               </Button>
             </div>
-            {errMsg && (
-              <p className="text-xs text-rose-500 mt-2 flex items-center gap-1">
-                <AlertCircle size={11} /> {errMsg}
-              </p>
-            )}
-            <button
-              className="text-xs text-gray-400 mt-3 underline"
-              onClick={() => { setPhase("pick"); setSelected(null); setErrMsg(""); }}
-            >
-              ← Change my selection
-            </button>
           </div>
         )}
 
@@ -430,6 +418,94 @@ export default function VotingPage() {
           <span>Powered by LV Branding</span>
         </div>
       </footer>
+
+      <Dialog
+        open={phase === "email" && !!selectedContestant && isOpen}
+        onOpenChange={(open) => {
+          if (!open && !submitting) {
+            setPhase("pick");
+            setErrMsg("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Review your vote</DialogTitle>
+            <DialogDescription>
+              Make sure this is who you want to vote for before we send your confirmation email.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedContestant && (
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                {selectedContestant.photo_url && (
+                  <img
+                    src={selectedContestant.photo_url}
+                    alt={selectedContestant.name}
+                    className="h-40 w-full object-cover"
+                  />
+                )}
+                <div className="p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Selected contestant</p>
+                  <p className="text-xl font-bold leading-tight text-gray-900">{selectedContestant.name}</p>
+                  {selectedContestant.description && (
+                    <p className="mt-1 text-sm leading-5 text-gray-500">{selectedContestant.description}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-900" htmlFor="vote-email">
+                  Email address
+                </label>
+                <Input
+                  id="vote-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleVote()}
+                  className="h-11"
+                  autoFocus
+                />
+                <p className="text-xs leading-5 text-gray-400">
+                  We'll email you a verification link. Your vote is counted only after you click it.
+                </p>
+              </div>
+
+              {errMsg && (
+                <p className="flex items-center gap-1 text-xs text-rose-500">
+                  <AlertCircle size={11} /> {errMsg}
+                </p>
+              )}
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setPhase("pick"); setSelected(null); setErrMsg(""); }}
+                  disabled={submitting}
+                >
+                  Choose someone else
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleVote}
+                  disabled={submitting || !email.trim()}
+                  className="gap-1.5 text-white"
+                  style={{ background: brandColor }}
+                >
+                  {submitting
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <><ArrowRight size={14} /> Send confirmation</>
+                  }
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
