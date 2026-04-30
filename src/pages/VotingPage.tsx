@@ -428,7 +428,7 @@ export default function VotingPage() {
           }
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl">
+        <DialogContent className="top-3 max-h-[calc(100dvh-1.5rem)] max-w-md translate-y-0 overflow-y-auto rounded-2xl p-4 sm:top-[50%] sm:max-h-[calc(100vh-2rem)] sm:translate-y-[-50%] sm:p-6">
           <DialogHeader>
             <DialogTitle>Review your vote</DialogTitle>
             <DialogDescription>
@@ -443,7 +443,7 @@ export default function VotingPage() {
                   <img
                     src={selectedContestant.photo_url}
                     alt={selectedContestant.name}
-                    className="h-40 w-full object-cover"
+                    className="h-28 w-full object-cover sm:h-40"
                   />
                 )}
                 <div className="p-4">
@@ -467,7 +467,6 @@ export default function VotingPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleVote()}
                   className="h-11"
-                  autoFocus
                 />
                 <p className="text-xs leading-5 text-gray-400">
                   We'll email you a verification link. Your vote is counted only after you click it.
@@ -480,7 +479,7 @@ export default function VotingPage() {
                 </p>
               )}
 
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+              <div className="sticky bottom-0 -mx-4 flex flex-col-reverse gap-2 border-t border-gray-100 bg-white px-4 pt-3 sm:static sm:mx-0 sm:flex-row sm:justify-between sm:border-0 sm:bg-transparent sm:px-0 sm:pt-0">
                 <Button
                   type="button"
                   variant="outline"
