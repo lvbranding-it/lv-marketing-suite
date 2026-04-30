@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Trophy, Plus, ExternalLink, Trash2, ChevronRight,
-  Users, BarChart2, Circle,
+  Trophy, Plus, Trash2, ChevronRight,
+  Circle, CopyPlus,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { useContests, useCreateContest, useDeleteContest, slugify, type Contest } from "@/hooks/useContests";
+import { useContests, useCreateContest, useDeleteContest, useDuplicateContest, slugify, type Contest } from "@/hooks/useContests";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -136,6 +136,7 @@ export default function Contests() {
   const { toast }     = useToast();
   const { data: contests = [], isLoading } = useContests();
   const deleteContest = useDeleteContest();
+  const duplicateContest = useDuplicateContest();
   const [showCreate, setShowCreate] = useState(false);
 
   const stats = {
@@ -153,6 +154,17 @@ export default function Contests() {
       toast({ description: "Contest deleted." });
     } catch (err) {
       toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed to delete" });
+    }
+  };
+
+  const handleDuplicate = async (c: Contest, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const copy = await duplicateContest.mutateAsync(c);
+      toast({ description: "Contest duplicated as a draft." });
+      navigate(`/contests/${copy.id}`);
+    } catch (err) {
+      toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed to duplicate" });
     }
   };
 
@@ -243,6 +255,11 @@ export default function Contests() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-rose-600"
+                          onClick={(e) => handleDuplicate(c, e)} disabled={duplicateContest.isPending}
+                          aria-label={`Duplicate ${c.title}`}>
+                          <CopyPlus size={13} />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-rose-600"
                           onClick={(e) => handleDelete(c, e)}>
                           <Trash2 size={13} />

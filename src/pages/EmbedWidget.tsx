@@ -206,6 +206,10 @@ export default function EmbedWidget() {
   }
 
   const isWinnerAnnounced = contest.status === "winner_announced";
+  const showPodium = contest.status === "closed" || contest.status === "winner_announced";
+  const podium = contestants.slice(0, 3);
+  const podiumOrder = [podium[1], podium[0], podium[2]].filter(Boolean);
+  const remainingContestants = showPodium ? contestants.slice(3) : [];
 
   return (
     <div ref={cardRef} style={styles.root(accent, transparent)}>
@@ -226,13 +230,55 @@ export default function EmbedWidget() {
 
       {isWinnerAnnounced && contest.winner_contestant_id && (
         <div style={styles.winnerBanner(brand)}>
-          👑 Winner announced!
+          Winner announced
         </div>
       )}
 
-      {/* Leaderboard */}
+      {/* Results */}
       {contestants.length === 0 ? (
         <p style={styles.empty}>No contestants yet.</p>
+      ) : showPodium ? (
+        <>
+          <div style={styles.podium(compact)}>
+            {podiumOrder.map((c) => {
+              const rank = contestants.findIndex((x) => x.id === c.id) + 1;
+              const pct = total > 0 ? Math.round((c.vote_count / total) * 100) : 0;
+              const isWinner = c.id === contest.winner_contestant_id || rank === 1;
+
+              return (
+                <div key={c.id} style={styles.podiumSpot(rank, compact)}>
+                  {showPhotos && c.photo_url && (
+                    <img src={c.photo_url} alt={c.name} style={styles.podiumPhoto(rank, isWinner)} />
+                  )}
+                  <div style={styles.podiumMedal(rank)}>
+                    <span>{rank}</span>
+                  </div>
+                  <div style={styles.podiumName(isWinner)}>{c.name}</div>
+                  <div style={styles.podiumVotes}>
+                    {c.vote_count.toLocaleString()} vote{c.vote_count !== 1 ? "s" : ""} · {pct}%
+                  </div>
+                  <div style={styles.podiumBase(rank, compact)} />
+                </div>
+              );
+            })}
+          </div>
+
+          {remainingContestants.length > 0 && (
+            <div style={styles.remainingList}>
+              {remainingContestants.map((c, index) => {
+                const rank = index + 4;
+                const pct = total > 0 ? Math.round((c.vote_count / total) * 100) : 0;
+                return (
+                  <div key={c.id} style={styles.remainingRow}>
+                    <span style={styles.remainingRank}>{rank}</span>
+                    <span style={styles.remainingName}>{c.name}</span>
+                    <span style={styles.remainingVotes}>{c.vote_count.toLocaleString()} · {pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       ) : (
         <div style={styles.list}>
           {contestants.map((c) => {
@@ -423,6 +469,139 @@ const styles = {
     flexDirection: "column" as const,
     gap: "14px",
   },
+
+  podium: (compact: boolean) => ({
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    alignItems: "end",
+    gap: compact ? "6px" : "10px",
+    margin: compact ? "4px 0 14px" : "4px 0 18px",
+  } as React.CSSProperties),
+
+  podiumSpot: (rank: number, compact: boolean) => ({
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    minWidth: 0,
+    transform: rank === 1 && !compact ? "translateY(-8px)" : "none",
+  } as React.CSSProperties),
+
+  podiumPhoto: (rank: number, isWinner: boolean) => ({
+    width: rank === 1 ? "58px" : "48px",
+    height: rank === 1 ? "58px" : "48px",
+    borderRadius: "50%",
+    objectFit: "cover" as const,
+    border: `3px solid ${isWinner ? "#F6C453" : "#E5E7EB"}`,
+    boxShadow: "0 8px 18px rgba(17, 24, 39, 0.12)",
+    marginBottom: "6px",
+  } as React.CSSProperties),
+
+  podiumMedal: (rank: number) => {
+    const colors: Record<number, { bg: string; color: string; border: string }> = {
+      1: { bg: "#FDE68A", color: "#92400E", border: "#F59E0B" },
+      2: { bg: "#E5E7EB", color: "#374151", border: "#9CA3AF" },
+      3: { bg: "#FDBA74", color: "#7C2D12", border: "#EA580C" },
+    };
+    const color = colors[rank] ?? colors[3];
+    return {
+      width: "28px",
+      height: "28px",
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: color.bg,
+      color: color.color,
+      border: `1px solid ${color.border}`,
+      fontSize: "13px",
+      fontWeight: 800,
+      marginBottom: "6px",
+      boxSizing: "border-box",
+    } as React.CSSProperties;
+  },
+
+  podiumName: (isWinner: boolean) => ({
+    width: "100%",
+    minHeight: "34px",
+    color: "#111827",
+    fontSize: isWinner ? "13px" : "12px",
+    fontWeight: isWinner ? 800 : 700,
+    lineHeight: 1.25,
+    textAlign: "center" as const,
+    overflowWrap: "anywhere" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  } as React.CSSProperties),
+
+  podiumVotes: {
+    color: "#6B7280",
+    fontSize: "11px",
+    fontWeight: 600,
+    lineHeight: 1.25,
+    minHeight: "28px",
+    textAlign: "center" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  } as React.CSSProperties,
+
+  podiumBase: (rank: number, compact: boolean) => {
+    const colors: Record<number, string> = {
+      1: "linear-gradient(180deg, #FDE68A 0%, #F59E0B 100%)",
+      2: "linear-gradient(180deg, #F3F4F6 0%, #9CA3AF 100%)",
+      3: "linear-gradient(180deg, #FDBA74 0%, #C2410C 100%)",
+    };
+    const heights: Record<number, string> = {
+      1: compact ? "74px" : "92px",
+      2: compact ? "56px" : "70px",
+      3: compact ? "44px" : "58px",
+    };
+    return {
+      width: "100%",
+      height: heights[rank] ?? heights[3],
+      borderRadius: "8px 8px 4px 4px",
+      background: colors[rank] ?? colors[3],
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.45)",
+      marginTop: "8px",
+    } as React.CSSProperties;
+  },
+
+  remainingList: {
+    border: "1px solid #F3F4F6",
+    borderRadius: "10px",
+    overflow: "hidden",
+  } as React.CSSProperties,
+
+  remainingRow: {
+    display: "grid",
+    gridTemplateColumns: "28px minmax(0, 1fr) auto",
+    gap: "8px",
+    alignItems: "center",
+    padding: "8px 10px",
+    borderBottom: "1px solid #F3F4F6",
+    fontSize: "12px",
+  } as React.CSSProperties,
+
+  remainingRank: {
+    color: "#9CA3AF",
+    fontWeight: 700,
+  } as React.CSSProperties,
+
+  remainingName: {
+    minWidth: 0,
+    color: "#111827",
+    fontWeight: 600,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  } as React.CSSProperties,
+
+  remainingVotes: {
+    color: "#6B7280",
+    fontWeight: 600,
+    whiteSpace: "nowrap" as const,
+  } as React.CSSProperties,
 
   resultBar: (brand: string, accent: string, isWinner: boolean, compact: boolean) => ({
     position: "relative" as const,

@@ -48,6 +48,15 @@ export interface Contestant {
   created_at: string;
 }
 
+export interface ContestVote {
+  id: string;
+  contest_id: string;
+  contestant_id: string;
+  voter_email: string;
+  verified_at: string | null;
+  created_at: string;
+}
+
 export type ContestStatus = Contest["status"];
 
 // ── Slug generator ────────────────────────────────────────────────────────────
@@ -169,6 +178,24 @@ export function useVoteCounts(contestId: string | undefined, liveRefresh = false
   });
 }
 
+export function useContestVotes(contestId: string | undefined, liveRefresh = false) {
+  return useQuery<ContestVote[]>({
+    queryKey: ["contest_votes", contestId],
+    queryFn: async () => {
+      if (!contestId) return [];
+      const { data, error } = await db
+        .from("votes")
+        .select("id, contest_id, contestant_id, voter_email, verified_at, created_at")
+        .eq("contest_id", contestId)
+        .order("verified_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ContestVote[];
+    },
+    enabled: !!contestId,
+    refetchInterval: liveRefresh ? 30_000 : false,
+  });
+}
+
 // ── Contest mutations ─────────────────────────────────────────────────────────
 
 export function useCreateContest() {
@@ -220,6 +247,62 @@ export function useDeleteContest() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contests"] }),
+  });
+}
+
+export function useDuplicateContest() {
+  const qc = useQueryClient();
+  const { org } = useOrg();
+  return useMutation({
+    mutationFn: async (contest: Contest) => {
+      if (!org) throw new Error("No organisation");
+
+      const copySlug = `${slugify(contest.slug || contest.title)}-copy-${Date.now().toString(36).slice(-5)}`;
+      const { data: newContest, error: contestError } = await db
+        .from("contests")
+        .insert({
+          org_id: org.id,
+          slug: copySlug,
+          title: `${contest.title} Copy`,
+          description: contest.description,
+          voting_instructions: contest.voting_instructions,
+          client_name: contest.client_name,
+          client_logo_url: contest.client_logo_url,
+          brand_color: contest.brand_color,
+          brand_accent: contest.brand_accent,
+          voting_opens_at: contest.voting_opens_at,
+          voting_closes_at: contest.voting_closes_at,
+          status: "draft",
+          results_public: contest.results_public,
+          winner_contestant_id: null,
+        })
+        .select()
+        .single();
+      if (contestError) throw contestError;
+
+      const { data: contestants, error: contestantsError } = await db
+        .from("contestants")
+        .select("name, description, photo_url, display_order")
+        .eq("contest_id", contest.id)
+        .order("display_order", { ascending: true });
+      if (contestantsError) throw contestantsError;
+
+      const copies = (contestants ?? []).map((contestant: Omit<Contestant, "id" | "contest_id" | "created_at">) => ({
+        ...contestant,
+        contest_id: newContest.id,
+      }));
+
+      if (copies.length > 0) {
+        const { error: copyError } = await db.from("contestants").insert(copies);
+        if (copyError) throw copyError;
+      }
+
+      return newContest as Contest;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["contests"] });
+      qc.invalidateQueries({ queryKey: ["contestants", data.id] });
+    },
   });
 }
 

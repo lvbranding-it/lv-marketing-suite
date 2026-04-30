@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Copy, Check, ExternalLink, Plus, Pencil, Trash2,
-  Trophy, Upload, X, Crown, ChevronDown,
+  Trophy, Upload, X, Crown, Download, CopyPlus,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  useContest, useContestants, useVoteCounts,
-  useUpdateContest, useCreateContestant, useUpdateContestant, useDeleteContestant,
+  useContest, useContestants, useVoteCounts, useContestVotes,
+  useUpdateContest, useCreateContestant, useUpdateContestant, useDeleteContestant, useDuplicateContest,
   normalizeContestPhotoUrl, uploadContestantPhoto, uploadContestLogo, slugify,
   type Contest, type Contestant,
 } from "@/hooks/useContests";
@@ -38,6 +38,24 @@ const STATUS_BADGE: Record<Contest["status"], string> = {
   closed:           "bg-amber-100 text-amber-700 border-amber-200",
   winner_announced: "bg-violet-100 text-violet-700 border-violet-200",
 };
+
+function csvCell(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadCsv(filename: string, rows: Array<Array<string | number | null | undefined>>) {
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // ── Contestant dialog ─────────────────────────────────────────────────────────
 
@@ -425,10 +443,12 @@ function VotesTab({ contest }: { contest: Contest }) {
   const update    = useUpdateContest();
   const { data: contestants = [] } = useContestants(contest.id);
   const { data: counts = {} }      = useVoteCounts(contest.id, true);
+  const { data: votes = [] }       = useContestVotes(contest.id, true);
 
   const totalVotes = Object.values(counts).reduce((s, n) => s + n, 0);
   const sorted     = [...contestants].sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
   const leader     = sorted[0];
+  const contestantNames = new Map(contestants.map((c) => [c.id, c.name]));
 
   const announceWinner = async () => {
     if (!leader) return;
@@ -439,6 +459,18 @@ function VotesTab({ contest }: { contest: Contest }) {
     } catch (err) {
       toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed" });
     }
+  };
+
+  const exportParticipantCsv = () => {
+    const rows = [
+      ["Rank", "Participant", "Votes", "Percent"],
+      ...sorted.map((c, index) => {
+        const votesForParticipant = counts[c.id] ?? 0;
+        const pct = totalVotes > 0 ? Math.round((votesForParticipant / totalVotes) * 100) : 0;
+        return [index + 1, c.name, votesForParticipant, `${pct}%`];
+      }),
+    ];
+    downloadCsv(`${contest.slug}-participant-votes.csv`, rows);
   };
 
   return (
@@ -457,6 +489,15 @@ function VotesTab({ contest }: { contest: Contest }) {
 
       {/* Leaderboard */}
       <div className="space-y-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Participants and votes</h3>
+            <p className="text-xs text-muted-foreground">Verified vote totals update every 30 seconds.</p>
+          </div>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={exportParticipantCsv}>
+            <Download size={12} /> CSV
+          </Button>
+        </div>
         {sorted.map((c, i) => {
           const v    = counts[c.id] ?? 0;
           const pct  = totalVotes > 0 ? Math.round((v / totalVotes) * 100) : 0;
@@ -485,6 +526,39 @@ function VotesTab({ contest }: { contest: Contest }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="bg-white border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b">
+          <h3 className="text-sm font-semibold">Verified voters</h3>
+          <p className="text-xs text-muted-foreground">{votes.length} confirmed vote{votes.length !== 1 ? "s" : ""}</p>
+        </div>
+        {votes.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No verified votes yet.</div>
+        ) : (
+          <div className="max-h-80 overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-muted/40">
+                <tr className="border-b">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Voter</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Participant</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Verified</th>
+                </tr>
+              </thead>
+              <tbody>
+                {votes.map((vote) => (
+                  <tr key={vote.id} className="border-b last:border-0">
+                    <td className="px-4 py-2 font-mono text-xs">{vote.voter_email}</td>
+                    <td className="px-4 py-2">{contestantNames.get(vote.contestant_id) ?? "Removed participant"}</td>
+                    <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {vote.verified_at ? new Date(vote.verified_at).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {contest.status === "closed" && !contest.winner_contestant_id && leader && (
@@ -641,7 +715,20 @@ function EmbedTab({ contest }: { contest: Contest }) {
 export default function ContestDetail() {
   const { id }      = useParams<{ id: string }>();
   const navigate    = useNavigate();
+  const { toast }   = useToast();
   const { data: contest, isLoading } = useContest(id);
+  const duplicateContest = useDuplicateContest();
+
+  const handleDuplicate = async () => {
+    if (!contest) return;
+    try {
+      const copy = await duplicateContest.mutateAsync(contest);
+      toast({ description: "Contest duplicated as a draft." });
+      navigate(`/contests/${copy.id}`);
+    } catch (err) {
+      toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed to duplicate" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -672,6 +759,9 @@ export default function ContestDetail() {
           <h1 className="text-base font-semibold truncate">{contest.title}</h1>
           <p className="text-xs text-muted-foreground">{contest.client_name ?? "LV Branding"}</p>
         </div>
+        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleDuplicate} disabled={duplicateContest.isPending}>
+          <CopyPlus size={13} /> Duplicate
+        </Button>
         <Badge className={cn("text-xs border shrink-0", STATUS_BADGE[contest.status])}>
           {STATUS_LABELS[contest.status]}
         </Badge>
