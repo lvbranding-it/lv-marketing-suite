@@ -11,12 +11,15 @@ import { useProjects } from "@/hooks/useProjects";
 import { SKILLS } from "@/data/skills";
 import { useLanguage } from "@/hooks/useLanguage";
 import { localizeSkill } from "@/data/skillTranslations";
+import PrintableOutput, { prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
+import type { SkillOutputRow } from "@/integrations/supabase/types";
 
 export default function History() {
   const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [skillFilter, setSkillFilter] = useState<string>("all");
+  const [printOutput, setPrintOutput] = useState<SkillOutputRow | null>(null);
 
   const { data: outputs = [], isLoading } = useSkillOutputs({
     projectId: projectFilter !== "all" ? projectFilter : undefined,
@@ -37,6 +40,11 @@ export default function History() {
       (o.title?.toLowerCase().includes(q) ?? false)
     );
   });
+
+  const handleDownloadPdf = (output: SkillOutputRow) => {
+    setPrintOutput(output);
+    window.setTimeout(() => prepareOutputPdfDownload(output), 0);
+  };
 
   return (
     <AppShell>
@@ -108,11 +116,17 @@ export default function History() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {filtered.map((output) => (
-              <SkillOutputCard key={output.id} output={output} />
+              <SkillOutputCard key={output.id} output={output} onDownloadPdf={handleDownloadPdf} />
             ))}
           </div>
         )}
       </div>
+
+      {printOutput && (
+        <div className="print-only">
+          <PrintableOutput output={printOutput} />
+        </div>
+      )}
     </AppShell>
   );
 }

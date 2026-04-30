@@ -98,3 +98,125 @@
     @apply bg-background text-foreground font-sans;
   }
 }
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.6in;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-only,
+  .print-only * {
+    visibility: visible !important;
+  }
+
+  .print-only {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+
+  .printable-output {
+    display: block;
+    font-family: "Fira Sans", system-ui, sans-serif;
+    color: #111827;
+    background: #ffffff;
+  }
+
+  .printable-output__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+    border-bottom: 2px solid #111827;
+  }
+
+  .printable-output__eyebrow {
+    margin: 0 0 8px;
+    color: #cb2039;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .printable-output h1 {
+    margin: 0;
+    color: #111827;
+    font-size: 26px;
+    line-height: 1.15;
+    font-weight: 700;
+  }
+
+  .printable-output__meta {
+    min-width: 150px;
+    color: #4b5563;
+    font-size: 11px;
+    line-height: 1.45;
+    text-align: right;
+  }
+
+  .printable-output__meta p {
+    margin: 0 0 4px;
+  }
+
+  .printable-output__body {
+    font-size: 11.5pt;
+    line-height: 1.5;
+  }
+
+  .printable-output__body h1,
+  .printable-output__body h2,
+  .printable-output__body h3 {
+    break-after: avoid;
+    color: #111827 !important;
+  }
+
+  .printable-output__body h2 {
+    border-bottom-color: #d1d5db !important;
+  }
+
+  .printable-output__body p,
+  .printable-output__body li,
+  .printable-output__body td,
+  .printable-output__body th {
+    color: #111827 !important;
+  }
+
+  .printable-output__body a {
+    color: #cb2039 !important;
+    text-decoration: underline;
+  }
+
+  .printable-output__body table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .printable-output__body tr,
+  .printable-output__body blockquote,
+  .printable-output__body pre {
+    break-inside: avoid;
+  }
+
+  .printable-output__body pre,
+  .printable-output__body code {
+    white-space: pre-wrap;
+  }
+}

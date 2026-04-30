@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle,
+  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle, FileDown,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { MarkdownContent } from "@/components/ui/markdown-content";
@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import SaveOutputDialog from "@/components/skills/SaveOutputDialog";
+import PrintableOutput, { prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
 import { useLanguage } from "@/hooks/useLanguage";
 import { localizeContextField, localizeSkill, translateSkillOption } from "@/data/skillTranslations";
 
@@ -90,6 +91,11 @@ export default function OutputDetail() {
     if (!output) return;
     navigator.clipboard.writeText(output.output_text);
     toast({ description: t("skills.copied") });
+  };
+
+  const handleDownloadPdf = () => {
+    if (!output) return;
+    prepareOutputPdfDownload(output);
   };
 
   const handleStar = () => {
@@ -226,6 +232,9 @@ export default function OutputDetail() {
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCopy}>
                 <Copy size={14} className="text-muted-foreground" />
               </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDownloadPdf} title="Download print-ready PDF">
+                <FileDown size={14} className="text-muted-foreground" />
+              </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
                 <Trash2 size={14} />
               </Button>
@@ -354,6 +363,10 @@ export default function OutputDetail() {
         defaultTitle={`${localizedSkill?.name ?? "Output"} - ${language === "es" ? "continuacion" : "continuation"}`}
         saving={saveOutputMutation.isPending}
       />
+
+      <div className="print-only">
+        <PrintableOutput output={output} />
+      </div>
     </AppShell>
   );
 }

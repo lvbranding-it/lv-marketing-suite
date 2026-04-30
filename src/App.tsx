@@ -149,6 +149,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/outputs"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><History /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/history"
         element={
           <ProtectedRoute>

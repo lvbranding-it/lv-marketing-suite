@@ -1,4 +1,4 @@
-import { Star, Trash2, ExternalLink } from "lucide-react";
+import { Star, Trash2, ExternalLink, FileDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,10 @@ import { es } from "date-fns/locale";
 
 interface SkillOutputCardProps {
   output: SkillOutputRow;
+  onDownloadPdf?: (output: SkillOutputRow) => void;
 }
 
-export default function SkillOutputCard({ output }: SkillOutputCardProps) {
+export default function SkillOutputCard({ output, onDownloadPdf }: SkillOutputCardProps) {
   const navigate = useNavigate();
   const { language, t } = useLanguage();
   const updateOutput = useUpdateSkillOutput();
@@ -44,6 +45,11 @@ export default function SkillOutputCard({ output }: SkillOutputCardProps) {
   const handleOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/outputs/${output.id}`);
+  };
+
+  const handleDownloadPdf = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDownloadPdf?.(output);
   };
 
   return (
@@ -94,6 +100,17 @@ export default function SkillOutputCard({ output }: SkillOutputCardProps) {
           >
             <ExternalLink size={13} />
           </Button>
+          {onDownloadPdf && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={handleDownloadPdf}
+              title="Download print-ready PDF"
+            >
+              <FileDown size={13} />
+            </Button>
+          )}
         </div>
       </div>
 
