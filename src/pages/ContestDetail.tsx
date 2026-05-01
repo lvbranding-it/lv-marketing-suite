@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Copy, Check, ExternalLink, Plus, Pencil, Trash2,
-  Trophy, Upload, X, Crown, Download, CopyPlus,
+  Trophy, Upload, X, Crown, Download, CopyPlus, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -448,8 +448,6 @@ function VotesTab({ contest }: { contest: Contest }) {
   const totalVotes = Object.values(counts).reduce((s, n) => s + n, 0);
   const sorted     = [...contestants].sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
   const leader     = sorted[0];
-  const contestantNames = new Map(contestants.map((c) => [c.id, c.name]));
-  const formatVoteTimecode = (value: string | null) => value ? new Date(value).toISOString() : "";
 
   const announceWinner = async () => {
     if (!leader) return;
@@ -472,18 +470,6 @@ function VotesTab({ contest }: { contest: Contest }) {
       }),
     ];
     downloadCsv(`${contest.slug}-participant-votes.csv`, rows);
-  };
-
-  const exportVoterCsv = () => {
-    const rows = [
-      ["Email", "Vote", "Timecode"],
-      ...votes.map((vote) => [
-        vote.voter_email,
-        contestantNames.get(vote.contestant_id) ?? "Removed participant",
-        formatVoteTimecode(vote.verified_at),
-      ]),
-    ];
-    downloadCsv(`${contest.slug}-verified-voters.csv`, rows);
   };
 
   return (
@@ -545,65 +531,6 @@ function VotesTab({ contest }: { contest: Contest }) {
         })}
       </div>
 
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold">Verified voters</h3>
-              <Badge variant="outline" className="text-[11px] font-medium">
-                {contestants.length} participant{contestants.length !== 1 ? "s" : ""}
-              </Badge>
-              <Badge variant="outline" className="text-[11px] font-medium">
-                {votes.length} email{votes.length !== 1 ? "s" : ""}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Each row shows the email, selected participant, and verification timecode.</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs self-start sm:self-auto"
-            onClick={exportVoterCsv}
-            disabled={votes.length === 0}
-          >
-            <Download size={12} /> Emails CSV
-          </Button>
-        </div>
-        {votes.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No verified votes yet.</div>
-        ) : (
-          <div className="max-h-80 overflow-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="sticky top-0 bg-muted/40">
-                <tr className="border-b">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[260px]">Voter email</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[220px]">Vote</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[190px]">Timecode</th>
-                </tr>
-              </thead>
-              <tbody>
-                {votes.map((vote) => {
-                  const participantName = contestantNames.get(vote.contestant_id) ?? "Removed participant";
-                  return (
-                    <tr key={vote.id} className="border-b last:border-0">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-800 break-all">{vote.voter_email}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="secondary" className="max-w-full justify-start truncate text-[11px] font-medium">
-                          {participantName}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {vote.verified_at ? new Date(vote.verified_at).toLocaleString() : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       {contest.status === "closed" && !contest.winner_contestant_id && leader && (
         <div className="flex justify-center pt-2">
           <Button onClick={announceWinner} disabled={update.isPending}
@@ -624,6 +551,144 @@ function VotesTab({ contest }: { contest: Contest }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function VotersTab({ contest }: { contest: Contest }) {
+  const { data: contestants = [] } = useContestants(contest.id);
+  const { data: votes = [] }       = useContestVotes(contest.id, true);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const contestantNames = new Map(contestants.map((c) => [c.id, c.name]));
+  const pageCount = Math.max(1, Math.ceil(votes.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const visibleVotes = votes.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const firstItem = votes.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const lastItem = Math.min(safePage * pageSize, votes.length);
+  const formatVoteTimecode = (value: string | null) => value ? new Date(value).toISOString() : "";
+
+  const exportVoterCsv = () => {
+    const rows = [
+      ["Email", "Vote", "Timecode"],
+      ...votes.map((vote) => [
+        vote.voter_email,
+        contestantNames.get(vote.contestant_id) ?? "Removed participant",
+        formatVoteTimecode(vote.verified_at),
+      ]),
+    ];
+    downloadCsv(`${contest.slug}-verified-voters.csv`, rows);
+  };
+
+  return (
+    <div className="bg-white border rounded-xl overflow-hidden">
+      <div className="px-4 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold">Verified voters</h3>
+            <Badge variant="outline" className="text-[11px] font-medium">
+              {votes.length} email{votes.length !== 1 ? "s" : ""}
+            </Badge>
+            <Badge variant="outline" className="text-[11px] font-medium">
+              {contestants.length} participant{contestants.length !== 1 ? "s" : ""}
+            </Badge>
+            <Badge variant="secondary" className="text-[11px] font-medium">
+              Page {safePage} of {pageCount}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Email, selected vote, and verification timecode.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs self-start sm:self-auto"
+          onClick={exportVoterCsv}
+          disabled={votes.length === 0}
+        >
+          <Download size={12} /> Emails CSV
+        </Button>
+      </div>
+
+      {votes.length === 0 ? (
+        <div className="px-4 py-10 text-center text-sm text-muted-foreground">No verified votes yet.</div>
+      ) : (
+        <>
+          <div className="md:hidden divide-y">
+            {visibleVotes.map((vote) => {
+              const participantName = contestantNames.get(vote.contestant_id) ?? "Removed participant";
+              return (
+                <div key={vote.id} className="p-4 space-y-2">
+                  <p className="font-mono text-xs text-gray-800 break-all">{vote.voter_email}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary" className="max-w-full justify-start truncate text-[11px] font-medium">
+                      {participantName}
+                    </Badge>
+                    <Badge variant="outline" className="text-[11px] font-medium">
+                      {vote.verified_at ? new Date(vote.verified_at).toLocaleString() : "No timecode"}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block overflow-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-muted/40">
+                <tr className="border-b">
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[300px]">Voter email</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[240px]">Vote</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground min-w-[190px]">Timecode</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleVotes.map((vote) => {
+                  const participantName = contestantNames.get(vote.contestant_id) ?? "Removed participant";
+                  return (
+                    <tr key={vote.id} className="border-b last:border-0">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-800 break-all">{vote.voter_email}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="secondary" className="max-w-full justify-start truncate text-[11px] font-medium">
+                          {participantName}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {vote.verified_at ? new Date(vote.verified_at).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <div className="px-4 py-3 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-muted-foreground">
+          Showing {firstItem}-{lastItem} of {votes.length}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1 text-xs"
+            onClick={() => setPage(Math.max(1, safePage - 1))}
+            disabled={safePage === 1}
+          >
+            <ChevronLeft size={13} /> Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1 text-xs"
+            onClick={() => setPage(Math.min(pageCount, safePage + 1))}
+            disabled={safePage === pageCount}
+          >
+            Next <ChevronRight size={13} />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -810,18 +875,20 @@ export default function ContestDetail() {
         </Badge>
       </div>
 
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto">
         <Tabs defaultValue="setup">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 w-full justify-start overflow-x-auto">
             <TabsTrigger value="setup">Setup</TabsTrigger>
             <TabsTrigger value="contestants">Contestants</TabsTrigger>
             <TabsTrigger value="votes">Votes</TabsTrigger>
+            <TabsTrigger value="voters">Voters</TabsTrigger>
             <TabsTrigger value="embed">Embed</TabsTrigger>
           </TabsList>
 
           <TabsContent value="setup">     <SetupTab       contest={contest} /></TabsContent>
           <TabsContent value="contestants"><ContestantsTab contest={contest} /></TabsContent>
           <TabsContent value="votes">     <VotesTab       contest={contest} /></TabsContent>
+          <TabsContent value="voters">    <VotersTab      contest={contest} /></TabsContent>
           <TabsContent value="embed">     <EmbedTab       contest={contest} /></TabsContent>
         </Tabs>
       </div>

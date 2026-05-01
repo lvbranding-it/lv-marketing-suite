@@ -172,23 +172,23 @@ export default function Contests() {
     <AppShell>
       <Header title="Contests" />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
 
         {/* ── Hero bar ────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-base font-semibold">Voting contests for your clients</h2>
             <p className="text-sm text-muted-foreground">
               Create branded voting pages, collect email-verified votes, and embed live results on any website.
             </p>
           </div>
-          <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-rose-500 hover:bg-rose-600 text-white shrink-0">
+          <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-rose-500 hover:bg-rose-600 text-white shrink-0 w-full sm:w-auto">
             <Plus size={14} /> New Contest
           </Button>
         </div>
 
         {/* ── Stats ───────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           {[
             { label: "Active",  value: stats.active, color: "text-emerald-600" },
             { label: "Draft",   value: stats.draft,  color: "text-gray-500" },
@@ -221,7 +221,56 @@ export default function Contests() {
               <p className="text-xs text-gray-400 mt-1">Create your first contest to get started.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <>
+            <div className="md:hidden divide-y">
+              {contests.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => navigate(`/contests/${c.id}`)}
+                  className="p-4 space-y-3 cursor-pointer active:bg-muted/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{c.title}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate">/vote/{c.slug}</p>
+                    </div>
+                    <Badge className={cn("text-xs border shrink-0", STATUS[c.status].class)}>
+                      {STATUS[c.status].label}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline" className="max-w-full truncate text-[11px] font-medium">
+                      {c.client_name ?? "No client"}
+                    </Badge>
+                    <Badge variant="outline" className="text-[11px] font-medium">
+                      {c.voting_closes_at
+                        ? formatDistanceToNow(new Date(c.voting_closes_at), { addSuffix: true })
+                        : "No close date"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-600"
+                      onClick={(e) => handleDuplicate(c, e)} disabled={duplicateContest.isPending}
+                      aria-label={`Duplicate ${c.title}`}>
+                      <CopyPlus size={14} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-rose-600"
+                      onClick={(e) => handleDelete(c, e)}
+                      aria-label={`Delete ${c.title}`}>
+                      <Trash2 size={14} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground"
+                      onClick={() => navigate(`/contests/${c.id}`)}
+                      aria-label={`Open ${c.title}`}>
+                      <ChevronRight size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Contest</th>
@@ -274,6 +323,8 @@ export default function Contests() {
                 ))}
               </tbody>
             </table>
+            </div>
+            </>
           )}
         </div>
       </div>
