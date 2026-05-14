@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import LVLogo from "@/components/LVLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { intakeTranslations, OPTION_VALUES, type Lang } from "@/data/intakeTranslations";
@@ -168,16 +167,34 @@ export default function IntakeForm() {
     setSubmitting(true);
     setError(null);
     try {
-      const { error: dbErr } = await supabase.from("intake_submissions").insert({
-        org_id:        orgId,
-        contact_name:  data.contact_name,
-        contact_email: data.contact_email,
-        contact_role:  data.contact_role || null,
-        company_name:  data.company_name,
-        form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
-        ...(contactId ? { contact_id: contactId } : {}),
-      });
+      const { data: newSub, error: dbErr } = await supabase
+        .from("intake_submissions")
+        .insert({
+          org_id:        orgId,
+          contact_name:  data.contact_name,
+          contact_email: data.contact_email,
+          contact_role:  data.contact_role || null,
+          company_name:  data.company_name,
+          form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
+          ...(contactId ? { contact_id: contactId } : {}),
+        })
+        .select("id")
+        .single();
       if (dbErr) throw dbErr;
+
+      // Fire-and-forget team notification email (non-blocking)
+      supabase.functions.invoke("intake-notify", {
+        body: {
+          submission_id:  newSub.id,
+          contact_name:   data.contact_name,
+          contact_email:  data.contact_email,
+          contact_role:   data.contact_role || null,
+          company_name:   data.company_name,
+          form_data:      { ...data },
+          language:       lang,
+        },
+      }).catch(() => { /* notification is best-effort */ });
+
       goTo(5, "forward");
     } catch (err) {
       setError(err instanceof Error ? err.message : t.errors.genericError);
@@ -203,49 +220,39 @@ export default function IntakeForm() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50 flex flex-col">
+    <div className="min-h-screen bg-[#F8F7F5] flex flex-col">
 
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center gap-2.5">
-          <LVLogo size={28} />
-          <div className="leading-tight">
-            <p className="text-xs font-semibold text-gray-900">LV Branding</p>
-            <p className="text-[10px] text-gray-400">Marketing Suite</p>
-          </div>
+      {/* Top bar — logo centered, lang toggle right */}
+      <header className="relative flex items-center justify-center px-6 py-5 bg-white border-b border-gray-100">
+        {/* Centered logo */}
+        <img
+          src="/lv-branding-logo.svg"
+          alt="LV Branding"
+          className="h-16 w-16 object-contain"
+        />
+        {/* Language toggle — absolute right */}
+        <div className="absolute right-6 top-1/2 -translate-y-1/2">
+          {LangToggle}
         </div>
-
-        {/* Center: language toggle — always visible */}
-        {LangToggle}
-
-        {/* Right: step progress */}
-        {step > 0 && step < 5 ? (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">{t.stepIndicator(step)}</span>
-            <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-rose-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        ) : (
-          <div className="w-28" /> /* spacer to keep logo left-aligned */
-        )}
       </header>
 
       {/* Step dots */}
       {step > 0 && step < 5 && (
-        <div className="flex justify-center gap-2 py-4">
+        <div className="flex justify-center gap-3 py-5">
           {t.steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="flex items-center gap-3">
               <div className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300",
-                i + 1 < step  ? "bg-rose-500 text-white scale-90"            :
-                i + 1 === step ? "bg-rose-500 text-white ring-4 ring-rose-200" :
-                                  "bg-gray-100 text-gray-400"
+                "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 border-2",
+                i + 1 < step
+                  ? "bg-rose-500 border-rose-500 text-white"
+                  : i + 1 === step
+                  ? "bg-rose-500 border-rose-500 text-white shadow-md shadow-rose-200"
+                  : "bg-white border-gray-200 text-gray-400"
               )}>
                 {i + 1 < step ? "✓" : i + 1}
               </div>
               {i < t.steps.length - 1 && (
-                <div className={cn("w-8 h-0.5 rounded-full transition-colors duration-300", i + 1 < step ? "bg-rose-400" : "bg-gray-200")} />
+                <div className={cn("w-10 h-0.5 rounded-full transition-colors duration-500", i + 1 < step ? "bg-rose-400" : "bg-gray-200")} />
               )}
             </div>
           ))}
@@ -253,8 +260,8 @@ export default function IntakeForm() {
       )}
 
       {/* Card */}
-      <div className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className={cn("w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-220", base)}>
+      <div className="flex-1 flex items-start justify-center px-4 py-6">
+        <div className={cn("w-full max-w-lg bg-white rounded-2xl shadow-lg border border-gray-100/80 overflow-hidden transition-all duration-220", base)}>
 
           {/* ── Welcome ── */}
           {step === 0 && !isPersonalized && (
@@ -309,12 +316,12 @@ export default function IntakeForm() {
 
           {/* ── Step Header ── */}
           {step >= 1 && step <= 4 && (
-            <div className="bg-gradient-to-r from-rose-50 to-orange-50 border-b border-gray-100 px-8 pt-7 pb-5">
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-3xl">{t.steps[step - 1].emoji}</span>
+            <div className="bg-gradient-to-r from-rose-50 to-amber-50 border-b border-rose-100/60 px-8 pt-6 pb-5">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl leading-none">{t.steps[step - 1].emoji}</span>
                 <div>
-                  <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">{t.steps[step - 1].hint}</p>
-                  <h2 className="text-xl font-bold text-gray-900">{t.steps[step - 1].label}</h2>
+                  <p className="text-[11px] font-semibold text-rose-500 uppercase tracking-widest mb-0.5">{t.steps[step - 1].hint}</p>
+                  <h2 className="text-[22px] font-bold text-gray-900 leading-tight">{t.steps[step - 1].label}</h2>
                 </div>
               </div>
             </div>
@@ -478,18 +485,27 @@ export default function IntakeForm() {
 
           {/* ── Navigation ── */}
           {step >= 1 && step <= 4 && (
-            <div className="px-8 py-5 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <Button variant="ghost" onClick={handleBack} disabled={step === 1} className="text-gray-500 hover:text-gray-800">
-                <ChevronLeft size={16} className="mr-1" />
+            <div className="px-8 py-5 border-t border-gray-100 flex items-center justify-between bg-white">
+              <Button
+                variant="ghost"
+                onClick={handleBack}
+                disabled={step === 1}
+                className="text-gray-400 hover:text-gray-700 gap-1"
+              >
+                <ChevronLeft size={15} />
                 {t.nav.back}
               </Button>
-              <Button onClick={handleNext} disabled={submitting} className="bg-rose-500 hover:bg-rose-600 text-white px-6 rounded-xl">
+              <Button
+                onClick={handleNext}
+                disabled={submitting}
+                className="bg-rose-500 hover:bg-rose-600 text-white px-7 py-2 rounded-xl font-semibold gap-1.5 shadow-sm shadow-rose-200"
+              >
                 {submitting ? (
-                  <><Loader2 size={15} className="mr-2 animate-spin" />{t.nav.submitting}</>
+                  <><Loader2 size={15} className="animate-spin" />{t.nav.submitting}</>
                 ) : step === 4 ? (
-                  <>{t.nav.submit} <CheckCircle2 size={15} className="ml-2" /></>
+                  <>{t.nav.submit} <CheckCircle2 size={15} /></>
                 ) : (
-                  <>{t.nav.next} <ChevronRight size={15} className="ml-1" /></>
+                  <>{t.nav.next} <ChevronRight size={15} /></>
                 )}
               </Button>
             </div>
@@ -498,7 +514,7 @@ export default function IntakeForm() {
       </div>
 
       {/* Footer */}
-      <footer className="text-center py-4 text-xs text-gray-300">{t.footer}</footer>
+      <footer className="text-center py-5 text-xs text-gray-400 font-light">{t.footer}</footer>
     </div>
   );
 }

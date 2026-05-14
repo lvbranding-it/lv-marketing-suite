@@ -6,7 +6,7 @@ import {
   Copy, Check, ExternalLink, Trash2, Eye, Mail,
   Calendar, Building2, ClipboardList, ChevronDown,
   FolderPlus, Loader2, CheckCircle2, ArrowRight, AlertCircle,
-  Search, X, UserCheck, Send,
+  Search, X, UserCheck, Send, FileText, Sparkles,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -122,6 +122,7 @@ export default function Intake() {
   const [streamedText, setStreamedText] = useState("");
   const [convertError, setConvertError] = useState("");
   const [newProjectId, setNewProjectId] = useState<string | null>(null);
+  const [modalTab, setModalTab]       = useState<"brief" | "context">("brief");
 
   // ── Personalized link state ──────────────────────────────────────────────────
   const [contactQuery, setContactQuery]             = useState("");
@@ -265,7 +266,13 @@ export default function Intake() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["intake_submissions"] }),
+    onSuccess: (_, { status }) => {
+      qc.invalidateQueries({ queryKey: ["intake_submissions"] });
+      // Keep the selected object in sync so the modal badge updates instantly
+      setSelected((prev) => prev ? { ...prev, status: status as IntakeSubmission["status"] } : prev);
+      const labels: Record<string, string> = { new: "New", reviewed: "Reviewed", converted: "Converted" };
+      toast({ description: `Status set to "${labels[status] ?? status}".` });
+    },
   });
 
   // ── Delete ───────────────────────────────────────────────────────────────────
@@ -281,6 +288,23 @@ export default function Intake() {
     },
   });
 
+  // ── Fetch linked project AI context (for converted submissions) ──────────────
+  const { data: linkedContext, isLoading: contextLoading } = useQuery<{
+    id: string; name: string; marketing_context: Record<string, string> | null;
+  } | null>({
+    queryKey: ["intake_linked_context", selected?.id],
+    queryFn: async () => {
+      if (!selected) return null;
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, marketing_context")
+        .filter("marketing_context->>intake_submission_id", "eq", selected.id)
+        .maybeSingle();
+      return (data as { id: string; name: string; marketing_context: Record<string, string> | null } | null) ?? null;
+    },
+    enabled: !!selected,
+  });
+
   // ── Close + reset ─────────────────────────────────────────────────────────────
   const closeModal = () => {
     setSelected(null);
@@ -288,6 +312,7 @@ export default function Intake() {
     setStreamedText("");
     setConvertError("");
     setNewProjectId(null);
+    setModalTab("brief");
   };
 
   // ── Convert to Project ────────────────────────────────────────────────────────
@@ -576,7 +601,7 @@ export default function Intake() {
                 {submissions.map((sub) => (
                   <tr
                     key={sub.id}
-                    onClick={() => { setSelected(sub); setConvertState("idle"); }}
+                    onClick={() => { setSelected(sub); setConvertState("idle"); setModalTab("brief"); }}
                     className="border-b border-border/50 last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3">
@@ -633,7 +658,7 @@ export default function Intake() {
         <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
 
           {/* Header */}
-          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+          <DialogHeader className="px-6 pt-6 pb-0 border-b shrink-0">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <DialogTitle className="text-lg font-bold truncate">
@@ -643,13 +668,24 @@ export default function Intake() {
                   {selected?.contact_name} · {selected?.contact_email}
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2 shrink-0 mr-6">
-                {selected && !isConverting && (
-                  <Badge className={cn("text-xs border", STATUS_META[selected.status]?.class)}>
-                    {STATUS_META[selected.status]?.label}
-                  </Badge>
-                )}
-              </div>
+              {/* Inline status selector — always visible, always editable */}
+              {selected && !isConverting && (
+                <div className="shrink-0 mr-6" onClick={(e) => e.stopPropagation()}>
+                  <Select
+                    value={selected.status}
+                    onValueChange={(v) => updateStatus.mutate({ id: selected.id, status: v })}
+                  >
+                    <SelectTrigger className={cn("h-7 text-xs border rounded-full px-2.5 w-28", STATUS_META[selected.status]?.class)}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">New</SelectItem>
+                      <SelectItem value="reviewed">Reviewed</SelectItem>
+                      <SelectItem value="converted">Converted</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {selected && !isConverting && (
@@ -685,12 +721,40 @@ export default function Intake() {
                     Convert to Project
                   </Button>
                 )}
-                {selected.status === "converted" && newProjectId && (
-                  <Button size="sm" variant="outline" onClick={() => { closeModal(); navigate(`/projects/${newProjectId}`); }} className="gap-1.5">
-                    <ArrowRight size={14} />
-                    Open Project
-                  </Button>
+                {selected.status === "converted" && (
+                  <div className="flex gap-2">
+                    {(newProjectId ?? linkedContext?.id) && (
+                      <Button size="sm" variant="outline" onClick={() => { closeModal(); navigate(`/projects/${newProjectId ?? linkedContext?.id}`); }} className="gap-1.5">
+                        <ArrowRight size={14} />
+                        Open Project
+                      </Button>
+                    )}
+                  </div>
                 )}
+              </div>
+            )}
+
+            {/* ── Brief / Context tabs ─────────────────────────────────────── */}
+            {selected && !isConverting && (
+              <div className="flex gap-1 mt-4 -mb-px">
+                {(["brief", "context"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setModalTab(tab)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-t-lg border-x border-t transition-colors",
+                      modalTab === tab
+                        ? "bg-white border-border text-foreground"
+                        : "bg-transparent border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {tab === "brief" ? <FileText size={11} /> : <Sparkles size={11} />}
+                    {tab === "brief" ? "Client Brief" : "AI Context"}
+                    {tab === "context" && linkedContext && (
+                      <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    )}
+                  </button>
+                ))}
               </div>
             )}
           </DialogHeader>
@@ -765,8 +829,8 @@ export default function Intake() {
             </div>
           )}
 
-          {/* ── Normal detail view ───────────────────────────────────────────── */}
-          {convertState === "idle" && selected && (
+          {/* ── Brief tab ────────────────────────────────────────────────────── */}
+          {convertState === "idle" && selected && modalTab === "brief" && (
             <ScrollArea className="flex-1 px-6 py-5">
               <div className="space-y-5">
                 {selected.contact_id && (
@@ -810,6 +874,50 @@ export default function Intake() {
                   <DetailRow label="Extra Notes"     value={fd(selected).extra_notes} />
                 </DetailSection>
               </div>
+            </ScrollArea>
+          )}
+
+          {/* ── AI Context tab ───────────────────────────────────────────────── */}
+          {convertState === "idle" && selected && modalTab === "context" && (
+            <ScrollArea className="flex-1 px-6 py-5">
+              {contextLoading ? (
+                <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                  <Loader2 size={16} className="animate-spin" /> Loading context…
+                </div>
+              ) : linkedContext?.marketing_context?.raw_markdown ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 text-xs text-violet-700">
+                    <Sparkles size={12} className="text-violet-500 shrink-0" />
+                    AI-generated marketing context — saved in project <strong>{linkedContext.name}</strong>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto h-6 text-xs px-2 text-violet-700 hover:bg-violet-100"
+                      onClick={() => { closeModal(); navigate(`/projects/${linkedContext.id}`); }}
+                    >
+                      Open project →
+                    </Button>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-4">
+                    <MarkdownContent>{linkedContext.marketing_context.raw_markdown}</MarkdownContent>
+                  </div>
+                </div>
+              ) : convertState === "idle" && selected.status !== "converted" ? (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                  <Sparkles size={32} className="text-gray-200" />
+                  <p className="text-sm font-medium text-gray-500">No AI context yet</p>
+                  <p className="text-xs text-gray-400">Convert this submission to a project to generate the marketing context.</p>
+                  <Button size="sm" onClick={() => { setModalTab("brief"); convertToProject(selected); }} className="mt-2 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <FolderPlus size={13} /> Convert to Project
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                  <Sparkles size={32} className="text-gray-200" />
+                  <p className="text-sm font-medium text-gray-500">Context not found</p>
+                  <p className="text-xs text-gray-400">The linked project may have been deleted or the context wasn't saved.</p>
+                </div>
+              )}
             </ScrollArea>
           )}
         </DialogContent>

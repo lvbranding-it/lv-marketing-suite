@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, AlertCircle, Settings2, Zap } from "lucide-react";
+import {
+  ArrowLeft, CheckCircle2, AlertCircle, Settings2, Zap,
+  FileText, Sparkles, ClipboardList, Mail, Building2,
+  Globe, Users, Target, Award, MessageSquare,
+} from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import SkillOutputCard from "@/components/skills/SkillOutputCard";
 import MarketingContextWizard from "@/components/projects/MarketingContextWizard";
@@ -9,16 +13,47 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { useProject } from "@/hooks/useProjects";
 import { useSkillOutputs } from "@/hooks/useSkillOutputs";
 import { cn } from "@/lib/utils";
 
+// ── Status styles ─────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<string, string> = {
-  active: "bg-green-50 text-green-700 border-green-200",
-  paused: "bg-amber-50 text-amber-700 border-amber-200",
+  active:   "bg-green-50 text-green-700 border-green-200",
+  paused:   "bg-amber-50 text-amber-700 border-amber-200",
   archived: "bg-slate-50 text-slate-600 border-slate-200",
 };
 
+// ── Brief field helpers ───────────────────────────────────────────────────────
+function BriefSection({ icon: Icon, title, children }: {
+  icon: React.ElementType; title: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Icon size={14} className="text-rose-500 shrink-0" />
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{title}</h3>
+      </div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function BriefRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+      <p className="text-sm text-gray-800 leading-relaxed">{value}</p>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
@@ -35,6 +70,7 @@ export default function ProjectDetail() {
     }
   }, [searchParams, project]);
 
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (projectLoading) {
     return (
       <AppShell>
@@ -52,14 +88,13 @@ export default function ProjectDetail() {
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
           <p className="text-4xl mb-3">❓</p>
           <p className="text-muted-foreground text-sm mb-4">Project not found.</p>
-          <Link to="/projects" className="text-primary text-sm underline">
-            Back to Projects
-          </Link>
+          <Link to="/projects" className="text-primary text-sm underline">Back to Projects</Link>
         </div>
       </AppShell>
     );
   }
 
+  // ── Wizard mode ───────────────────────────────────────────────────────────
   if (showWizard) {
     return (
       <AppShell>
@@ -78,10 +113,7 @@ export default function ProjectDetail() {
           <div className="flex-1 min-h-0">
             <MarketingContextWizard
               projectId={project.id}
-              onComplete={() => {
-                setShowWizard(false);
-                navigate(`/projects/${project.id}`);
-              }}
+              onComplete={() => { setShowWizard(false); navigate(`/projects/${project.id}`); }}
               onSkip={() => setShowWizard(false)}
             />
           </div>
@@ -90,10 +122,21 @@ export default function ProjectDetail() {
     );
   }
 
-  const contextData = project.marketing_context as Record<string, unknown>;
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const contextData = project.marketing_context as Record<string, unknown> | null;
+  const intakeInputs = contextData?.intake_inputs as Record<string, string> | null;
+  const rawMarkdown  = contextData?.raw_markdown as string | null;
+  const generatedAt  = contextData?.generated_at as string | null;
+
+  const hasIntakeBrief = !!(intakeInputs && Object.keys(intakeInputs).length > 0);
+  const hasContextDoc  = !!rawMarkdown;
+
+  // Decide default tab: if intake data exists, open on brief, otherwise outputs
+  const defaultTab = hasIntakeBrief || hasContextDoc ? "brief" : "outputs";
 
   return (
     <AppShell>
+      {/* Breadcrumb */}
       <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
         <button
           onClick={() => navigate("/projects")}
@@ -112,8 +155,9 @@ export default function ProjectDetail() {
         </Badge>
       </div>
 
-      <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-        {/* Project header */}
+      <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-5">
+
+        {/* ── Project header ──────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-foreground">{project.name}</h1>
@@ -124,68 +168,118 @@ export default function ProjectDetail() {
               <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
             )}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/skills`)}
-          >
+          <Button variant="outline" size="sm" onClick={() => navigate("/skills")}>
             <Zap size={13} className="mr-1.5" />
             Run a Skill
           </Button>
         </div>
 
-        {/* Marketing Context section */}
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              {project.context_complete ? (
-                <CheckCircle2 size={16} className="text-green-500" />
-              ) : (
-                <AlertCircle size={16} className="text-amber-500" />
-              )}
-              <h2 className="text-sm font-semibold">Marketing Context</h2>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              onClick={() => setShowWizard(true)}
-            >
-              <Settings2 size={12} className="mr-1.5" />
-              {project.context_complete ? "Edit" : "Set Up"}
-            </Button>
+        {/* ── Marketing context status pill ───────────────────────────────── */}
+        <div className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3">
+          <div className="flex items-center gap-2">
+            {project.context_complete ? (
+              <CheckCircle2 size={15} className="text-green-500 shrink-0" />
+            ) : (
+              <AlertCircle size={15} className="text-amber-500 shrink-0" />
+            )}
+            <span className="text-sm font-medium">Marketing Context</span>
+            {project.context_complete && generatedAt && (
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                · Generated {new Date(generatedAt).toLocaleDateString("en-US", { dateStyle: "medium" })}
+              </span>
+            )}
+            {!project.context_complete && (
+              <span className="text-xs text-muted-foreground">— not set up yet</span>
+            )}
           </div>
-
-          {project.context_complete && contextData?.raw_markdown ? (
-            <div className="text-xs text-muted-foreground">
-              Context document ready. All skills will use this automatically.
-              {contextData.generated_at ? (
-                <span className="ml-2 text-muted-foreground/60">
-                  Generated {new Date(String(contextData.generated_at)).toLocaleDateString()}
-                </span>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                Set up a marketing context to improve all skill outputs for this project.
-              </p>
-              <Button size="sm" onClick={() => setShowWizard(true)}>
-                Set Up Context
-              </Button>
-            </div>
-          )}
+          <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowWizard(true)}>
+            <Settings2 size={12} className="mr-1.5" />
+            {project.context_complete ? "Edit" : "Set Up"}
+          </Button>
         </div>
 
-        {/* Outputs */}
-        <Tabs defaultValue="outputs">
-          <TabsList>
+        {/* ── Tabs ────────────────────────────────────────────────────────── */}
+        <Tabs defaultValue={defaultTab}>
+          <TabsList className="w-full justify-start">
+            {(hasIntakeBrief || hasContextDoc) && (
+              <TabsTrigger value="brief" className="gap-1.5">
+                <FileText size={13} />
+                Client Brief
+              </TabsTrigger>
+            )}
+            {hasContextDoc && (
+              <TabsTrigger value="context" className="gap-1.5">
+                <Sparkles size={13} />
+                AI Context
+              </TabsTrigger>
+            )}
             <TabsTrigger value="outputs">
+              <ClipboardList size={13} className="mr-1.5" />
               Outputs ({outputs.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="outputs" className="mt-4">
+          {/* ── Client Brief tab ──────────────────────────────────────────── */}
+          {(hasIntakeBrief || hasContextDoc) && (
+            <TabsContent value="brief" className="mt-5">
+              {hasIntakeBrief ? (
+                <div className="space-y-5">
+                  <BriefSection icon={Mail} title="Contact & Company">
+                    <BriefRow label="Full Name"    value={intakeInputs!.contact_name} />
+                    <BriefRow label="Email"        value={intakeInputs!.contact_email} />
+                    <BriefRow label="Role / Title" value={intakeInputs!.contact_role} />
+                    <BriefRow label="Company"      value={intakeInputs!.company_name} />
+                    <BriefRow label="Website"      value={intakeInputs!.website} />
+                  </BriefSection>
+
+                  <Separator />
+
+                  <BriefSection icon={Building2} title="Business">
+                    <BriefRow label="Industry"       value={intakeInputs!.industry} />
+                    <BriefRow label="Company Size"   value={intakeInputs!.company_size} />
+                    <BriefRow label="Business Model" value={intakeInputs!.business_model} />
+                    <BriefRow label="One-Liner"      value={intakeInputs!.one_liner} />
+                  </BriefSection>
+
+                  <Separator />
+
+                  <BriefSection icon={Target} title="Goals & Audience">
+                    <BriefRow label="Goals"          value={intakeInputs!.goals} />
+                    <BriefRow label="Ideal Customer" value={intakeInputs!.ideal_customer} />
+                    <BriefRow label="Top Pain Point" value={intakeInputs!.top_problem} />
+                    <BriefRow label="Timeline"       value={intakeInputs!.timeline} />
+                  </BriefSection>
+
+                  <Separator />
+
+                  <BriefSection icon={Award} title="Brand & Competition">
+                    <BriefRow label="Competitors"     value={intakeInputs!.competitors} />
+                    <BriefRow label="Differentiators" value={intakeInputs!.differentiators} />
+                    <BriefRow label="Brand Tone"      value={intakeInputs!.tone} />
+                    <BriefRow label="Extra Notes"     value={intakeInputs!.extra_notes} />
+                  </BriefSection>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                  <FileText size={36} className="text-gray-200" />
+                  <p className="text-sm font-medium text-gray-500">No intake brief linked</p>
+                  <p className="text-xs text-gray-400">This project wasn't converted from a client intake form.</p>
+                </div>
+              )}
+            </TabsContent>
+          )}
+
+          {/* ── AI Context tab ────────────────────────────────────────────── */}
+          {hasContextDoc && (
+            <TabsContent value="context" className="mt-5">
+              <div className="bg-card border border-border rounded-xl px-5 py-5">
+                <MarkdownContent>{rawMarkdown!}</MarkdownContent>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* ── Outputs tab ───────────────────────────────────────────────── */}
+          <TabsContent value="outputs" className="mt-5">
             {outputsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)}
