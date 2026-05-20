@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/hooks/useProjects";
 import { useSkillOutputs } from "@/hooks/useSkillOutputs";
+import { useAgentRunCounts } from "@/hooks/useAgentRuns";
 import BranchSelect from "@/components/branches/BranchSelect";
 import { branchMatchesFilter, type BranchFilterValue } from "@/hooks/useBranches";
 
@@ -18,6 +19,7 @@ export default function Projects() {
   const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const { data: projects = [], isLoading } = useProjects();
   const { data: allOutputs = [] } = useSkillOutputs();
+  const { data: agentRunCounts = {} } = useAgentRunCounts();
 
   const outputCountByProject = allOutputs.reduce<Record<string, number>>((acc, o) => {
     if (o.project_id) acc[o.project_id] = (acc[o.project_id] ?? 0) + 1;
@@ -82,6 +84,7 @@ export default function Projects() {
                 key={project.id}
                 project={project}
                 outputCount={outputCountByProject[project.id] ?? 0}
+                agentRunCount={agentRunCounts[project.id] ?? 0}
               />
             ))}
           </div>

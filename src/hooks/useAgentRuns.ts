@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrg } from "./useOrg";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,29 @@ export function useAgentRun(runId: string | undefined) {
         .single();
       if (error) throw error;
       return data as AgentRun;
+    },
+  });
+}
+
+/** Returns a map of project_id → agent run count for the current org */
+export function useAgentRunCounts() {
+  const { org } = useOrg();
+  return useQuery({
+    queryKey: ["agent_run_counts", org?.id],
+    enabled: !!org,
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("agent_runs")
+        .select("project_id")
+        .eq("org_id", org!.id);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const row of (data ?? []) as { project_id: string }[]) {
+        if (row.project_id) counts[row.project_id] = (counts[row.project_id] ?? 0) + 1;
+      }
+      return counts;
     },
   });
 }

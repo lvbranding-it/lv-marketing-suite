@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Archive, Pause } from "lucide-react";
+import { CheckCircle2, AlertCircle, Archive, Pause, Bot } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/integrations/supabase/types";
@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 interface ProjectCardProps {
   project: Project;
   outputCount?: number;
+  agentRunCount?: number;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -22,7 +23,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   archived: <Archive size={10} className="mr-1" />,
 };
 
-export default function ProjectCard({ project, outputCount = 0 }: ProjectCardProps) {
+export default function ProjectCard({ project, outputCount = 0, agentRunCount = 0 }: ProjectCardProps) {
   const navigate = useNavigate();
 
   return (
@@ -71,7 +72,20 @@ export default function ProjectCard({ project, outputCount = 0 }: ProjectCardPro
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {agentRunCount > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/agents/${project.id}`);
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-colors font-medium"
+              title="Open in Agent Workspace"
+            >
+              <Bot size={10} />
+              {agentRunCount} run{agentRunCount !== 1 ? "s" : ""}
+            </button>
+          )}
           <span>{outputCount} output{outputCount !== 1 ? "s" : ""}</span>
           <span>{formatDistanceToNow(new Date(project.updated_at), { addSuffix: true })}</span>
         </div>
