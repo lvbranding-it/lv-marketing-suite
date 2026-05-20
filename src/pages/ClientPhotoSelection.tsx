@@ -172,6 +172,9 @@ export default function ClientPhotoSelection() {
     {}
   );
 
+  // Photos are protected (no right-click / long-press save) until editing is complete
+  const protectImages = !session?.deliverables_ready_at;
+
   const selectedCount = photos.filter((p) => p.status === "selected").length;
   const photoLimit = session?.photo_limit ?? 0;
   const extraPrice = Number(session?.extra_photo_price ?? 0);
@@ -481,6 +484,7 @@ export default function ClientPhotoSelection() {
                   disabled={isDisabled(photo)}
                   signedUrl={signedUrls[photo.id] ?? null}
                   commentCount={commentCountByPhotoId[photo.id] ?? 0}
+                  protectImages={protectImages}
                 />
               ))}
             </div>
@@ -573,6 +577,7 @@ export default function ClientPhotoSelection() {
           setCommentPhoto(p);
         }}
         disabled={lightboxPhoto ? isDisabled(lightboxPhoto) : false}
+        protectImages={protectImages}
       />
 
       {/* Comment panel — side sheet */}

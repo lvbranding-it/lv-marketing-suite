@@ -22,6 +22,7 @@ import {
   RefreshCw,
   FolderDown,
   Trophy,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -44,6 +45,7 @@ import {
 const NAV_ITEMS = [
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/skills", labelKey: "nav.skills", icon: Zap },
+  { to: "/agents", labelKey: "nav.agents", icon: Bot },
   { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
   { to: "/workspace", labelKey: "nav.workspace", icon: BookOpen },
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
@@ -328,9 +330,11 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
 
 interface AppShellProps {
   children: React.ReactNode;
+  /** Remove overflow-auto so child can manage its own scroll areas (e.g. workspace panels) */
+  noPadding?: boolean;
 }
 
-export default function AppShell({ children }: AppShellProps) {
+export default function AppShell({ children, noPadding }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -369,7 +373,9 @@ export default function AppShell({ children }: AppShellProps) {
       </Sheet>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto pt-14 md:pt-0">{children}</main>
+      <main className={cn("flex-1 pt-14 md:pt-0", noPadding ? "overflow-hidden" : "overflow-auto")}>
+        {children}
+      </main>
     </div>
   );
 }

@@ -35,6 +35,7 @@ const Contests             = lazy(() => import("@/pages/Contests"));
 const ContestDetail        = lazy(() => import("@/pages/ContestDetail"));
 const VotingPage           = lazy(() => import("@/pages/VotingPage"));
 const EmbedWidget          = lazy(() => import("@/pages/EmbedWidget"));
+const AgentWorkspace       = lazy(() => import("@/pages/AgentWorkspace"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -246,6 +247,23 @@ function AppRoutes() {
       <Route
         path="/embed/:slug"
         element={<Suspense fallback={null}><EmbedWidget /></Suspense>}
+      />
+      {/* Agent Workspace */}
+      <Route
+        path="/agents"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><AgentWorkspace /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agents/:projectId"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><AgentWorkspace /></Suspense>
+          </ProtectedRoute>
+        }
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

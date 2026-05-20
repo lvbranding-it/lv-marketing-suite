@@ -11,6 +11,7 @@ interface ClientPhotoCardProps {
   disabled: boolean;   // limit reached and photo is not_selected
   signedUrl: string | null;
   commentCount: number;
+  protectImages?: boolean; // block right-click / long-press save until editing is done
 }
 
 export default function ClientPhotoCard({
@@ -21,6 +22,7 @@ export default function ClientPhotoCard({
   disabled,
   signedUrl,
   commentCount,
+  protectImages = false,
 }: ClientPhotoCardProps) {
   const isSelected = photo.status === "selected";
   const [imgError, setImgError] = useState(false);
@@ -45,12 +47,30 @@ export default function ClientPhotoCard({
         {!signedUrl ? (
           <Skeleton className="absolute inset-0 rounded-none" />
         ) : !imgError ? (
-          <img
-            src={signedUrl}
-            alt={photo.file_name}
-            className="w-full h-full object-cover"
-            onError={() => setImgError(true)}
-          />
+          <>
+            <img
+              src={signedUrl}
+              alt={photo.file_name}
+              className="w-full h-full object-cover"
+              draggable={false}
+              onError={() => setImgError(true)}
+              onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
+              style={protectImages ? {
+                WebkitTouchCallout: "none",
+                WebkitUserSelect: "none",
+                userSelect: "none",
+                WebkitUserDrag: "none",
+              } as React.CSSProperties : undefined}
+            />
+            {/* Transparent overlay blocks long-press save on mobile */}
+            {protectImages && (
+              <div
+                className="absolute inset-0"
+                onContextMenu={(e) => e.preventDefault()}
+                style={{ WebkitTouchCallout: "none" } as React.CSSProperties}
+              />
+            )}
+          </>
         ) : (
           <div className="w-full h-full bg-muted flex items-center justify-center text-xs text-muted-foreground p-2 text-center">
             {photo.file_name}

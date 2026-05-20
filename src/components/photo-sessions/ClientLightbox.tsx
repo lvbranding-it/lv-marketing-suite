@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, CheckCircle2, Circle, MessageSquare } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, CheckCircle2, Circle, MessageSquare, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { SessionPhoto } from "@/integrations/supabase/types";
@@ -14,6 +14,7 @@ interface ClientLightboxProps {
   onToggle: (photo: SessionPhoto) => void;
   onComment: (photo: SessionPhoto) => void;
   disabled: boolean; // limit reached and this photo is not selected
+  protectImages?: boolean; // block right-click / long-press save until editing is done
 }
 
 export default function ClientLightbox({
@@ -26,6 +27,7 @@ export default function ClientLightbox({
   onToggle,
   onComment,
   disabled,
+  protectImages = false,
 }: ClientLightboxProps) {
   const currentIndex = photo ? photos.findIndex((p) => p.id === photo.id) : -1;
   const hasPrev = currentIndex > 0;
@@ -99,13 +101,30 @@ export default function ClientLightbox({
 
         {/* Photo */}
         {signedUrl ? (
-          <img
-            key={photo.id}
-            src={signedUrl}
-            alt={photo.file_name}
-            className="max-h-full max-w-full object-contain rounded-lg select-none"
-            draggable={false}
-          />
+          <div className="relative max-h-full max-w-full flex items-center justify-center">
+            <img
+              key={photo.id}
+              src={signedUrl}
+              alt={photo.file_name}
+              className="max-h-full max-w-full object-contain rounded-lg select-none"
+              draggable={false}
+              onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
+              style={protectImages ? {
+                WebkitTouchCallout: "none",
+                WebkitUserSelect: "none",
+                userSelect: "none",
+                WebkitUserDrag: "none",
+              } as React.CSSProperties : undefined}
+            />
+            {/* Transparent overlay blocks long-press save on mobile */}
+            {protectImages && (
+              <div
+                className="absolute inset-0 rounded-lg"
+                onContextMenu={(e) => e.preventDefault()}
+                style={{ WebkitTouchCallout: "none" } as React.CSSProperties}
+              />
+            )}
+          </div>
         ) : (
           <div className="w-64 h-64 bg-white/10 rounded-xl flex items-center justify-center text-white/40 text-sm">
             Loading…
@@ -128,6 +147,14 @@ export default function ClientLightbox({
       <div className="shrink-0 px-4 py-4 flex flex-col items-center gap-3">
         {/* File name */}
         <p className="text-white/40 text-xs truncate max-w-xs">{photo.file_name}</p>
+
+        {/* Preview-only notice when photos are protected */}
+        {protectImages && (
+          <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 text-white/60 text-xs rounded-full px-3 py-1">
+            <Lock size={11} />
+            Preview only · Download available after editing is complete
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {/* Comment button */}
