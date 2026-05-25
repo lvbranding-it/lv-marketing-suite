@@ -79,6 +79,53 @@ const AGENTS: Record<string, { systemPrompt: string; requiredFields: string[] }>
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Content block types accepted by Claude API
+type TextBlock     = { type: "text"; text: string };
+type ImageBlock    = { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+type DocumentBlock = { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
+type ContentBlock  = TextBlock | ImageBlock | DocumentBlock;
+
+interface AttachmentInput { name: string; type: string; data: string; }
+
+/**
+ * Build the user-message content for the Claude API.
+ * When attachments are present the content becomes an array of typed blocks;
+ * otherwise it stays a plain string (cheaper, no wrapping overhead).
+ */
+function buildUserContent(
+  text: string,
+  attachments: AttachmentInput[],
+): string | ContentBlock[] {
+  if (!attachments || attachments.length === 0) return text;
+
+  const blocks: ContentBlock[] = [];
+
+  for (const att of attachments) {
+    if (att.type.startsWith("image/")) {
+      blocks.push({
+        type:   "image",
+        source: { type: "base64", media_type: att.type, data: att.data },
+      });
+    } else if (att.type === "application/pdf") {
+      blocks.push({
+        type:   "document",
+        source: { type: "base64", media_type: "application/pdf", data: att.data },
+      });
+    } else {
+      // Plain text / CSV / JSON / Markdown — decode base64 and embed inline
+      let decoded = "";
+      try { decoded = atob(att.data); } catch { decoded = "[unreadable]"; }
+      blocks.push({
+        type: "text",
+        text: `[Attached file: ${att.name}]\n\`\`\`\n${decoded.slice(0, 50_000)}\n\`\`\``,
+      });
+    }
+  }
+
+  if (text.trim()) blocks.push({ type: "text", text });
+  return blocks;
+}
+
 /** Extract <SNAPSHOT_JSON>...</SNAPSHOT_JSON> from AI output */
 function extractSnapshot(text: string): Record<string, unknown> {
   const match = text.match(/<SNAPSHOT_JSON>([\s\S]*?)<\/SNAPSHOT_JSON>/i);
@@ -149,6 +196,7 @@ serve(async (req) => {
     mode?:               "create" | "revise";
     parentRunId?:        string;
     conversationHistory?: { role: "user" | "assistant"; content: string }[];
+    attachments?:        AttachmentInput[];
   };
 
   try {
@@ -157,10 +205,15 @@ serve(async (req) => {
     return json({ error: "Invalid JSON" }, 400);
   }
 
-  const { orgId, projectId, agentId, input, languageControl, mode = "create", parentRunId, conversationHistory = [] } = body;
+  const {
+    orgId, projectId, agentId, input, languageControl,
+    mode = "create", parentRunId, conversationHistory = [],
+    attachments = [],
+  } = body;
 
-  if (!orgId || !projectId || !agentId || !input) {
-    return json({ error: "Missing required fields: orgId, projectId, agentId, input" }, 400);
+  const hasAttachments = attachments.length > 0;
+  if (!orgId || !projectId || !agentId || (!input && !hasAttachments)) {
+    return json({ error: "Missing required fields: orgId, projectId, agentId, and input or attachments" }, 400);
   }
 
   const agent = AGENTS[agentId];
@@ -222,10 +275,10 @@ serve(async (req) => {
     snapshotBlock,
   ].filter(Boolean).join("");
 
-  // Build messages
-  const messages: { role: "user" | "assistant"; content: string }[] = [
+  // Build messages — last user turn may contain file content blocks
+  const messages: { role: string; content: string | ContentBlock[] }[] = [
     ...conversationHistory,
-    { role: "user", content: input },
+    { role: "user", content: buildUserContent(input, attachments) },
   ];
 
   // Create a pending run record

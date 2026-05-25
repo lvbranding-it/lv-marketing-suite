@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, Bot, User, Copy, RefreshCw, ChevronDown,
-  FileDown, FileText,
+  FileDown, FileText, Paperclip, X, FileIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,19 +19,53 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { agents, getAgent, CATEGORY_LABELS, CATEGORY_COLORS, routeMessage } from "@/lib/agents";
-import { useRunAgent, useAgentRun, type RunResult } from "@/hooks/useAgentRuns";
+import { useRunAgent, useAgentRun, type RunResult, type Attachment } from "@/hooks/useAgentRuns";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import DiscoveryForm from "./DiscoveryForm";
 import QuickFieldChips from "./QuickFieldChips";
 
-export interface ChatMessage {
-  type:      "user" | "agent";
-  content:   string;
-  agentId?:  string;
-  runResult?: RunResult;
+/** Lightweight display record stored in chat history — no base64 data */
+interface MessageAttachment {
+  name:       string;
+  type:       string;
+  previewUrl?: string; // object URL for images
 }
+
+export interface ChatMessage {
+  type:        "user" | "agent";
+  content:     string;
+  agentId?:    string;
+  runResult?:  RunResult;
+  attachments?: MessageAttachment[];
+}
+
+/** Full pending attachment including base64 data, kept only until sent */
+interface PendingAttachment extends Attachment {
+  previewUrl?: string;
+  size:        number;
+}
+
+const MAX_FILE_BYTES  = 5 * 1024 * 1024; // 5 MB per file
+const MAX_FILES       = 5;
+const ACCEPTED_TYPES  = [
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "application/pdf",
+  "text/plain", "text/csv", "text/markdown",
+  "application/json",
+].join(",");
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isImage(type: string) { return type.startsWith("image/"); }
 
 interface Props {
   projectId:       string;
@@ -245,13 +279,49 @@ function parseDiscoveryQuestions(text: string): string[] | null {
 export default function AgentRunChat({
   projectId, projectName, orgId, onRunComplete, initialAgentId, loadRunId,
 }: Props) {
-  const [agentId,         setAgentId]         = useState(initialAgentId ?? "smart");
-  const [language,        setLanguage]        = useState("EN");
-  const [input,           setInput]           = useState("");
-  const [messages,        setMessages]        = useState<ChatMessage[]>([]);
-  const [projectAgentIds, setProjectAgentIds] = useState<string[]>([]);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const runAgent  = useRunAgent();
+  const [agentId,           setAgentId]         = useState(initialAgentId ?? "smart");
+  const [language,          setLanguage]        = useState("EN");
+  const [input,             setInput]           = useState("");
+  const [messages,          setMessages]        = useState<ChatMessage[]>([]);
+  const [projectAgentIds,   setProjectAgentIds] = useState<string[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const bottomRef  = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const runAgent   = useRunAgent();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const remaining = MAX_FILES - pendingAttachments.length;
+    const toProcess = files.slice(0, remaining);
+
+    const next: PendingAttachment[] = [];
+    for (const file of toProcess) {
+      if (file.size > MAX_FILE_BYTES) {
+        toast({ description: `"${file.name}" exceeds 5 MB and was skipped.`, variant: "destructive" });
+        continue;
+      }
+      try {
+        const data       = await fileToBase64(file);
+        const previewUrl = isImage(file.type) ? URL.createObjectURL(file) : undefined;
+        next.push({ name: file.name, type: file.type, data, previewUrl, size: file.size });
+      } catch {
+        toast({ description: `Could not read "${file.name}".`, variant: "destructive" });
+      }
+    }
+    setPendingAttachments((prev) => [...prev, ...next]);
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removeAttachment = (idx: number) => {
+    setPendingAttachments((prev) => {
+      const removed = prev[idx];
+      if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   // Load historical agents used in this project
   useEffect(() => {
@@ -291,27 +361,44 @@ export default function AgentRunChat({
   const handleRunLoaded = (msgs: ChatMessage[]) => setMessages(msgs);
 
   const handleSend = async (overrideText?: string) => {
-    const text = (overrideText ?? input).trim();
-    if (!text || runAgent.isPending) return;
+    const text       = (overrideText ?? input).trim();
+    const hasFiles   = pendingAttachments.length > 0;
+    if ((!text && !hasFiles) || runAgent.isPending) return;
 
-    const resolvedAgentId = agentId === "smart" ? routeMessage(text) : agentId;
+    const resolvedAgentId = agentId === "smart" ? routeMessage(text || "analyze file") : agentId;
 
     const history: { role: "user" | "assistant"; content: string }[] = messages.map((m) => ({
       role:    m.type === "user" ? "user" : "assistant",
       content: m.content,
     }));
 
-    setMessages((prev) => [...prev, { type: "user", content: text }]);
+    // Build display info for the message bubble (no base64 data)
+    const displayAttachments: MessageAttachment[] = pendingAttachments.map(
+      ({ name, type, previewUrl }) => ({ name, type, previewUrl }),
+    );
+    // Default display text when only files are sent
+    const displayText = text || `Analyze the attached file${pendingAttachments.length > 1 ? "s" : ""}.`;
+
+    setMessages((prev) => [
+      ...prev,
+      { type: "user", content: displayText, attachments: displayAttachments },
+    ]);
     setInput("");
+    // Keep a snapshot of attachments to send, then clear pending immediately
+    const attachmentsToSend: Attachment[] = pendingAttachments.map(
+      ({ name, type, data }) => ({ name, type, data }),
+    );
+    setPendingAttachments([]);
 
     try {
       const result = await runAgent.mutateAsync({
         orgId,
         projectId,
         agentId: resolvedAgentId,
-        input:   text,
+        input:   displayText,
         languageControl: { language },
         conversationHistory: history,
+        attachments: attachmentsToSend,
       });
 
       setMessages((prev) => [
@@ -332,6 +419,8 @@ export default function AgentRunChat({
       });
       setMessages((prev) => prev.slice(0, -1));
       setInput(text);
+      // Restore pending attachments on failure
+      setPendingAttachments(pendingAttachments);
     }
   };
 
@@ -494,8 +583,37 @@ export default function AgentRunChat({
               return (
                 <div key={i} className="flex justify-end">
                   <div className="flex items-start gap-2 max-w-[80%]">
-                    <div className="bg-rose-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
+                    <div className="flex flex-col gap-1.5">
+                      {/* Attachment thumbnails */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 justify-end">
+                          {msg.attachments.map((att, ai) => (
+                            <div
+                              key={ai}
+                              className="flex items-center gap-1 rounded-lg overflow-hidden border border-rose-300 bg-rose-50 text-rose-700 text-[11px]"
+                            >
+                              {att.previewUrl ? (
+                                <img
+                                  src={att.previewUrl}
+                                  alt={att.name}
+                                  className="h-14 w-14 object-cover"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-1 px-2 py-1">
+                                  <FileIcon size={13} />
+                                  <span className="max-w-[120px] truncate font-medium">{att.name}</span>
+                                </div>
+                              )}
+                              {att.previewUrl && (
+                                <span className="px-1.5 py-1 max-w-[90px] truncate font-medium">{att.name}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="bg-rose-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
                     </div>
                     <div className="shrink-0 w-7 h-7 bg-muted rounded-full flex items-center justify-center mt-0.5">
                       <User size={14} />
@@ -632,18 +750,71 @@ export default function AgentRunChat({
               onSubmit={(text) => setInput((prev) => prev ? prev + "\n" + text : text)}
             />
           )}
+
+          {/* Pending attachment chips */}
+          {pendingAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {pendingAttachments.map((att, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 pr-1 overflow-hidden text-[11px] text-gray-700"
+                >
+                  {att.previewUrl ? (
+                    <img src={att.previewUrl} alt={att.name} className="h-8 w-8 object-cover shrink-0" />
+                  ) : (
+                    <div className="flex items-center justify-center w-8 h-8 bg-gray-100 shrink-0">
+                      <FileIcon size={13} className="text-gray-500" />
+                    </div>
+                  )}
+                  <span className="max-w-[140px] truncate font-medium">{att.name}</span>
+                  <button
+                    onClick={() => removeAttachment(i)}
+                    className="ml-0.5 p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPTED_TYPES}
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
           <div className="flex gap-2 items-end">
+            {/* Attach button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={runAgent.isPending || pendingAttachments.length >= MAX_FILES}
+              title="Attach file (images, PDF, text — max 5 MB each)"
+              className="shrink-0 h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Paperclip size={15} />
+            </button>
+
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Type your input… (Enter to send, Shift+Enter for new line)`}
+              placeholder={
+                pendingAttachments.length > 0
+                  ? "Add a message about the file(s)… (optional)"
+                  : "Type your input… (Enter to send, Shift+Enter for new line)"
+              }
               className="min-h-[72px] max-h-48 resize-none text-sm flex-1"
               disabled={runAgent.isPending}
             />
             <Button
               onClick={() => handleSend()}
-              disabled={!input.trim() || runAgent.isPending}
+              disabled={(!input.trim() && pendingAttachments.length === 0) || runAgent.isPending}
               size="sm"
               className="shrink-0 h-9 gap-1.5"
             >
@@ -655,7 +826,7 @@ export default function AgentRunChat({
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
-            Enter to send · Shift+Enter for new line · Agents follow a 2-phase flow: questions first, then full output
+            Enter to send · Shift+Enter for new line · Attach images, PDFs or text files (max 5 MB each)
           </p>
         </div>
       </div>

@@ -100,6 +100,12 @@ export function useAgentRunCounts() {
 
 // ── Mutation: run an agent ────────────────────────────────────────────────────
 
+export interface Attachment {
+  name: string;
+  type: string;  // MIME type
+  data: string;  // base64-encoded file content (no data-URL prefix)
+}
+
 interface RunAgentParams {
   orgId:               string;
   projectId:           string;
@@ -109,6 +115,7 @@ interface RunAgentParams {
   mode?:               "create" | "revise";
   parentRunId?:        string;
   conversationHistory?: { role: "user" | "assistant"; content: string }[];
+  attachments?:        Attachment[];
 }
 
 export function useRunAgent() {
