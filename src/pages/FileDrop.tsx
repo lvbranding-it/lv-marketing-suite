@@ -384,6 +384,8 @@ function ShareCard({
 }
 
 // ── Upload Share Dialog ───────────────────────────────────────────────────────
+const MAX_SHARE_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase plan limit)
+
 function NewShareDialog({
   open,
   onOpenChange,
@@ -407,6 +409,14 @@ function NewShareDialog({
   };
 
   const handleFile = (f: File) => {
+    if (f.size > MAX_SHARE_BYTES) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: `Maximum file size is ${formatBytes(MAX_SHARE_BYTES)}. Your file is ${formatBytes(f.size)}.`,
+      });
+      return;
+    }
     setFile(f);
     if (!label.trim()) setLabel(f.name);
   };
@@ -476,7 +486,7 @@ function NewShareDialog({
                 <UploadCloud size={28} className="text-muted-foreground" />
                 <div className="text-center">
                   <p className="text-sm font-medium text-slate-700">Drop a file here</p>
-                  <p className="text-xs text-muted-foreground">or click to browse</p>
+                  <p className="text-xs text-muted-foreground">or click to browse · max 50 MB</p>
                 </div>
               </>
             )}

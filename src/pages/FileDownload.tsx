@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Download, FileIcon, AlertCircle, Loader2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import LVLogo from "@/components/LVLogo";
 
 interface ShareInfo {
   label:       string;
@@ -89,6 +90,11 @@ export default function FileDownload() {
           {/* Top accent */}
           <div className="h-1.5 bg-gradient-to-r from-rose-500 to-rose-400" />
 
+          {/* Logo header */}
+          <div className="flex justify-center pt-6 pb-2">
+            <LVLogo size={44} />
+          </div>
+
           <div className="p-8">
             {/* Loading */}
             {state === "loading" && (
@@ -163,9 +169,10 @@ export default function FileDownload() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          Shared via LV Marketing Suite
-        </p>
+        <div className="flex items-center justify-center gap-2 mt-5">
+          <LVLogo size={22} />
+          <p className="text-xs text-muted-foreground">LV Marketing Suite</p>
+        </div>
       </div>
     </div>
   );
