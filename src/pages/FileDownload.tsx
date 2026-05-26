@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Download, FileIcon, AlertCircle, Loader2, Clock } from "lucide-react";
+import { Download, AlertCircle, Loader2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import LVLogo from "@/components/LVLogo";
@@ -84,16 +84,15 @@ export default function FileDownload() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md flex flex-col items-center gap-4">
+
+        {/* Logo — outside the card */}
+        <LVLogo size={55} />
+
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+        <div className="w-full bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
           {/* Top accent */}
           <div className="h-1.5 bg-gradient-to-r from-rose-500 to-rose-400" />
-
-          {/* Logo header */}
-          <div className="flex justify-center pt-6 pb-2">
-            <LVLogo size={44} />
-          </div>
 
           <div className="p-8">
             {/* Loading */}
@@ -129,18 +128,10 @@ export default function FileDownload() {
             {/* Ready */}
             {state === "ready" && info && (
               <div className="flex flex-col items-center gap-6">
-                {/* Icon */}
-                <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
-                  <FileIcon size={28} className="text-rose-500" />
-                </div>
-
                 {/* Info */}
                 <div className="text-center">
-                  <p className="text-lg font-bold text-slate-800 mb-0.5">{info.label}</p>
-                  <p className="text-sm text-muted-foreground truncate max-w-xs" title={info.fileName}>
-                    {info.fileName}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">{formatBytes(info.fileSize)}</p>
+                  <p className="text-lg font-bold text-slate-800 mb-1">{info.label}</p>
+                  <p className="text-xs text-muted-foreground">{formatBytes(info.fileSize)}</p>
                 </div>
 
                 {/* Expiry notice */}
@@ -169,10 +160,7 @@ export default function FileDownload() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-center gap-2 mt-5">
-          <LVLogo size={22} />
-          <p className="text-xs text-muted-foreground">LV Marketing Suite</p>
-        </div>
+        <p className="text-xs text-muted-foreground">LV Marketing Suite</p>
       </div>
     </div>
   );
