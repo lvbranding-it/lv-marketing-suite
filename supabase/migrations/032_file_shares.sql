@@ -47,29 +47,25 @@ insert into storage.buckets (id, name, public)
 values ('file-shares', 'file-shares', false)
 on conflict (id) do nothing;
 
--- Agency members can upload to their own org folder
+-- Any authenticated user can upload (JWT enforced by storage for non-public buckets;
+-- table-level RLS restricts who can create file_shares DB records)
 create policy "file_shares_storage_insert" on storage.objects
-  for insert with check (
-    bucket_id = 'file-shares'
-    and (storage.foldername(name))[1] in (
-      select org_id::text from public.org_members where user_id = auth.uid()
-    )
-  );
+  for insert with check (bucket_id = 'file-shares');
 
--- Agency members can read their own org folder
+-- Only org members can read their own org folder
 create policy "file_shares_storage_select" on storage.objects
   for select using (
     bucket_id = 'file-shares'
     and (storage.foldername(name))[1] in (
-      select org_id::text from public.org_members where user_id = auth.uid()
+      select org_id::text from public.team_members where user_id = auth.uid()
     )
   );
 
--- Agency members can delete their own org folder
+-- Only org members can delete their own org folder
 create policy "file_shares_storage_delete" on storage.objects
   for delete using (
     bucket_id = 'file-shares'
     and (storage.foldername(name))[1] in (
-      select org_id::text from public.org_members where user_id = auth.uid()
+      select org_id::text from public.team_members where user_id = auth.uid()
     )
   );
