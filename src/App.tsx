@@ -36,6 +36,7 @@ const ContestDetail        = lazy(() => import("@/pages/ContestDetail"));
 const VotingPage           = lazy(() => import("@/pages/VotingPage"));
 const EmbedWidget          = lazy(() => import("@/pages/EmbedWidget"));
 const AgentWorkspace       = lazy(() => import("@/pages/AgentWorkspace"));
+const FileDownload         = lazy(() => import("@/pages/FileDownload"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -216,6 +217,11 @@ function AppRoutes() {
       <Route
         path="/upload/:token"
         element={<Suspense fallback={null}><ClientUpload /></Suspense>}
+      />
+      {/* File Share — public client download (no auth) */}
+      <Route
+        path="/download/:token"
+        element={<Suspense fallback={null}><FileDownload /></Suspense>}
       />
       {/* Contests — admin (protected) */}
       <Route

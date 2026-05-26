@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { format } from "date-fns";
-import { Copy, Check, FolderDown, Plus, ChevronDown, ChevronUp, Download, X, Loader2 } from "lucide-react";
+import {
+  Copy, Check, FolderDown, Plus, ChevronDown, ChevronUp,
+  Download, X, Loader2, Share2, FileIcon, Trash2, LinkIcon,
+  UploadCloud,
+} from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +40,12 @@ import {
   type FileRequest,
   type FileSubmission,
 } from "@/hooks/useFileRequests";
+import {
+  useFileShares,
+  useCreateFileShare,
+  useDeleteFileShare,
+  type FileShare,
+} from "@/hooks/useFileShares";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -307,13 +318,225 @@ function NewDropDialog({
   );
 }
 
+// ── Share card ────────────────────────────────────────────────────────────────
+function ShareCard({
+  share,
+  onDelete,
+}: {
+  share: FileShare;
+  onDelete: (s: FileShare) => void;
+}) {
+  const downloadUrl = `${window.location.origin}/download/${share.token}`;
+  const isExpired = share.expires_at ? new Date(share.expires_at) < new Date() : false;
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-9 h-9 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center shrink-0">
+            <FileIcon size={16} className="text-rose-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{share.label}</p>
+            <p className="text-xs text-muted-foreground truncate" title={share.file_name}>
+              {share.file_name} · {formatBytes(share.file_size)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {isExpired && (
+            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+              Expired
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50 gap-1"
+            onClick={() => onDelete(share)}
+          >
+            <Trash2 size={11} /> Delete
+          </Button>
+        </div>
+      </div>
+
+      {/* Download link */}
+      <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-md px-3 py-2">
+        <LinkIcon size={11} className="text-muted-foreground shrink-0" />
+        <code className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{downloadUrl}</code>
+        <CopyButton text={downloadUrl} />
+      </div>
+
+      {/* Footer row */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{share.download_count} download{share.download_count !== 1 ? "s" : ""}</span>
+        <div className="flex items-center gap-3">
+          {share.expires_at && (
+            <span>
+              Expires {format(new Date(share.expires_at), "MMM d, yyyy")}
+            </span>
+          )}
+          <span>Created {format(new Date(share.created_at), "MMM d, yyyy")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Upload Share Dialog ───────────────────────────────────────────────────────
+function NewShareDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const createShare = useCreateFileShare();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [label, setLabel] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const reset = () => {
+    setLabel("");
+    setExpiresAt("");
+    setFile(null);
+  };
+
+  const handleFile = (f: File) => {
+    setFile(f);
+    if (!label.trim()) setLabel(f.name);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) handleFile(dropped);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file || !label.trim()) return;
+    try {
+      await createShare.mutateAsync({ label, file, expiresAt: expiresAt || null });
+      toast({ description: "Share link created." });
+      reset();
+      onOpenChange(false);
+    } catch {
+      toast({ variant: "destructive", description: "Failed to create share link." });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Share a File</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          {/* Drop zone */}
+          <div
+            className={cn(
+              "border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-colors",
+              dragging
+                ? "border-rose-400 bg-rose-50"
+                : file
+                  ? "border-emerald-300 bg-emerald-50"
+                  : "border-border hover:border-rose-300 hover:bg-rose-50/40"
+            )}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+          >
+            {file ? (
+              <>
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <FileIcon size={18} className="text-emerald-600" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700 truncate max-w-xs">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive underline"
+                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                >
+                  Remove
+                </button>
+              </>
+            ) : (
+              <>
+                <UploadCloud size={28} className="text-muted-foreground" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700">Drop a file here</p>
+                  <p className="text-xs text-muted-foreground">or click to browse · up to 500 MB</p>
+                </div>
+              </>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+
+          {/* Label */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Label <span className="text-destructive">*</span></label>
+            <Input
+              placeholder="e.g. Q2 Proposal Deck"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              required
+            />
+          </div>
+
+          {/* Expiry */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Expiry date <span className="text-muted-foreground text-xs">(optional)</span></label>
+            <Input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!file || !label.trim() || createShare.isPending}>
+              {createShare.isPending
+                ? <><Loader2 size={14} className="animate-spin mr-1.5" /> Uploading…</>
+                : "Create Link"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function FileDrop() {
-  const { data: requests = [], isLoading } = useFileRequests();
+  const { data: requests = [], isLoading: requestsLoading } = useFileRequests();
+  const { data: shares = [], isLoading: sharesLoading } = useFileShares();
   const closeRequest = useCloseFileRequest();
+  const deleteShare = useDeleteFileShare();
   const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const [tab, setTab] = useState<"receive" | "send">("receive");
+  const [dropDialogOpen, setDropDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<FileRequest | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FileShare | null>(null);
 
   const handleConfirmClose = async () => {
     if (!closeTarget) return;
@@ -326,50 +549,112 @@ export default function FileDrop() {
     setCloseTarget(null);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteShare.mutateAsync(deleteTarget);
+      toast({ description: `"${deleteTarget.label}" deleted.` });
+    } catch {
+      toast({ variant: "destructive", description: "Failed to delete share." });
+    }
+    setDeleteTarget(null);
+  };
+
   return (
     <AppShell>
-      <Header title="Client File Drop" subtitle="Send a link to clients so they can upload files directly to you." />
+      <Header title="Files" subtitle="Receive files from clients or share files with them." />
       <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-6">
-        {/* Header actions */}
-        <div className="flex items-center justify-end">
-          <Button onClick={() => setDialogOpen(true)} className="gap-2">
-            <Plus size={15} /> New Drop Link
-          </Button>
+
+        {/* Tab + action row */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "receive" | "send")}>
+            <TabsList>
+              <TabsTrigger value="receive" className="gap-1.5">
+                <FolderDown size={13} /> Receive
+              </TabsTrigger>
+              <TabsTrigger value="send" className="gap-1.5">
+                <Share2 size={13} /> Send / Share
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {tab === "receive" ? (
+            <Button onClick={() => setDropDialogOpen(true)} className="gap-2">
+              <Plus size={15} /> New Drop Link
+            </Button>
+          ) : (
+            <Button onClick={() => setShareDialogOpen(true)} className="gap-2">
+              <Plus size={15} /> Share a File
+            </Button>
+          )}
         </div>
 
-        {/* Content */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
-          </div>
-        ) : requests.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <FolderDown size={32} className="text-primary" />
+        {/* ── RECEIVE tab ─────────────────────────────────────── */}
+        {tab === "receive" && (
+          requestsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
             </div>
-            <div>
-              <p className="text-base font-semibold">No drop links yet</p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-                Create a shareable link and send it to a client — they can drag &amp; drop files without needing an account.
-              </p>
+          ) : requests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <FolderDown size={32} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">No drop links yet</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                  Create a shareable link and send it to a client — they can drag &amp; drop files without needing an account.
+                </p>
+              </div>
+              <Button onClick={() => setDropDialogOpen(true)} className="gap-2">
+                <Plus size={15} /> Create Drop Link
+              </Button>
             </div>
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
-              <Plus size={15} /> Create Drop Link
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {requests.map((r) => (
-              <RequestCard key={r.id} request={r} onClose={setCloseTarget} />
-            ))}
-          </div>
+          ) : (
+            <div className="space-y-3">
+              {requests.map((r) => (
+                <RequestCard key={r.id} request={r} onClose={setCloseTarget} />
+              ))}
+            </div>
+          )
+        )}
+
+        {/* ── SEND tab ────────────────────────────────────────── */}
+        {tab === "send" && (
+          sharesLoading ? (
+            <div className="space-y-3">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+            </div>
+          ) : shares.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-rose-50 flex items-center justify-center">
+                <Share2 size={32} className="text-rose-500" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">No shared files yet</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                  Upload a PDF, deck, or any file and get a shareable download link to send to clients.
+                </p>
+              </div>
+              <Button onClick={() => setShareDialogOpen(true)} className="gap-2">
+                <Plus size={15} /> Share a File
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {shares.map((s) => (
+                <ShareCard key={s.id} share={s} onDelete={setDeleteTarget} />
+              ))}
+            </div>
+          )
         )}
       </div>
 
-      {/* New drop dialog */}
-      <NewDropDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      {/* Dialogs */}
+      <NewDropDialog open={dropDialogOpen} onOpenChange={setDropDialogOpen} />
+      <NewShareDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} />
 
-      {/* Close confirm */}
+      {/* Close drop confirm */}
       <AlertDialog open={!!closeTarget} onOpenChange={(open) => !open && setCloseTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -385,6 +670,27 @@ export default function FileDrop() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Close Link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete share confirm */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this share?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleteTarget?.label}" will be permanently deleted and the download link will stop working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
