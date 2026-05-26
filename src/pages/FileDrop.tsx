@@ -475,7 +475,7 @@ function NewShareDialog({
                 <UploadCloud size={28} className="text-muted-foreground" />
                 <div className="text-center">
                   <p className="text-sm font-medium text-slate-700">Drop a file here</p>
-                  <p className="text-xs text-muted-foreground">or click to browse · up to 500 MB</p>
+                  <p className="text-xs text-muted-foreground">or click to browse</p>
                 </div>
               </>
             )}

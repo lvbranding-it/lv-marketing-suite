@@ -42,10 +42,11 @@ create policy "file_shares_delete" on public.file_shares
 -- Public read by token (used by the edge function via service role, not anon)
 -- The edge function uses the service-role key, so no additional anon policy is needed.
 
--- Storage bucket for shared files (private — only accessible via signed URLs)
-insert into storage.buckets (id, name, public)
-values ('file-shares', 'file-shares', false)
-on conflict (id) do nothing;
+-- NOTE: The 'file-shares' bucket must be created via the Supabase Storage API,
+-- not via direct SQL insert. Direct inserts create phantom rows not visible to
+-- the storage service. After running this migration, create the bucket via:
+--   admin.storage.createBucket('file-shares', { public: false })
+-- The bucket was created via a one-time setup edge function after this migration.
 
 -- Any authenticated user can upload (JWT enforced by storage for non-public buckets;
 -- table-level RLS restricts who can create file_shares DB records)
