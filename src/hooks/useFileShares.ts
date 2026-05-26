@@ -65,7 +65,10 @@ export function useCreateFileShare() {
       const { error: uploadErr } = await supabase.storage
         .from("file-shares")
         .upload(filePath, file, { contentType: file.type, upsert: false });
-      if (uploadErr) throw uploadErr;
+      if (uploadErr) {
+        // Surface the actual storage error message (e.g. "The object exceeded the maximum allowed size")
+        throw new Error(uploadErr.message || JSON.stringify(uploadErr));
+      }
 
       // 2. Insert the DB record
       const { data, error: insertErr } = await db

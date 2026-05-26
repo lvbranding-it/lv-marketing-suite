@@ -426,8 +426,9 @@ function NewShareDialog({
       toast({ description: "Share link created." });
       reset();
       onOpenChange(false);
-    } catch {
-      toast({ variant: "destructive", description: "Failed to create share link." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ variant: "destructive", title: "Upload failed", description: msg || "Failed to create share link." });
     }
   };
 
