@@ -4,6 +4,13 @@ import { useOrg } from "./useOrg";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface FileShareItem {
+  name:      string;
+  size:      number;
+  mime_type: string;
+  path:      string;
+}
+
 export interface FileShare {
   id:             string;
   org_id:         string;
@@ -12,6 +19,7 @@ export interface FileShare {
   file_size:      number;
   mime_type:      string;
   file_path:      string;
+  files:          FileShareItem[];
   token:          string;
   expires_at:     string | null;
   download_count: number;
@@ -44,8 +52,13 @@ export function useFileShares() {
 
 interface CreateFileShareParams {
   label:     string;
-  file:      File;
+  files:     File[];
   expiresAt: string | null;
+}
+
+/** Sanitize a filename for use as a storage path segment */
+function safePath(name: string, index: number): string {
+  return `${index}_${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 }
 
 export function useCreateFileShare() {
@@ -55,38 +68,53 @@ export function useCreateFileShare() {
   const db = supabase as any;
 
   return useMutation({
-    mutationFn: async ({ label, file, expiresAt }: CreateFileShareParams): Promise<FileShare> => {
+    mutationFn: async ({ label, files, expiresAt }: CreateFileShareParams): Promise<FileShare> => {
       if (!org) throw new Error("No organisation");
+      if (!files.length) throw new Error("No files selected");
 
-      // 1. Upload the file to storage
-      const ext = file.name.split(".").pop() ?? "bin";
-      const filePath = `${org.id}/${crypto.randomUUID()}.${ext}`;
+      // One folder per share so all files are grouped together
+      const folderPath = `${org.id}/${crypto.randomUUID()}`;
+      const uploaded: FileShareItem[] = [];
 
-      const { error: uploadErr } = await supabase.storage
-        .from("file-shares")
-        .upload(filePath, file, { contentType: file.type, upsert: false });
-      if (uploadErr) {
-        // Surface the actual storage error message (e.g. "The object exceeded the maximum allowed size")
-        throw new Error(uploadErr.message || JSON.stringify(uploadErr));
+      for (let i = 0; i < files.length; i++) {
+        const file     = files[i];
+        const filePath = `${folderPath}/${safePath(file.name, i)}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from("file-shares")
+          .upload(filePath, file, { contentType: file.type, upsert: false });
+
+        if (uploadErr) {
+          // Clean up any already-uploaded files before throwing
+          if (uploaded.length) {
+            await supabase.storage.from("file-shares").remove(uploaded.map(u => u.path));
+          }
+          throw new Error(uploadErr.message || JSON.stringify(uploadErr));
+        }
+
+        uploaded.push({ name: file.name, size: file.size, mime_type: file.type || "application/octet-stream", path: filePath });
       }
 
-      // 2. Insert the DB record
+      const totalSize  = files.reduce((sum, f) => sum + f.size, 0);
+      const isMultiple = files.length > 1;
+
       const { data, error: insertErr } = await db
         .from("file_shares")
         .insert({
           org_id:    org.id,
           label:     label.trim(),
-          file_name: file.name,
-          file_size: file.size,
-          mime_type: file.type || "application/octet-stream",
-          file_path: filePath,
+          file_name: isMultiple ? `${files.length} files` : files[0].name,
+          file_size: totalSize,
+          mime_type: isMultiple ? "application/octet-stream" : (files[0].type || "application/octet-stream"),
+          file_path: uploaded[0]?.path ?? "",
+          files:     uploaded,
           expires_at: expiresAt || null,
         })
         .select()
         .single();
+
       if (insertErr) {
-        // Clean up orphaned storage file on DB failure
-        await supabase.storage.from("file-shares").remove([filePath]);
+        await supabase.storage.from("file-shares").remove(uploaded.map(u => u.path));
         throw insertErr;
       }
 
@@ -106,10 +134,15 @@ export function useDeleteFileShare() {
 
   return useMutation({
     mutationFn: async (share: FileShare) => {
-      // 1. Remove storage object
-      await supabase.storage.from("file-shares").remove([share.file_path]);
+      // Delete all storage objects for this share
+      const paths = share.files.length > 0
+        ? share.files.map(f => f.path)
+        : share.file_path ? [share.file_path] : [];
 
-      // 2. Delete DB row
+      if (paths.length) {
+        await supabase.storage.from("file-shares").remove(paths);
+      }
+
       const { error } = await db.from("file_shares").delete().eq("id", share.id);
       if (error) throw error;
     },

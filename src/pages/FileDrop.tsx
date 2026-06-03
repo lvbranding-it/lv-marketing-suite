@@ -338,8 +338,10 @@ function ShareCard({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate">{share.label}</p>
-            <p className="text-xs text-muted-foreground truncate" title={share.file_name}>
-              {share.file_name} · {formatBytes(share.file_size)}
+            <p className="text-xs text-muted-foreground">
+              {share.files.length > 1
+                ? `${share.files.length} files · ${formatBytes(share.file_size)}`
+                : `${share.file_name} · ${formatBytes(share.file_size)}`}
             </p>
           </div>
         </div>
@@ -384,7 +386,7 @@ function ShareCard({
 }
 
 // ── Upload Share Dialog ───────────────────────────────────────────────────────
-const MAX_SHARE_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase plan limit)
+const MAX_SHARE_BYTES = 50 * 1024 * 1024; // 50 MB per file (Supabase plan limit)
 
 function NewShareDialog({
   open,
@@ -397,42 +399,49 @@ function NewShareDialog({
   const createShare = useCreateFileShare();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [label, setLabel] = useState("");
+  const [label, setLabel]       = useState("");
   const [expiresAt, setExpiresAt] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles]       = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
 
-  const reset = () => {
-    setLabel("");
-    setExpiresAt("");
-    setFile(null);
-  };
+  const reset = () => { setLabel(""); setExpiresAt(""); setFiles([]); };
 
-  const handleFile = (f: File) => {
-    if (f.size > MAX_SHARE_BYTES) {
+  const addFiles = (incoming: FileList | File[]) => {
+    const arr = Array.from(incoming);
+    const oversized = arr.filter(f => f.size > MAX_SHARE_BYTES);
+    if (oversized.length) {
       toast({
         variant: "destructive",
         title: "File too large",
-        description: `Maximum file size is ${formatBytes(MAX_SHARE_BYTES)}. Your file is ${formatBytes(f.size)}.`,
+        description: `${oversized.map(f => f.name).join(", ")} exceed${oversized.length === 1 ? "s" : ""} the 50 MB limit.`,
       });
-      return;
     }
-    setFile(f);
-    if (!label.trim()) setLabel(f.name);
+    const valid = arr.filter(f => f.size <= MAX_SHARE_BYTES);
+    if (!valid.length) return;
+    setFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      const merged = [...prev, ...valid.filter(f => !names.has(f.name))];
+      if (!label.trim() && merged.length === 1) setLabel(merged[0].name);
+      return merged;
+    });
   };
+
+  const removeFile = (name: string) =>
+    setFiles(prev => prev.filter(f => f.name !== name));
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const dropped = e.dataTransfer.files[0];
-    if (dropped) handleFile(dropped);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
   };
+
+  const totalSize = files.reduce((s, f) => s + f.size, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !label.trim()) return;
+    if (!files.length || !label.trim()) return;
     try {
-      await createShare.mutateAsync({ label, file, expiresAt: expiresAt || null });
+      await createShare.mutateAsync({ label, files, expiresAt: expiresAt || null });
       toast({ description: "Share link created." });
       reset();
       onOpenChange(false);
@@ -446,57 +455,59 @@ function NewShareDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Share a File</DialogTitle>
+          <DialogTitle>Share Files</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+
           {/* Drop zone */}
           <div
             className={cn(
-              "border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-3 cursor-pointer transition-colors",
-              dragging
-                ? "border-rose-400 bg-rose-50"
-                : file
-                  ? "border-emerald-300 bg-emerald-50"
-                  : "border-border hover:border-rose-300 hover:bg-rose-50/40"
+              "border-2 border-dashed rounded-xl p-5 flex flex-col items-center gap-3 cursor-pointer transition-colors",
+              dragging ? "border-rose-400 bg-rose-50" : "border-border hover:border-rose-300 hover:bg-rose-50/40"
             )}
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
           >
-            {file ? (
-              <>
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <FileIcon size={18} className="text-emerald-600" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700 truncate max-w-xs">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-destructive underline"
-                  onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                >
-                  Remove
-                </button>
-              </>
-            ) : (
-              <>
-                <UploadCloud size={28} className="text-muted-foreground" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Drop a file here</p>
-                  <p className="text-xs text-muted-foreground">or click to browse · max 50 MB</p>
-                </div>
-              </>
-            )}
+            <UploadCloud size={26} className="text-muted-foreground" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-700">Drop files here</p>
+              <p className="text-xs text-muted-foreground">or click to browse · max 50 MB per file</p>
+            </div>
           </div>
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+            onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ""; }}
           />
+
+          {/* File list */}
+          {files.length > 0 && (
+            <div className="space-y-1.5">
+              {files.map(f => (
+                <div key={f.name} className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2">
+                  <FileIcon size={13} className="text-rose-500 shrink-0" />
+                  <span className="text-xs flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{formatBytes(f.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(f.name)}
+                    className="ml-1 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              {files.length > 1 && (
+                <p className="text-xs text-muted-foreground text-right">
+                  {files.length} files · {formatBytes(totalSize)} total
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Label */}
           <div className="space-y-1.5">
@@ -512,20 +523,14 @@ function NewShareDialog({
           {/* Expiry */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Expiry date <span className="text-muted-foreground text-xs">(optional)</span></label>
-            <Input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-            />
+            <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!file || !label.trim() || createShare.isPending}>
+            <Button type="button" variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
+            <Button type="submit" disabled={!files.length || !label.trim() || createShare.isPending}>
               {createShare.isPending
-                ? <><Loader2 size={14} className="animate-spin mr-1.5" /> Uploading…</>
+                ? <><Loader2 size={14} className="animate-spin mr-1.5" />Uploading…</>
                 : "Create Link"}
             </Button>
           </div>
