@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Loader2, Copy, Check, QrCode, ExternalLink, Download, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Copy, Check, QrCode, ExternalLink, Download, Trash2, Upload, Star, X, Clock, Camera } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -13,7 +15,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useOrg } from "@/hooks/useOrg";
 import { useEvent, useCreateEvent, useUpdateEvent, type LVEvent } from "@/hooks/useEvents";
+import { useEventPhotos, useUpdatePhotoStatus, useDeleteEventPhoto, getPhotoUrl, type EventPhoto } from "@/hooks/useEventPhotos";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +60,18 @@ function FormField({ label, hint, required, children }: { label: string; hint?: 
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {children}
     </div>
+  );
+}
+
+// ── Pending badge for the Photos tab trigger ──────────────────────────────────
+
+function PhotosBadge({ eventId }: { eventId: string }) {
+  const { data: photos = [] } = useEventPhotos(eventId, "pending");
+  if (photos.length === 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+      {photos.length}
+    </span>
   );
 }
 
@@ -107,6 +127,184 @@ function QRPanel({ slug }: { slug: string }) {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Inline Photo Moderation ───────────────────────────────────────────────────
+
+const PHOTO_STATUS_STYLES: Record<string, string> = {
+  pending:  "bg-amber-50 text-amber-700 border-amber-200",
+  approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  featured: "bg-rose-50 text-rose-700 border-rose-200",
+  rejected: "bg-slate-100 text-slate-500 border-slate-200",
+};
+
+function MiniPhotoCard({ photo, onApprove, onReject, onFeature, onDelete, busy }: {
+  photo:     EventPhoto;
+  onApprove: () => void;
+  onReject:  () => void;
+  onFeature: () => void;
+  onDelete:  () => void;
+  busy:      boolean;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="relative aspect-square bg-muted">
+        {!loaded && <Skeleton className="absolute inset-0" />}
+        <img
+          src={getPhotoUrl(photo.image_path)}
+          alt=""
+          className={cn("w-full h-full object-cover", loaded ? "opacity-100" : "opacity-0")}
+          onLoad={() => setLoaded(true)}
+        />
+        <Badge variant="outline" className={cn("absolute top-1.5 left-1.5 text-[9px]", PHOTO_STATUS_STYLES[photo.status])}>
+          {photo.status}
+        </Badge>
+      </div>
+      <div className="p-2 space-y-1">
+        {photo.attendee_name && <p className="text-xs font-medium truncate">{photo.attendee_name}</p>}
+        {photo.caption && <p className="text-[10px] text-muted-foreground line-clamp-1">{photo.caption}</p>}
+        <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+          <Clock size={8} /> {formatDistanceToNow(new Date(photo.uploaded_at), { addSuffix: true })}
+          <span className="ml-1 flex items-center gap-0.5"><Camera size={8} /> {photo.upload_source}</span>
+        </p>
+        <div className="flex gap-1 pt-0.5">
+          {photo.status !== "approved" && photo.status !== "featured" && (
+            <button disabled={busy} onClick={onApprove} title="Approve"
+              className="flex-1 flex items-center justify-center py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors text-[10px] font-medium gap-0.5">
+              <Check size={10} /> Approve
+            </button>
+          )}
+          {photo.status !== "featured" && (
+            <button disabled={busy} onClick={onFeature} title="Feature"
+              className="flex-1 flex items-center justify-center py-1 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors text-[10px] font-medium gap-0.5">
+              <Star size={10} /> Feature
+            </button>
+          )}
+          {photo.status !== "rejected" && (
+            <button disabled={busy} onClick={onReject} title="Reject"
+              className="flex items-center justify-center py-1 px-1.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+              <X size={10} />
+            </button>
+          )}
+          <button disabled={busy} onClick={onDelete} title="Delete"
+            className="flex items-center justify-center py-1 px-1.5 rounded bg-red-50 text-red-500 hover:bg-red-100 transition-colors">
+            <Trash2 size={10} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PhotosPanel({ eventId }: { eventId: string }) {
+  const { toast }             = useToast();
+  const [filter, setFilter]   = useState<string>("pending");
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<EventPhoto | null>(null);
+
+  const { data: photos = [], isLoading, refetch } = useEventPhotos(eventId, filter);
+  const { data: allPhotos = [] }                  = useEventPhotos(eventId, "all");
+  const updateStatus = useUpdatePhotoStatus();
+  const deletePhoto  = useDeleteEventPhoto();
+
+  const pendingCount = allPhotos.filter(p => p.status === "pending").length;
+
+  const setStatus = async (photo: EventPhoto, status: EventPhoto["status"]) => {
+    setBusyIds(s => new Set(s).add(photo.id));
+    try {
+      await updateStatus.mutateAsync({ id: photo.id, status, eventId });
+      refetch();
+    } catch {
+      toast({ variant: "destructive", description: "Failed to update photo." });
+    } finally {
+      setBusyIds(s => { const n = new Set(s); n.delete(photo.id); return n; });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deletePhoto.mutateAsync({ id: deleteTarget.id, imagePath: deleteTarget.image_path, eventId });
+      toast({ description: "Photo deleted." });
+      refetch();
+    } catch {
+      toast({ variant: "destructive", description: "Failed to delete photo." });
+    }
+    setDeleteTarget(null);
+  };
+
+  const FILTERS = ["pending", "approved", "featured", "rejected", "all"];
+
+  return (
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {FILTERS.map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+              filter === f
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === "pending" && pendingCount > 0 && (
+              <span className="ml-1.5 bg-amber-500 text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        ))}
+        <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={() => refetch()}>Refresh</Button>
+      </div>
+
+      {/* Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="aspect-square rounded-xl" />)}
+        </div>
+      ) : photos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+          <p className="text-3xl">📸</p>
+          <p className="text-sm text-muted-foreground">No {filter !== "all" ? filter : ""} photos yet.</p>
+          {filter === "pending" && (
+            <p className="text-xs text-muted-foreground">Attendees can upload photos by scanning the QR code.</p>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {photos.map(photo => (
+            <MiniPhotoCard
+              key={photo.id}
+              photo={photo}
+              busy={busyIds.has(photo.id)}
+              onApprove={() => setStatus(photo, "approved")}
+              onReject={() => setStatus(photo, "rejected")}
+              onFeature={() => setStatus(photo, "featured")}
+              onDelete={() => setDeleteTarget(photo)}
+            />
+          ))}
+        </div>
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this photo?</AlertDialogTitle>
+            <AlertDialogDescription>This permanently removes the photo from storage and cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -249,6 +447,10 @@ export default function EventExperienceEditor() {
                 <TabsTrigger value="content" className="flex-1">Content</TabsTrigger>
                 <TabsTrigger value="branding" className="flex-1">Branding</TabsTrigger>
                 <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
+                <TabsTrigger value="photos" className="flex-1 relative">
+                  Photos
+                  {!isNew && eventId && <PhotosBadge eventId={eventId} />}
+                </TabsTrigger>
               </TabsList>
 
               {/* ── BASICS ── */}
@@ -460,6 +662,18 @@ export default function EventExperienceEditor() {
                   <ToggleRow label="Show event logo" checked={form.show_logo ?? true} onChange={(v) => set("show_logo", v)} />
                   <ToggleRow label="Show QR code on screen" checked={form.show_qr_code_on_screen ?? true} onChange={(v) => set("show_qr_code_on_screen", v)} />
                 </div>
+              </TabsContent>
+              {/* ── PHOTOS ── */}
+              <TabsContent value="photos">
+                {isNew ? (
+                  <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+                    Save the event first to start receiving and moderating photos.
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl p-5">
+                    <PhotosPanel eventId={eventId!} />
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
