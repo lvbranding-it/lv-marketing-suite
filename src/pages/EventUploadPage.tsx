@@ -1,20 +1,18 @@
 import { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Camera, ImageIcon, RefreshCw, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { useEventBySlug, type LVEvent } from "@/hooks/useEvents";
 import { uploadEventPhoto } from "@/hooks/useEventPhotos";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type Stage = "select" | "preview" | "submitting" | "done" | "error";
-type Source = "camera" | "selfie" | "gallery";
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Stage  = "select" | "preview" | "submitting" | "done" | "error";
+type Source = "camera" | "selfie" | "gallery";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,39 +25,37 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-function isValidImageFile(file: File): string | null {
-  const validTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif"];
-  if (!validTypes.includes(file.type) && !file.type.startsWith("image/")) {
-    return "This file type is not supported. Please use a photo.";
-  }
-  if (file.size > MAX_BYTES) {
-    return "This file is too large. Please choose a photo under 15 MB.";
-  }
+function validateFile(file: File): string | null {
+  if (!file.type.startsWith("image/")) return "This file type is not supported. Please use a photo.";
+  if (file.size > MAX_BYTES) return `File is too large. Please choose a photo under 15 MB.`;
   return null;
 }
 
-// ── Branded header ────────────────────────────────────────────────────────────
+// ── Capture button ────────────────────────────────────────────────────────────
 
-function EventHeader({ event }: { event: LVEvent }) {
+function CaptureButton({
+  label, icon, bg, border, textColor, onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  bg: string;
+  border?: string;
+  textColor: string;
+  onClick: () => void;
+}) {
   return (
-    <header
-      className="px-6 py-5 flex flex-col items-center gap-3 text-center"
-      style={{ backgroundColor: event.primary_color }}
+    <button
+      onClick={onClick}
+      className="w-full py-[18px] rounded-2xl flex items-center justify-center gap-3 font-bold text-[17px] transition-opacity active:opacity-75 shadow-sm select-none"
+      style={{
+        backgroundColor: bg,
+        border: border ? `2px solid ${border}` : "none",
+        color: textColor,
+      }}
     >
-      {event.show_logo && event.logo_url && (
-        <img src={event.logo_url} alt={event.name} className="h-14 w-auto object-contain" />
-      )}
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: event.accent_color }}>
-          {event.upload_headline}
-        </h1>
-        {event.upload_subheadline && (
-          <p className="text-sm mt-1 opacity-80" style={{ color: event.accent_color }}>
-            {event.upload_subheadline}
-          </p>
-        )}
-      </div>
-    </header>
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -72,63 +68,98 @@ function SelectStage({
   onFile: (file: File, source: Source) => void;
   onError: (msg: string) => void;
 }) {
-  const selfieRef   = useRef<HTMLInputElement>(null);
-  const rearRef     = useRef<HTMLInputElement>(null);
-  const galleryRef  = useRef<HTMLInputElement>(null);
+  const selfieRef  = useRef<HTMLInputElement>(null);
+  const rearRef    = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement>, source: Source) => {
+  const handle = (e: React.ChangeEvent<HTMLInputElement>, src: Source) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const err = isValidImageFile(file);
+    const err = validateFile(file);
     if (err) { onError(err); return; }
-    onFile(file, source);
+    onFile(file, src);
     e.target.value = "";
   };
 
-  const { camera_mode, allow_camera_capture, allow_gallery_upload } = event;
-  const showSelfie  = allow_camera_capture && (camera_mode === "front"  || camera_mode === "both");
-  const showRear    = allow_camera_capture && (camera_mode === "rear"   || camera_mode === "both");
+  const { camera_mode, allow_camera_capture, allow_gallery_upload,
+          selfie_button_label, rear_camera_button_label, gallery_button_label,
+          primary_color, secondary_color } = event;
+
+  const showSelfie  = allow_camera_capture && (camera_mode === "front" || camera_mode === "both");
+  const showRear    = allow_camera_capture && (camera_mode === "rear"  || camera_mode === "both");
   const showGallery = allow_gallery_upload;
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8">
-      <p className="text-muted-foreground text-sm text-center">How would you like to share?</p>
+    <div className="flex flex-col items-center justify-between flex-1 px-6 pt-6 pb-10 gap-6">
+      {/* Logo — the hero */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full">
+        {event.logo_url ? (
+          <img
+            src={event.logo_url}
+            alt={event.name}
+            className="w-full max-w-[280px] max-h-[260px] object-contain drop-shadow-md"
+          />
+        ) : (
+          <h1
+            className="text-4xl font-extrabold text-center leading-tight"
+            style={{ color: primary_color }}
+          >
+            {event.name}
+          </h1>
+        )}
 
-      <div className="w-full max-w-xs space-y-3">
+        {/* Subheadline — optional, very subtle */}
+        {event.upload_subheadline && (
+          <p className="text-sm text-center text-gray-400 max-w-xs leading-relaxed">
+            {event.upload_subheadline}
+          </p>
+        )}
+      </div>
+
+      {/* Buttons */}
+      <div className="w-full max-w-sm space-y-3">
+        <p className="text-sm text-center text-gray-400 mb-1">How would you like to share?</p>
+
         {showSelfie && (
           <>
-            <button
+            <CaptureButton
+              label={selfie_button_label}
+              icon={<Camera size={20} />}
+              bg={secondary_color}
+              textColor="#ffffff"
               onClick={() => selfieRef.current?.click()}
-              className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-semibold text-white transition-opacity active:opacity-80 shadow-md"
-              style={{ backgroundColor: "#CB2039" }}
-            >
-              <Camera size={20} /> {event.selfie_button_label}
-            </button>
-            <input ref={selfieRef} type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => handleInput(e, "selfie")} />
+            />
+            <input ref={selfieRef} type="file" accept="image/*" capture="user" className="hidden"
+              onChange={(e) => handle(e, "selfie")} />
           </>
         )}
+
         {showRear && (
           <>
-            <button
+            <CaptureButton
+              label={rear_camera_button_label}
+              icon={<Camera size={20} />}
+              bg={primary_color}
+              textColor="#ffffff"
               onClick={() => rearRef.current?.click()}
-              className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-semibold text-white transition-opacity active:opacity-80 shadow-md"
-              style={{ backgroundColor: "#0B1F4D" }}
-            >
-              <Camera size={20} /> {event.rear_camera_button_label}
-            </button>
-            <input ref={rearRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleInput(e, "camera")} />
+            />
+            <input ref={rearRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => handle(e, "camera")} />
           </>
         )}
+
         {showGallery && (
           <>
-            <button
+            <CaptureButton
+              label={gallery_button_label}
+              icon={<ImageIcon size={20} />}
+              bg="transparent"
+              border={secondary_color}
+              textColor={secondary_color}
               onClick={() => galleryRef.current?.click()}
-              className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-semibold border-2 transition-opacity active:opacity-80"
-              style={{ borderColor: "#CB2039", color: "#CB2039" }}
-            >
-              <ImageIcon size={20} /> {event.gallery_button_label}
-            </button>
-            <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleInput(e, "gallery")} />
+            />
+            <input ref={galleryRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => handle(e, "gallery")} />
           </>
         )}
       </div>
@@ -139,93 +170,97 @@ function SelectStage({
 // ── Preview stage ─────────────────────────────────────────────────────────────
 
 function PreviewStage({
-  event, previewUrl, file, source,
-  onRetake, onSubmit, submitting,
+  event, previewUrl, onRetake, onSubmit, submitting,
 }: {
-  event: LVEvent;
-  previewUrl: string;
-  file: File;
-  source: Source;
-  onRetake: () => void;
-  onSubmit: (name: string, caption: string, consent: boolean) => void;
-  submitting: boolean;
+  event:       LVEvent;
+  previewUrl:  string;
+  onRetake:    () => void;
+  onSubmit:    (name: string, caption: string, consent: boolean) => void;
+  submitting:  boolean;
 }) {
-  const [name, setName]         = useState("");
-  const [caption, setCaption]   = useState("");
-  const [consent, setConsent]   = useState(false);
-  const [nameErr, setNameErr]   = useState("");
-  const [capErr, setCapErr]     = useState("");
+  const [name, setName]       = useState("");
+  const [caption, setCaption] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [errors, setErrors]   = useState<{ name?: string; caption?: string }>({});
 
   const handleSubmit = () => {
-    let ok = true;
-    if (event.require_name && !name.trim()) { setNameErr("Name is required."); ok = false; }
-    if (event.require_caption && !caption.trim()) { setCapErr("Caption is required."); ok = false; }
-    if (!ok) return;
+    const errs: typeof errors = {};
+    if (event.require_name    && !name.trim())    errs.name    = "Name is required.";
+    if (event.require_caption && !caption.trim()) errs.caption = "Caption is required.";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     onSubmit(name, caption, consent);
   };
 
+  const { primary_color, secondary_color } = event;
+
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto">
-      {/* Preview image */}
-      <div className="relative bg-black">
-        <img src={previewUrl} alt="Preview" className="w-full max-h-[45vh] object-contain" />
+    <div className="flex flex-col flex-1 overflow-y-auto">
+      {/* Photo preview */}
+      <div className="relative bg-black w-full" style={{ maxHeight: "50vh" }}>
+        <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" style={{ maxHeight: "50vh" }} />
       </div>
 
-      <div className="p-5 space-y-4">
-        <p className="text-base font-semibold text-center">Looks good?</p>
-
+      <div className="px-6 py-5 space-y-4 flex-1">
+        {/* Retake */}
         <button
           onClick={onRetake}
-          className="w-full py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted/40 flex items-center justify-center gap-2"
+          className="w-full py-3 rounded-2xl border-2 text-sm font-semibold text-gray-500 flex items-center justify-center gap-2 transition-colors hover:bg-gray-50 active:opacity-75"
+          style={{ borderColor: "#e5e7eb" }}
         >
-          <RefreshCw size={15} /> Retake / Choose Another
+          <RefreshCw size={16} /> Retake / Choose Another
         </button>
 
-        {/* Optional fields */}
-        {!event.require_name || true ? (
+        {/* Name */}
+        {(event.require_name || true) && (
           <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Your Name {event.require_name && <span className="text-destructive">*</span>}
-              {!event.require_name && <span className="text-muted-foreground text-xs"> (optional)</span>}
+            <label className="text-sm font-medium text-gray-700">
+              Your Name
+              {!event.require_name && <span className="text-gray-400 font-normal"> (optional)</span>}
             </label>
-            <Input
+            <input
+              type="text"
               placeholder="First name"
               value={name}
-              onChange={(e) => { setName(e.target.value); setNameErr(""); }}
-              className={nameErr ? "border-destructive" : ""}
+              onChange={(e) => { setName(e.target.value); setErrors(p => ({ ...p, name: undefined })); }}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-offset-1 bg-white"
+              style={{ focusRingColor: secondary_color } as React.CSSProperties}
             />
-            {nameErr && <p className="text-xs text-destructive">{nameErr}</p>}
+            {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
-        ) : null}
+        )}
 
-        {!event.require_caption || true ? (
+        {/* Caption */}
+        {(event.require_caption || true) && (
           <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Caption {event.require_caption && <span className="text-destructive">*</span>}
-              {!event.require_caption && <span className="text-muted-foreground text-xs"> (optional)</span>}
+            <label className="text-sm font-medium text-gray-700">
+              Caption
+              {!event.require_caption && <span className="text-gray-400 font-normal"> (optional)</span>}
             </label>
-            <Textarea
+            <textarea
               placeholder="Add a caption…"
               rows={2}
               value={caption}
-              onChange={(e) => { setCaption(e.target.value); setCapErr(""); }}
-              className={cn("resize-none", capErr ? "border-destructive" : "")}
+              onChange={(e) => { setCaption(e.target.value); setErrors(p => ({ ...p, caption: undefined })); }}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none resize-none bg-white"
             />
-            {capErr && <p className="text-xs text-destructive">{capErr}</p>}
+            {errors.caption && <p className="text-xs text-red-500">{errors.caption}</p>}
           </div>
-        ) : null}
+        )}
 
         {/* Consent */}
         {event.require_consent && (
           <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-rose-600"
-            />
-            <span className="text-xs text-muted-foreground leading-relaxed">
-              By submitting this photo, I confirm I own or have permission to share it and authorize LV Branding and the event organizers to display it during the event and in related event media.
+            <div className="mt-0.5 shrink-0">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+                style={{ accentColor: secondary_color }}
+              />
+            </div>
+            <span className="text-xs text-gray-400 leading-relaxed">
+              By submitting, I authorize LV Branding and the event organizers to display this photo on event screens and related event media.
             </span>
           </label>
         )}
@@ -234,12 +269,12 @@ function PreviewStage({
         <button
           onClick={handleSubmit}
           disabled={submitting || (event.require_consent && !consent)}
-          className="w-full py-4 rounded-2xl font-bold text-white text-lg flex items-center justify-center gap-2 transition-opacity disabled:opacity-50"
-          style={{ backgroundColor: "#CB2039" }}
+          className="w-full py-[18px] rounded-2xl font-bold text-[17px] text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-50 active:opacity-75 shadow-sm"
+          style={{ backgroundColor: secondary_color }}
         >
           {submitting
             ? <><Loader2 size={20} className="animate-spin" /> Sending…</>
-            : "Submit Photo"
+            : "Submit Photo 🎉"
           }
         </button>
       </div>
@@ -250,60 +285,60 @@ function PreviewStage({
 // ── Done stage ────────────────────────────────────────────────────────────────
 
 function DoneStage({ event }: { event: LVEvent }) {
+  const { primary_color, secondary_color, logo_url, name, auto_approve, confirmation_message } = event;
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
-        <CheckCircle2 size={44} className="text-emerald-500" />
+    <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8 py-10 text-center">
+      {logo_url ? (
+        <img src={logo_url} alt={name} className="w-40 max-h-32 object-contain opacity-80" />
+      ) : null}
+
+      <div className="w-20 h-20 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: `${secondary_color}20` }}>
+        <CheckCircle2 size={44} style={{ color: secondary_color }} />
       </div>
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">
-          {event.auto_approve ? "You're on the big screen! 🎉" : "Photo received! 🎉"}
+
+      <div className="space-y-2">
+        <h2 className="text-2xl font-extrabold" style={{ color: primary_color }}>
+          {auto_approve ? "You're on the big screen! 🎉" : "Photo received! 🎉"}
         </h2>
-        <p className="text-muted-foreground text-base leading-relaxed max-w-sm">
-          {event.confirmation_message ??
-            (event.auto_approve
+        <p className="text-gray-400 text-base leading-relaxed max-w-xs mx-auto">
+          {confirmation_message ??
+            (auto_approve
               ? "Your photo may appear on the big screen shortly. Enjoy the show!"
-              : "Our team will review it. Watch the big screen — your moment may appear soon!"
+              : "Our team will review it quickly. Watch the big screen — your moment may appear soon!"
             )
           }
         </p>
       </div>
-      {event.show_qr_code_on_screen && (
-        <p className="text-xs text-muted-foreground">Share with a friend — scan the QR on the big screen!</p>
-      )}
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function EventUploadPage() {
-  const { eventSlug }  = useParams<{ eventSlug: string }>();
+  const { eventSlug } = useParams<{ eventSlug: string }>();
   const { data: event, isLoading, isError } = useEventBySlug(eventSlug);
 
   const [stage, setStage]         = useState<Stage>("select");
   const [file, setFile]           = useState<File | null>(null);
   const [source, setSource]       = useState<Source>("gallery");
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [errorMsg, setErrorMsg]   = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [errorMsg, setErrorMsg]   = useState("");
 
   const handleFile = async (f: File, src: Source) => {
-    setFile(f);
-    setSource(src);
-    const url = await fileToDataUrl(f);
-    setPreviewUrl(url);
+    setFile(f); setSource(src);
+    setPreviewUrl(await fileToDataUrl(f));
     setStage("preview");
   };
 
   const handleRetake = () => {
-    setFile(null);
-    setPreviewUrl("");
-    setStage("select");
+    setFile(null); setPreviewUrl(""); setStage("select");
   };
 
   const handleError = (msg: string) => {
-    setErrorMsg(msg);
-    setStage("error");
+    setErrorMsg(msg); setStage("error");
   };
 
   const handleSubmit = async (name: string, caption: string, consent: boolean) => {
@@ -311,13 +346,11 @@ export default function EventUploadPage() {
     setStage("submitting");
     try {
       await uploadEventPhoto({
-        eventId:     event.id,
-        orgId:       event.org_id,
+        eventId:    event.id,
+        orgId:      event.org_id,
         file,
-        source:      source === "selfie" ? "camera" : source,
-        name,
-        caption,
-        consent,
+        source:     source === "selfie" ? "camera" : source,
+        name, caption, consent,
         autoApprove: event.auto_approve,
       });
       setStage("done");
@@ -327,12 +360,12 @@ export default function EventUploadPage() {
     }
   };
 
-  // Loading / not found
+  // Loading
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F8F7F5] flex flex-col">
-        <Skeleton className="h-36 w-full" />
-        <div className="p-6 space-y-4">
+      <div className="min-h-screen bg-[#F8F7F5] flex flex-col items-center justify-center gap-6 p-8">
+        <Skeleton className="w-56 h-44 rounded-2xl" />
+        <div className="w-full max-w-sm space-y-3">
           <Skeleton className="h-14 rounded-2xl" />
           <Skeleton className="h-14 rounded-2xl" />
           <Skeleton className="h-14 rounded-2xl" />
@@ -341,51 +374,51 @@ export default function EventUploadPage() {
     );
   }
 
+  // Not found
   if (isError || !event) {
     return (
       <div className="min-h-screen bg-[#F8F7F5] flex flex-col items-center justify-center gap-4 text-center p-6">
-        <AlertCircle size={40} className="text-destructive" />
-        <p className="text-lg font-semibold">Event not found</p>
-        <p className="text-sm text-muted-foreground">This link may have expired or the event may be inactive.</p>
+        <AlertCircle size={40} className="text-red-400" />
+        <p className="text-lg font-semibold text-gray-800">Event not found</p>
+        <p className="text-sm text-gray-400">This link may have expired or the event may be inactive.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F7F5]">
-      <EventHeader event={event} />
-
+    <div className="min-h-screen bg-[#F8F7F5] flex flex-col" style={{ fontFamily: "'Fira Sans', sans-serif" }}>
       {stage === "select" && (
         <SelectStage event={event} onFile={handleFile} onError={handleError} />
       )}
-      {(stage === "preview" || stage === "submitting") && file && previewUrl && (
+
+      {(stage === "preview" || stage === "submitting") && previewUrl && (
         <PreviewStage
           event={event}
           previewUrl={previewUrl}
-          file={file}
-          source={source}
           onRetake={handleRetake}
           onSubmit={handleSubmit}
           submitting={stage === "submitting"}
         />
       )}
+
       {stage === "done" && <DoneStage event={event} />}
+
       {stage === "error" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
-          <AlertCircle size={40} className="text-destructive" />
-          <p className="text-base font-semibold text-slate-800">Something went wrong</p>
-          <p className="text-sm text-muted-foreground">{errorMsg}</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 text-center">
+          <AlertCircle size={44} className="text-red-400" />
+          <p className="text-lg font-semibold text-gray-800">Something went wrong</p>
+          <p className="text-sm text-gray-400">{errorMsg}</p>
           <button
             onClick={() => setStage("select")}
-            className="px-6 py-3 rounded-2xl font-semibold text-white"
-            style={{ backgroundColor: "#CB2039" }}
+            className="px-8 py-4 rounded-2xl font-bold text-white text-base active:opacity-75"
+            style={{ backgroundColor: event.secondary_color }}
           >
             Try Again
           </button>
         </div>
       )}
 
-      <footer className="text-center py-5 text-xs text-muted-foreground">
+      <footer className="text-center py-5 text-xs text-gray-300">
         Powered by LV Branding Event Experiences
       </footer>
     </div>
