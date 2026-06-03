@@ -35,8 +35,13 @@ const Contests             = lazy(() => import("@/pages/Contests"));
 const ContestDetail        = lazy(() => import("@/pages/ContestDetail"));
 const VotingPage           = lazy(() => import("@/pages/VotingPage"));
 const EmbedWidget          = lazy(() => import("@/pages/EmbedWidget"));
-const AgentWorkspace       = lazy(() => import("@/pages/AgentWorkspace"));
-const FileDownload         = lazy(() => import("@/pages/FileDownload"));
+const AgentWorkspace         = lazy(() => import("@/pages/AgentWorkspace"));
+const FileDownload           = lazy(() => import("@/pages/FileDownload"));
+const EventExperiences       = lazy(() => import("@/pages/EventExperiences"));
+const EventExperienceEditor  = lazy(() => import("@/pages/EventExperienceEditor"));
+const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration"));
+const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
+const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -223,6 +228,9 @@ function AppRoutes() {
         path="/download/:token"
         element={<Suspense fallback={null}><FileDownload /></Suspense>}
       />
+      {/* Event Experiences — public pages (no auth) */}
+      <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
+      <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />
       {/* Contests — admin (protected) */}
       <Route
         path="/contests"
@@ -271,6 +279,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Event Experiences — admin (protected) */}
+      <Route path="/event-experiences" element={<ProtectedRoute><Suspense fallback={null}><EventExperiences /></Suspense></ProtectedRoute>} />
+      <Route path="/event-experiences/:eventId" element={<ProtectedRoute><Suspense fallback={null}><EventExperienceEditor /></Suspense></ProtectedRoute>} />
+      <Route path="/event-experiences/:eventId/photos" element={<ProtectedRoute><Suspense fallback={null}><EventPhotoModeration /></Suspense></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
