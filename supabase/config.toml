@@ -371,6 +371,9 @@ deno_version = 2
 [functions.agent-run]
 verify_jwt = false
 
+[functions.intake-notify]
+verify_jwt = false
+
 [functions.invite-member]
 verify_jwt = false
 

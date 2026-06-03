@@ -167,19 +167,31 @@ export default function IntakeForm() {
     setSubmitting(true);
     setError(null);
     try {
-      const { data: newSub, error: dbErr } = await supabase
-        .from("intake_submissions")
-        .insert({
-          org_id:        orgId,
-          contact_name:  data.contact_name,
-          contact_email: data.contact_email,
-          contact_role:  data.contact_role || null,
-          company_name:  data.company_name,
-          form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
-          ...(contactId ? { contact_id: contactId } : {}),
-        })
-        .select("id")
-        .single();
+      // 15-second timeout — protects users on slow connections (e.g. high-latency regions)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          lang === "es"
+            ? "La conexión tardó demasiado. Por favor verifica tu internet e intenta de nuevo."
+            : "Connection timed out. Please check your internet and try again."
+        )), 15_000)
+      );
+
+      const { data: newSub, error: dbErr } = await Promise.race([
+        supabase
+          .from("intake_submissions")
+          .insert({
+            org_id:        orgId,
+            contact_name:  data.contact_name,
+            contact_email: data.contact_email,
+            contact_role:  data.contact_role || null,
+            company_name:  data.company_name,
+            form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
+            ...(contactId ? { contact_id: contactId } : {}),
+          })
+          .select("id")
+          .single(),
+        timeoutPromise,
+      ]);
       if (dbErr) throw dbErr;
 
       // Fire-and-forget team notification email (non-blocking)
@@ -197,7 +209,14 @@ export default function IntakeForm() {
 
       goTo(5, "forward");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.errors.genericError);
+      // Supabase returns PostgrestError (plain object with .message), not an Error instance
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : t.errors.genericError;
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -351,7 +370,7 @@ export default function IntakeForm() {
                 <Input placeholder={t.fields.company_name.placeholder} className="h-11" {...form1.register("company_name")} />
               </Field>
               <Field label={t.fields.website.label} error={form1.formState.errors.website?.message}>
-                <Input type="url" placeholder={t.fields.website.placeholder} className="h-11" {...form1.register("website")} />
+                <Input type="text" inputMode="url" placeholder={t.fields.website.placeholder} className="h-11" {...form1.register("website")} />
               </Field>
             </div>
           )}

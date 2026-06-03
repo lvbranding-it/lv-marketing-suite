@@ -257,13 +257,15 @@ serve(async (req) => {
     marketingBlock += `\n\nCLIENT BRIEF (from intake form):\n${intakeLines}`;
   }
   if (rawMarkdown) {
-    // Trim to first 3000 chars to avoid bloating the context too much
-    marketingBlock += `\n\nAI MARKETING CONTEXT (generated strategy doc):\n${rawMarkdown.slice(0, 3000)}${rawMarkdown.length > 3000 ? "\n[...truncated]" : ""}`;
+    // Trim to first 2000 chars to keep context lean
+    marketingBlock += `\n\nAI MARKETING CONTEXT (generated strategy doc):\n${rawMarkdown.slice(0, 2000)}${rawMarkdown.length > 2000 ? "\n[...truncated]" : ""}`;
   }
 
   // ── Brand snapshot block (accumulated intel from previous agent runs) ───────
+  // Serialise snapshot, but cap at 3000 chars to avoid bloating the context
+  const snapshotJson = JSON.stringify(currentSnapshot, null, 2);
   const snapshotBlock = Object.keys(currentSnapshot).length > 0
-    ? `\n\nBRAND SNAPSHOT (accumulated from previous agent runs):\n${JSON.stringify(currentSnapshot, null, 2)}`
+    ? `\n\nBRAND SNAPSHOT (accumulated from previous agent runs):\n${snapshotJson.slice(0, 3000)}${snapshotJson.length > 3000 ? "\n...}" : ""}`
     : "";
 
   const systemPrompt = [
@@ -275,9 +277,11 @@ serve(async (req) => {
     snapshotBlock,
   ].filter(Boolean).join("");
 
-  // Build messages — last user turn may contain file content blocks
+  // Build messages — cap history at last 10 turns to keep context lean,
+  // then append the new user turn (which may contain file content blocks)
+  const trimmedHistory = conversationHistory.slice(-10);
   const messages: { role: string; content: string | ContentBlock[] }[] = [
-    ...conversationHistory,
+    ...trimmedHistory,
     { role: "user", content: buildUserContent(input, attachments) },
   ];
 
@@ -325,7 +329,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model:      MODEL,
-        max_tokens: 8192,
+        max_tokens: 6000,
         system:     systemPrompt,
         messages,
       }),
