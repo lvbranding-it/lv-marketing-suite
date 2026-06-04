@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, Bot, User, Copy, RefreshCw, ChevronDown,
-  FileDown, FileText, Paperclip, X, FileIcon,
+  FileDown, FileText, Paperclip, X, FileIcon, FileType2, Presentation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -261,6 +261,191 @@ function exportMarkdown(content: string, runId: string) {
   a.download = `run-${runId.slice(0, 8)}.md`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── Word export (.docx) ───────────────────────────────────────────────────────
+async function exportWord(
+  content: string,
+  sections: { key: string; title: string; content: string }[],
+  runId: string,
+  agentIdForExport?: string,
+) {
+  const { Document, Paragraph, TextRun, HeadingLevel, Packer, AlignmentType, BorderStyle } = await import("docx");
+
+  const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
+
+  /** Strip markdown characters from a string */
+  const strip = (t: string) =>
+    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+
+  /** Convert a block of markdown text to Paragraph nodes */
+  const toParagraphs = (text: string): InstanceType<typeof Paragraph>[] =>
+    text
+      .split("\n")
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return new Paragraph({ text: "" });
+        // Heading lines
+        if (trimmed.startsWith("### ")) return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_3 });
+        if (trimmed.startsWith("## "))  return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_2 });
+        if (trimmed.startsWith("# "))   return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_1 });
+        // Bullet
+        if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+          return new Paragraph({ text: strip(trimmed.slice(2)), bullet: { level: 0 } });
+        }
+        return new Paragraph({
+          children: [new TextRun({ text: strip(trimmed), size: 22 })],
+        });
+      });
+
+  const children: InstanceType<typeof Paragraph>[] = [];
+
+  // Document title
+  children.push(
+    new Paragraph({
+      children: [new TextRun({ text: agentName, bold: true, size: 40, color: "231F20" })],
+      heading: HeadingLevel.TITLE,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: `LV Branding · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}`, size: 18, color: "888888" })],
+    }),
+    new Paragraph({ text: "" }),
+  );
+
+  // Sections — each section gets a heading + its content
+  if (sections.length > 0) {
+    for (const s of sections) {
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text: s.title, bold: true, size: 28, color: "CB2039" })],
+          heading: HeadingLevel.HEADING_1,
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "CB2039" } },
+        }),
+        new Paragraph({ text: "" }),
+        ...toParagraphs(s.content),
+        new Paragraph({ text: "" }),
+      );
+    }
+  } else {
+    // Fallback: use the full text
+    children.push(...toParagraphs(content));
+  }
+
+  // Footer note
+  children.push(
+    new Paragraph({ text: "" }),
+    new Paragraph({
+      children: [new TextRun({ text: `© ${new Date().getFullYear()} LV Branding. Confidential.`, size: 16, color: "AAAAAA", italics: true })],
+      alignment: AlignmentType.CENTER,
+    }),
+  );
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: "Calibri", size: 22 },
+        },
+      },
+    },
+    sections: [{ children }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), { href: url, download: `${agentName}-${runId.slice(0, 8)}.docx` });
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── PowerPoint export (.pptx) ─────────────────────────────────────────────────
+async function exportPowerPoint(
+  sections: { key: string; title: string; content: string }[],
+  runId: string,
+  agentIdForExport?: string,
+) {
+  const PptxGenJS = (await import("pptxgenjs")).default;
+  const pptx      = new PptxGenJS();
+  const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
+
+  const strip = (t: string) =>
+    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+
+  // Theme
+  pptx.layout  = "LAYOUT_WIDE"; // 16:9
+  pptx.theme   = { headFontFace: "Calibri", bodyFontFace: "Calibri" };
+
+  // ── Title slide ──
+  const titleSlide = pptx.addSlide();
+  titleSlide.background = { color: "231F20" };
+  titleSlide.addText("LV Branding", {
+    x: 0.5, y: 1.2, w: 12.5, h: 0.7,
+    fontSize: 18, color: "CB2039", bold: true, align: "center",
+  });
+  titleSlide.addText(agentName, {
+    x: 0.5, y: 2.0, w: 12.5, h: 1.4,
+    fontSize: 36, color: "FFFFFF", bold: true, align: "center",
+  });
+  titleSlide.addText(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), {
+    x: 0.5, y: 3.6, w: 12.5, h: 0.5,
+    fontSize: 14, color: "888888", align: "center",
+  });
+
+  // ── Content slides ──
+  const srcSections = sections.length > 0 ? sections : [{ key: "1", title: agentName, content: "" }];
+
+  for (const s of srcSections) {
+    const slide = pptx.addSlide();
+    slide.background = { color: "FFFFFF" };
+
+    // Red accent bar
+    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.12, fill: { color: "CB2039" }, line: { color: "CB2039" } });
+
+    // Section title
+    slide.addText(strip(s.title), {
+      x: 0.5, y: 0.3, w: 12.3, h: 0.75,
+      fontSize: 24, color: "231F20", bold: true,
+    });
+
+    // Divider line
+    slide.addShape(pptx.ShapeType.line, { x: 0.5, y: 1.1, w: 12.3, h: 0, line: { color: "DDDDDD", width: 1 } });
+
+    // Content as bullet points
+    const lines = s.content
+      .split("\n")
+      .map((l) => strip(l))
+      .filter((l) => l.length > 0)
+      .slice(0, 18); // cap per slide
+
+    if (lines.length > 0) {
+      const bulletLines = lines.map((text) => ({
+        text,
+        options: {
+          bullet:   text.startsWith("- ") || text.startsWith("•") ? { indent: 15 } : false as const,
+          fontSize: 14,
+          color:    "333333",
+          breakLine: true,
+        } as Parameters<typeof slide.addText>[1],
+      }));
+
+      slide.addText(bulletLines, {
+        x: 0.5, y: 1.25, w: 12.3, h: 5.2,
+        fontSize: 14, color: "333333", valign: "top",
+      });
+    }
+
+    // Footer
+    slide.addText("LV Branding — Confidential", {
+      x: 0.5, y: 6.8, w: 9, h: 0.3,
+      fontSize: 9, color: "BBBBBB",
+    });
+    slide.addText(`${s.key}`, {
+      x: 12.3, y: 6.8, w: 0.5, h: 0.3,
+      fontSize: 9, color: "BBBBBB", align: "right",
+    });
+  }
+
+  await pptx.writeFile({ fileName: `${agentName}-${runId.slice(0, 8)}.pptx` });
 }
 
 /** Parse numbered questions (e.g. "1. What is X?") from agent message */
@@ -699,6 +884,32 @@ export default function AgentRunChat({
                             className="text-xs gap-2"
                           >
                             <FileText size={12} /> Export as PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                await exportWord(displayText, msg.runResult!.outputSections ?? [], msg.runResult!.runId, msg.agentId);
+                                toast({ description: "Exported as Word (.docx)" });
+                              } catch {
+                                toast({ description: "Word export failed.", variant: "destructive" });
+                              }
+                            }}
+                            className="text-xs gap-2"
+                          >
+                            <FileType2 size={12} /> Export as Word
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                await exportPowerPoint(msg.runResult!.outputSections ?? [], msg.runResult!.runId, msg.agentId);
+                                toast({ description: "Exported as PowerPoint (.pptx)" });
+                              } catch {
+                                toast({ description: "PowerPoint export failed.", variant: "destructive" });
+                              }
+                            }}
+                            className="text-xs gap-2"
+                          >
+                            <Presentation size={12} /> Export as PowerPoint
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
