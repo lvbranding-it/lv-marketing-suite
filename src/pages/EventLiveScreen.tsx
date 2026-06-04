@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Play, Pause, SkipForward, SkipBack,
-  QrCode as QrCodeIcon, Monitor, Star, Settings,
-} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEventBySlug } from "@/hooks/useEvents";
 import { useApprovedEventPhotos, getPhotoUrl, type EventPhoto } from "@/hooks/useEventPhotos";
-import { cn } from "@/lib/utils";
 
 // ── Ken Burns animations (CSS injected) ───────────────────────────────────────
 
@@ -22,7 +17,7 @@ const KB_NAMES = ["kb1", "kb2", "kb3", "kb4", "kb5"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ScreenMode = "slideshow" | "holding" | "qr" | "featured";
+type ScreenMode = "slideshow" | "holding" | "qr";
 
 // ── Blur slide (background + centered photo) ──────────────────────────────────
 
@@ -172,59 +167,49 @@ function QRScreen({
   );
 }
 
-// ── Operator controls ─────────────────────────────────────────────────────────
+// ── QR Call-to-Action panel ───────────────────────────────────────────────────
 
-function OperatorControls({
-  mode, setMode, paused, setPaused, onNext, onPrev, photoCount, visible,
+function QRPanel({
+  uploadUrl,
+  headline,
+  secondaryColor,
 }: {
-  mode:       ScreenMode;
-  setMode:    (m: ScreenMode) => void;
-  paused:     boolean;
-  setPaused:  (v: boolean) => void;
-  onNext:     () => void;
-  onPrev:     () => void;
-  photoCount: number;
-  visible:    boolean;
+  uploadUrl:      string;
+  headline:       string;
+  secondaryColor: string;
 }) {
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&color=000000&bgcolor=FFFFFF&qzone=2&data=${encodeURIComponent(uploadUrl)}`;
+
   return (
     <div
-      className="fixed bottom-5 right-5 z-50 transition-all duration-500"
-      style={{ opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none" }}
+      className="absolute right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-4 pointer-events-none"
+      style={{
+        background:     "rgba(0,0,0,.58)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        border:         "1px solid rgba(255,255,255,.12)",
+        borderRadius:   "24px",
+        padding:        "28px 24px",
+        width:          "220px",
+      }}
     >
-      <div className="bg-black/75 backdrop-blur-md text-white rounded-2xl p-4 w-64 space-y-3 border border-white/10 shadow-2xl">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Operator Controls</p>
+      {/* CTA headline */}
+      <p
+        className="text-center font-extrabold leading-tight"
+        style={{ color: secondaryColor, fontSize: "19px" }}
+      >
+        {headline}
+      </p>
 
-        {/* Modes */}
-        <div className="grid grid-cols-2 gap-1">
-          {([
-            { m: "slideshow", icon: <Play size={11} />,       label: "Slideshow" },
-            { m: "holding",   icon: <Monitor size={11} />,    label: "Holding" },
-            { m: "qr",        icon: <QrCodeIcon size={11} />, label: "QR Code" },
-            { m: "featured",  icon: <Star size={11} />,       label: "Featured" },
-          ] as { m: ScreenMode; icon: React.ReactNode; label: string }[]).map(({ m, icon, label }) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={cn(
-                "flex items-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium transition-colors",
-                mode === m ? "bg-white/20 text-white" : "text-white/50 hover:bg-white/10"
-              )}
-            >
-              {icon} {label}
-            </button>
-          ))}
-        </div>
+      {/* QR code */}
+      <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ padding: "6px", background: "#fff" }}>
+        <img src={qrSrc} alt="Scan to upload" width={168} height={168} className="block rounded-xl" />
+      </div>
 
-        {/* Playback */}
-        <div className="flex gap-1.5">
-          <button onClick={onPrev}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors"><SkipBack  size={13} /></button>
-          <button onClick={() => setPaused(!paused)} className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors">
-            {paused ? <Play size={13} /> : <Pause size={13} />}
-          </button>
-          <button onClick={onNext}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors"><SkipForward size={13} /></button>
-        </div>
-
-        <p className="text-[9px] text-white/25 text-center">{photoCount} approved photo{photoCount !== 1 ? "s" : ""}</p>
+      {/* Sub-CTA */}
+      <div className="text-center space-y-0.5">
+        <p className="text-white font-semibold text-sm">Scan &amp; appear on screen</p>
+        <p className="text-white/40 text-[11px] break-all font-mono leading-tight">{uploadUrl.replace("https://", "")}</p>
       </div>
     </div>
   );
