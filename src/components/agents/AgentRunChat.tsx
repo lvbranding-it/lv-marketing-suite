@@ -274,10 +274,10 @@ function exportWord(content: string, runId: string, agentIdForExport?: string, p
   URL.revokeObjectURL(url);
 }
 
-// ── PowerPoint export (.pptx) ─────────────────────────────────────────────────
+// ── PowerPoint export (.pptx) — rich text, branded slides ────────────────────
 async function exportPowerPoint(
   sections: { key: string; title: string; content: string }[],
-  content:  string,   // full markdown fallback when sections is empty
+  content:  string,
   runId:    string,
   agentIdForExport?: string,
 ) {
@@ -287,41 +287,123 @@ async function exportPowerPoint(
 
   pptx.layout = "LAYOUT_WIDE"; // 16:9
 
-  /** Strip markdown syntax */
-  const clean = (t: string) =>
-    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").replace(/^[-•]\s*/gm, "• ").trim();
+  // ── Brand palette ─────────────────────────────────────────────────────────
+  const C = { red: "CB2039", dark: "231F20", body: "374151", muted: "9CA3AF", white: "FFFFFF", line: "E5E7EB" };
+
+  // ── Strip bare heading/bullet markers (for slide titles) ──────────────────
+  const stripTitle = (t: string) =>
+    t.replace(/^#{1,6}\s+/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
+
+  // ── Rich-text markdown → pptxgenjs TextProps[] ───────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type TP = { text: string; options?: Record<string, any> };
+
+  /** Parse **bold** within a line into mixed TextProps */
+  function inlineParts(text: string, baseColor = C.body, baseFontSize = 14): TP[] {
+    const out: TP[] = [];
+    const rx = /\*\*(.+?)\*\*/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = rx.exec(text)) !== null) {
+      if (m.index > last) out.push({ text: text.slice(last, m.index), options: { color: baseColor, fontSize: baseFontSize } });
+      out.push({ text: m[1], options: { bold: true, color: C.dark, fontSize: baseFontSize } });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ text: text.slice(last), options: { color: baseColor, fontSize: baseFontSize } });
+    return out.filter(p => p.text);
+  }
+
+  /** Convert a markdown block to a pptxgenjs TextProps array */
+  function mdToTP(markdown: string): TP[] {
+    const out: TP[] = [];
+    const lines = markdown.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw     = lines[i];
+      const trimmed = raw.trim();
+
+      if (!trimmed) { if (out.length) out.push({ text: "\n" }); continue; }
+
+      // H3
+      if (trimmed.startsWith("### ")) {
+        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.dark, fontSize: 15, underline: true } });
+        continue;
+      }
+      // H2
+      if (trimmed.startsWith("## ")) {
+        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.red, fontSize: 16 } });
+        continue;
+      }
+      // H1
+      if (trimmed.startsWith("# ")) {
+        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.dark, fontSize: 18 } });
+        continue;
+      }
+      // Bullet (- or • or *)
+      if (/^[-•*]\s+/.test(trimmed)) {
+        const body = trimmed.replace(/^[-•*]\s+/, "");
+        out.push({ text: "  •  ", options: { color: C.red, bold: true, fontSize: 14 } });
+        out.push(...inlineParts(body));
+        out.push({ text: "\n" });
+        continue;
+      }
+      // Numbered list
+      const numMatch = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
+      if (numMatch) {
+        out.push({ text: `  ${numMatch[1]}.  `, options: { color: C.red, bold: true, fontSize: 14 } });
+        out.push(...inlineParts(numMatch[2]));
+        out.push({ text: "\n" });
+        continue;
+      }
+      // Horizontal rule
+      if (trimmed === "---") {
+        out.push({ text: "──────────────────────────────────\n", options: { color: C.line, fontSize: 8 } });
+        continue;
+      }
+      // Table row — simplify to pipe-separated text
+      if (trimmed.startsWith("|")) {
+        const cells = trimmed.split("|").map(c => c.trim()).filter(c => c && !/^[-: ]+$/.test(c));
+        if (cells.length) {
+          out.push(...inlineParts(cells.join("   │   ")));
+          out.push({ text: "\n" });
+        }
+        continue;
+      }
+      // Regular paragraph
+      out.push(...inlineParts(trimmed));
+      out.push({ text: "\n" });
+    }
+
+    // Remove trailing newlines
+    while (out.length && out[out.length - 1].text === "\n") out.pop();
+    return out.filter(p => p.text);
+  }
 
   // ── Build slide data ──────────────────────────────────────────────────────
-  interface SlideData { title: string; body: string; index: number }
+  interface SlideData { title: string; chunks: TP[]; idx: number }
   let slides: SlideData[] = [];
 
   if (sections.length > 0) {
-    // Use structured sections (each section = 1 slide)
     slides = sections.map((s, i) => ({
-      title: clean(s.title),
-      body:  s.content.split("\n").filter(l => l.trim()).map(clean).join("\n"),
-      index: i + 1,
+      title:  stripTitle(s.title),
+      chunks: mdToTP(s.content),
+      idx:    i + 1,
     }));
   } else {
-    // Parse full markdown: split on H1/H2/H3 headings
     const parts = content.split(/(?=^#{1,3}\s)/m).filter(p => p.trim());
     if (parts.length > 1) {
       parts.forEach((part, i) => {
-        const lines     = part.split("\n").filter(l => l.trim());
-        const firstLine = lines[0] ?? "";
-        const title     = clean(firstLine.replace(/^#{1,3}\s+/, ""));
-        const body      = lines.slice(1).map(clean).filter(l => l).join("\n");
-        slides.push({ title, body, index: i + 1 });
+        const lines = part.split("\n").filter(l => l.trim());
+        const title = stripTitle(lines[0] ?? "");
+        slides.push({ title, chunks: mdToTP(lines.slice(1).join("\n")), idx: i + 1 });
       });
     } else {
-      // No headings — chunk every 10 lines into a slide
-      const allLines = content.split("\n").filter(l => l.trim()).map(clean);
-      const CHUNK = 10;
+      const allLines = content.split("\n").filter(l => l.trim());
+      const CHUNK = 12;
       for (let i = 0; i < allLines.length; i += CHUNK) {
         slides.push({
-          title: i === 0 ? agentName : `${agentName} (cont'd)`,
-          body:  allLines.slice(i, i + CHUNK).join("\n"),
-          index: Math.floor(i / CHUNK) + 1,
+          title:  i === 0 ? agentName : `${agentName} (cont'd)`,
+          chunks: mdToTP(allLines.slice(i, i + CHUNK).join("\n")),
+          idx:    Math.floor(i / CHUNK) + 1,
         });
       }
     }
@@ -329,53 +411,62 @@ async function exportPowerPoint(
 
   // ── Title slide ───────────────────────────────────────────────────────────
   const ts = pptx.addSlide();
-  ts.background = { color: "231F20" };
-  ts.addText("LV Branding", { x: 0.5, y: 1.4, w: 12.3, h: 0.7, fontSize: 20, color: "CB2039", bold: true, align: "center" });
-  ts.addText(agentName,     { x: 0.5, y: 2.2, w: 12.3, h: 1.4, fontSize: 40, color: "FFFFFF", bold: true, align: "center" });
+  ts.background = { color: C.dark };
+  // Red top bar
+  ts.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.12, fill: { color: C.red }, line: { color: C.red } });
+  // "LV Branding"
+  ts.addText("LV Branding", { x: 0.5, y: 1.3, w: 12.3, h: 0.6, fontSize: 18, color: C.red, bold: true, align: "center" });
+  // Agent name (large)
+  ts.addText(agentName, { x: 0.5, y: 2.0, w: 12.3, h: 1.6, fontSize: 44, color: C.white, bold: true, align: "center" });
+  // Date
   ts.addText(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-             { x: 0.5, y: 3.8, w: 12.3, h: 0.5, fontSize: 14, color: "888888", align: "center" });
-  ts.addText("CONFIDENTIAL", { x: 0.5, y: 6.8, w: 12.3, h: 0.3, fontSize: 9, color: "444444", align: "center", bold: true });
+    { x: 0.5, y: 3.8, w: 12.3, h: 0.4, fontSize: 14, color: C.muted, align: "center" });
+  // Red bottom bar
+  ts.addShape(pptx.ShapeType.rect, { x: 0, y: 7.1, w: 13.33, h: 0.4, fill: { color: C.red }, line: { color: C.red } });
+  ts.addText("CONFIDENTIAL — LV Branding", { x: 0.5, y: 7.15, w: 12.3, h: 0.25, fontSize: 9, color: C.white, align: "center" });
 
   // ── Content slides ────────────────────────────────────────────────────────
   for (const s of slides) {
     const slide = pptx.addSlide();
-    slide.background = { color: "FFFFFF" };
+    slide.background = { color: C.white };
 
-    // Red accent bar (top)
-    slide.addShape(pptx.ShapeType.rect, {
-      x: 0, y: 0, w: 13.33, h: 0.09,
-      fill: { color: "CB2039" }, line: { color: "CB2039" },
-    });
+    // Red thin top bar
+    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.09, fill: { color: C.red }, line: { color: C.red } });
+
+    // Red left accent bar (mirrors Word's border-left)
+    slide.addShape(pptx.ShapeType.rect, { x: 0.28, y: 0.18, w: 0.07, h: 0.88, fill: { color: C.red }, line: { color: C.red } });
 
     // Slide title
     slide.addText(s.title, {
-      x: 0.55, y: 0.2, w: 12.2, h: 0.85,
-      fontSize: 26, bold: true, color: "1A1A2E",
+      x: 0.48, y: 0.18, w: 12.4, h: 0.88,
+      fontSize: 26, bold: true, color: C.dark, valign: "middle",
     });
 
-    // Thin separator
-    slide.addShape(pptx.ShapeType.line, {
-      x: 0.55, y: 1.12, w: 12.2, h: 0,
-      line: { color: "E5E7EB", width: 1 },
-    });
+    // Thin horizontal rule under title
+    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 1.12, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
 
-    // Body text
-    if (s.body.trim()) {
-      slide.addText(s.body, {
-        x: 0.55, y: 1.25, w: 12.2, h: 5.4,
-        fontSize: 15, color: "374151",
-        valign: "top", wrap: true,
+    // Body rich text
+    if (s.chunks.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      slide.addText(s.chunks as any, {
+        x: 0.4, y: 1.22, w: 12.5, h: 5.65,
+        fontSize: 14, color: C.body, valign: "top", wrap: true,
       });
     }
 
-    // Footer
+    // Footer separator
+    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 7.05, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
+
+    // Footer left: agency name
     slide.addText("LV Branding — Confidential", {
-      x: 0.55, y: 6.9, w: 10, h: 0.25,
-      fontSize: 9, color: "9CA3AF",
+      x: 0.4, y: 7.1, w: 9, h: 0.24,
+      fontSize: 9, color: C.muted,
     });
-    slide.addText(`${s.index} / ${slides.length}`, {
-      x: 12.0, y: 6.9, w: 0.8, h: 0.25,
-      fontSize: 9, color: "9CA3AF", align: "right",
+
+    // Footer right: slide counter in red
+    slide.addText(`${s.idx} / ${slides.length}`, {
+      x: 11.9, y: 7.1, w: 1.0, h: 0.24,
+      fontSize: 9, color: C.red, bold: true, align: "right",
     });
   }
 
