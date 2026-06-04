@@ -130,15 +130,14 @@ function RunLoader({ runId, onLoad }: { runId: string; onLoad: (msgs: ChatMessag
   return null;
 }
 
-// ── PDF export (branded, LV header + QR code) ─────────────────────────────────
-function exportPdf(content: string, runId: string, agentIdForExport?: string, projectId?: string) {
-  const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
+// ── Shared: markdown → styled HTML (used by PDF and Word) ────────────────────
+function buildExportHtml(content: string, runId: string, agentIdForExport?: string, projectId?: string): string {
+  const agentName  = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
   const projectUrl = `${window.location.origin}/agents/${projectId}`;
   const qrCodeUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(projectUrl)}&bgcolor=FFFFFF&color=231F20&margin=4`;
+  const lvLogoSvg  = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250.1 250.1" width="48" height="48"><circle cx="125.05" cy="125.05" r="125.05" fill="#fff"/><path fill="#CB2039" d="M125.05,16.67c-27.38,0-52.38,10.15-71.46,26.9v75.86c0,2.73,2.21,4.95,4.95,4.95h35.88c3.7.03,4.58,2.56,4.9,5.59.33,3.2.57,6.07,1.06,10.21.55,4.71-1.97,6.04-5.85,6.04h-57.49c-2.73,0-4.95-2.21-4.95-4.95v-71.95c-9.79,16.29-15.41,35.35-15.41,55.74,0,59.86,48.52,108.38,108.38,108.38.39,0,.77,0,1.16,0-3.84-30.87-11.01-75.15-14.66-104.58-.29-2.39,1.07-4.62,3.48-4.62h11.07c1.68,0,3.13,1.16,3.51,2.79,0,0,6.42,51,9.08,72.65.52,4.22,4.49,8.51,9.26-.05,12.67-22.75,28.78-51.64,41-72.55.86-1.47,2.4-2.72,4.1-2.7,5.12.07,12.08,0,15.73,0,3.37,0,4.57,2.3,3.48,4.45-15.39,30.22-42.66,69.2-59.08,100.94,46.23-12.38,80.27-54.56,80.27-104.7,0-59.86-48.52-108.38-108.38-108.38Z"/></svg>`;
 
-  const lvLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250.1 250.1" width="48" height="48"><circle cx="125.05" cy="125.05" r="125.05" fill="#fff"/><path fill="#CB2039" d="M125.05,16.67c-27.38,0-52.38,10.15-71.46,26.9v75.86c0,2.73,2.21,4.95,4.95,4.95h35.88c3.7.03,4.58,2.56,4.9,5.59.33,3.2.57,6.07,1.06,10.21.55,4.71-1.97,6.04-5.85,6.04h-57.49c-2.73,0-4.95-2.21-4.95-4.95v-71.95c-9.79,16.29-15.41,35.35-15.41,55.74,0,59.86,48.52,108.38,108.38,108.38.39,0,.77,0,1.16,0-3.84-30.87-11.01-75.15-14.66-104.58-.29-2.39,1.07-4.62,3.48-4.62h11.07c1.68,0,3.13,1.16,3.51,2.79,0,0,6.42,51,9.08,72.65.52,4.22,4.49,8.51,9.26-.05,12.67-22.75,28.78-51.64,41-72.55.86-1.47,2.4-2.72,4.1-2.7,5.12.07,12.08,0,15.73,0,3.37,0,4.57,2.3,3.48,4.45-15.39,30.22-42.66,69.2-59.08,100.94,46.23-12.38,80.27-54.56,80.27-104.7,0-59.86-48.52-108.38-108.38-108.38Z"/></svg>`;
-
-  // Simple markdown → html conversion
+  // markdown → HTML
   let html = content
     .replace(/^### (.+)$/gm, "<h3>$1</h3>")
     .replace(/^## (.+)$/gm, "<h2>$1</h2>")
@@ -150,97 +149,95 @@ function exportPdf(content: string, runId: string, agentIdForExport?: string, pr
     .replace(/^(\d+)\. (.+)$/gm, "<li>$2</li>");
 
   // Tables
-  html = html.replace(
-    /(\|.+\|[\r\n]+\|[\s:|-]+\|[\r\n]+((?:\|.+\|[\r\n]*)+))/g,
-    (match) => {
-      const lines = match.trim().split("\n").filter((l) => l.trim());
-      if (lines.length < 2) return match;
-      const parseRow = (line: string) =>
-        line.split("|").filter((_, i, arr) => i > 0 && i < arr.length - 1).map((c) => c.trim());
-      const headers = parseRow(lines[0]);
-      const dataRows = lines.slice(2);
-      let table = "<table><thead><tr>";
-      headers.forEach((h) => { table += `<th>${h}</th>`; });
-      table += "</tr></thead><tbody>";
-      dataRows.forEach((row) => {
-        const cells = parseRow(row);
-        table += "<tr>";
-        cells.forEach((c) => { table += `<td>${c}</td>`; });
-        table += "</tr>";
-      });
-      table += "</tbody></table>";
-      return table;
-    },
-  );
+  html = html.replace(/(\|.+\|[\r\n]+\|[\s:|-]+\|[\r\n]+((?:\|.+\|[\r\n]*)+))/g, (match) => {
+    const lines = match.trim().split("\n").filter((l) => l.trim());
+    if (lines.length < 2) return match;
+    const parseRow = (line: string) =>
+      line.split("|").filter((_, i, arr) => i > 0 && i < arr.length - 1).map((c) => c.trim());
+    const headers = parseRow(lines[0]);
+    const dataRows = lines.slice(2);
+    let table = "<table><thead><tr>";
+    headers.forEach((h) => { table += `<th>${h}</th>`; });
+    table += "</tr></thead><tbody>";
+    dataRows.forEach((row) => {
+      const cells = parseRow(row);
+      table += "<tr>"; cells.forEach((c) => { table += `<td>${c}</td>`; }); table += "</tr>";
+    });
+    return table + "</tbody></table>";
+  });
 
   html = html.split("\n").map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return "";
-    if (trimmed.startsWith("<")) return trimmed;
-    return `<p>${trimmed}</p>`;
+    const t = line.trim();
+    if (!t) return "";
+    if (t.startsWith("<")) return t;
+    return `<p>${t}</p>`;
   }).join("\n");
 
-  const iframe = document.createElement("iframe");
+  return `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<title>${agentName} — Run ${runId.slice(0, 8)}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;600;700&display=swap');
+  @page { margin:0.75in 1in;size:letter; }
+  body { font-family:'Fira Sans','Segoe UI',system-ui,sans-serif;font-size:11pt;line-height:1.6;color:#231F20;max-width:100%; }
+  h1 { font-size:18pt;margin:0 0 2pt;color:#231F20;font-weight:700; }
+  h2 { font-size:14pt;margin:16pt 0 6pt;color:#231F20;border-left:3px solid #CB2039;padding-left:8px; }
+  h3 { font-size:12pt;margin:12pt 0 4pt;color:#231F20; }
+  p { margin:4pt 0; }
+  strong { font-weight:600; }
+  table { border-collapse:collapse;width:100%;margin:8pt 0;font-size:10pt; }
+  th,td { border:1px solid #ddd;padding:6px 10px;text-align:left; }
+  th { background:#231F20;color:#fff;font-weight:600; }
+  tr:nth-child(even) td { background:#f9f9f9; }
+  li { margin:2pt 0; }
+  hr { border:none;border-top:1px solid #ddd;margin:12pt 0; }
+  .header-bar { display:flex;align-items:center;gap:16px;border-bottom:3px solid #CB2039;padding-bottom:12pt;margin-bottom:20pt; }
+  .header-logo { flex-shrink:0;width:48px;height:48px;background:#231F20;border-radius:8px;padding:4px; }
+  .header-text { flex:1; }
+  .header-brand { font-size:16pt;font-weight:700;color:#231F20;margin:0; }
+  .header-slogan { font-size:9pt;color:#CB2039;font-weight:600;letter-spacing:.5px;margin:2pt 0 0;text-transform:uppercase; }
+  .header-meta { font-size:9pt;color:#888;margin-top:4pt; }
+  .header-qr { flex-shrink:0;text-align:center; }
+  .header-qr img { width:80px;height:80px;border:1px solid #eee;border-radius:4px; }
+  .header-qr-label { font-size:7pt;color:#999;margin-top:2pt; }
+  .confidential { margin-top:32pt;padding-top:12pt;border-top:1px solid #ddd;font-size:8pt;color:#999;text-align:center;line-height:1.4; }
+  .confidential strong { color:#CB2039; }
+  @media print {
+    .header-logo,.header-qr img { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
+    th { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
+  }
+</style></head><body>
+<div class="header-bar">
+  <div class="header-logo">${lvLogoSvg}</div>
+  <div class="header-text">
+    <div class="header-brand">LV Branding</div>
+    <div class="header-slogan">Strategy that works. Creativity that moves.</div>
+    <div class="header-meta">${agentName} · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}</div>
+  </div>
+  <div class="header-qr">
+    <img src="${qrCodeUrl}" alt="Project QR" />
+    <div class="header-qr-label">Scan to open project</div>
+  </div>
+</div>
+${html}
+<div class="confidential">
+  <strong>CONFIDENTIAL</strong><br/>
+  This document is the property of LV Branding and is intended solely for the use of the individual or entity to whom it is addressed.
+  Unauthorized reproduction, distribution, or disclosure is strictly prohibited.
+  © ${new Date().getFullYear()} LV Branding. All rights reserved.
+</div>
+</body></html>`;
+}
+
+// ── PDF export ────────────────────────────────────────────────────────────────
+function exportPdf(content: string, runId: string, agentIdForExport?: string, projectId?: string) {
+  const fullHtml = buildExportHtml(content, runId, agentIdForExport, projectId);
+  const iframe   = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:800px;height:600px;";
   document.body.appendChild(iframe);
   const doc = iframe.contentDocument;
   if (!doc) { toast({ description: "Failed to generate PDF", variant: "destructive" }); return; }
-
-  doc.open();
-  doc.write(`<!DOCTYPE html><html><head>
-  <title>${agentName} — Run ${runId.slice(0, 8)}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;600;700&display=swap');
-    @page { margin: 0.75in 1in; size: letter; }
-    body { font-family:'Fira Sans','Segoe UI',system-ui,sans-serif;font-size:11pt;line-height:1.6;color:#231F20;max-width:100%; }
-    h1 { font-size:18pt;margin:0 0 2pt;color:#231F20;font-weight:700; }
-    h2 { font-size:14pt;margin:16pt 0 6pt;color:#231F20;border-left:3px solid #CB2039;padding-left:8px; }
-    h3 { font-size:12pt;margin:12pt 0 4pt;color:#231F20; }
-    p { margin:4pt 0; }
-    strong { font-weight:600; }
-    table { border-collapse:collapse;width:100%;margin:8pt 0;font-size:10pt; }
-    th,td { border:1px solid #ddd;padding:6px 10px;text-align:left; }
-    th { background:#231F20;color:#fff;font-weight:600; }
-    tr:nth-child(even) td { background:#f9f9f9; }
-    li { margin:2pt 0; }
-    hr { border:none;border-top:1px solid #ddd;margin:12pt 0; }
-    .header-bar { display:flex;align-items:center;gap:16px;border-bottom:3px solid #CB2039;padding-bottom:12pt;margin-bottom:20pt; }
-    .header-logo { flex-shrink:0;width:48px;height:48px;background:#231F20;border-radius:8px;padding:4px; }
-    .header-text { flex:1; }
-    .header-brand { font-size:16pt;font-weight:700;color:#231F20;margin:0; }
-    .header-slogan { font-size:9pt;color:#CB2039;font-weight:600;letter-spacing:.5px;margin:2pt 0 0;text-transform:uppercase; }
-    .header-meta { font-size:9pt;color:#888;margin-top:4pt; }
-    .header-qr { flex-shrink:0;text-align:center; }
-    .header-qr img { width:80px;height:80px;border:1px solid #eee;border-radius:4px; }
-    .header-qr-label { font-size:7pt;color:#999;margin-top:2pt; }
-    .confidential { margin-top:32pt;padding-top:12pt;border-top:1px solid #ddd;font-size:8pt;color:#999;text-align:center;line-height:1.4; }
-    .confidential strong { color:#CB2039; }
-    @media print {
-      .header-logo,.header-qr img { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-      th { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-    }
-  </style></head><body>
-  <div class="header-bar">
-    <div class="header-logo">${lvLogoSvg}</div>
-    <div class="header-text">
-      <div class="header-brand">LV Branding</div>
-      <div class="header-slogan">Strategy that works. Creativity that moves.</div>
-      <div class="header-meta">${agentName} · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}</div>
-    </div>
-    <div class="header-qr">
-      <img src="${qrCodeUrl}" alt="Project QR" />
-      <div class="header-qr-label">Scan to open project</div>
-    </div>
-  </div>
-  ${html}
-  <div class="confidential">
-    <strong>CONFIDENTIAL</strong><br/>
-    This document is the property of LV Branding and is intended solely for the use of the individual or entity to whom it is addressed.
-    Unauthorized reproduction, distribution, or disclosure is strictly prohibited.
-    © ${new Date().getFullYear()} LV Branding. All rights reserved.
-  </div>
-</body></html>`);
-  doc.close();
+  doc.open(); doc.write(fullHtml); doc.close();
   iframe.onload = () => {
     setTimeout(() => {
       iframe.contentWindow?.print();
@@ -263,97 +260,16 @@ function exportMarkdown(content: string, runId: string) {
   URL.revokeObjectURL(url);
 }
 
-// ── Word export (.docx) ───────────────────────────────────────────────────────
-async function exportWord(
-  content: string,
-  sections: { key: string; title: string; content: string }[],
-  runId: string,
-  agentIdForExport?: string,
-) {
-  const { Document, Paragraph, TextRun, HeadingLevel, Packer, AlignmentType, BorderStyle } = await import("docx");
-
+// ── Word export — uses same branded HTML as PDF, downloaded as .doc ───────────
+function exportWord(content: string, runId: string, agentIdForExport?: string, projectId?: string) {
   const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
-
-  /** Strip markdown characters from a string */
-  const strip = (t: string) =>
-    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").trim();
-
-  /** Convert a block of markdown text to Paragraph nodes */
-  const toParagraphs = (text: string): InstanceType<typeof Paragraph>[] =>
-    text
-      .split("\n")
-      .map((line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return new Paragraph({ text: "" });
-        // Heading lines
-        if (trimmed.startsWith("### ")) return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_3 });
-        if (trimmed.startsWith("## "))  return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_2 });
-        if (trimmed.startsWith("# "))   return new Paragraph({ text: strip(trimmed), heading: HeadingLevel.HEADING_1 });
-        // Bullet
-        if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
-          return new Paragraph({ text: strip(trimmed.slice(2)), bullet: { level: 0 } });
-        }
-        return new Paragraph({
-          children: [new TextRun({ text: strip(trimmed), size: 22 })],
-        });
-      });
-
-  const children: InstanceType<typeof Paragraph>[] = [];
-
-  // Document title
-  children.push(
-    new Paragraph({
-      children: [new TextRun({ text: agentName, bold: true, size: 40, color: "231F20" })],
-      heading: HeadingLevel.TITLE,
-    }),
-    new Paragraph({
-      children: [new TextRun({ text: `LV Branding · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}`, size: 18, color: "888888" })],
-    }),
-    new Paragraph({ text: "" }),
-  );
-
-  // Sections — each section gets a heading + its content
-  if (sections.length > 0) {
-    for (const s of sections) {
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: s.title, bold: true, size: 28, color: "CB2039" })],
-          heading: HeadingLevel.HEADING_1,
-          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "CB2039" } },
-        }),
-        new Paragraph({ text: "" }),
-        ...toParagraphs(s.content),
-        new Paragraph({ text: "" }),
-      );
-    }
-  } else {
-    // Fallback: use the full text
-    children.push(...toParagraphs(content));
-  }
-
-  // Footer note
-  children.push(
-    new Paragraph({ text: "" }),
-    new Paragraph({
-      children: [new TextRun({ text: `© ${new Date().getFullYear()} LV Branding. Confidential.`, size: 16, color: "AAAAAA", italics: true })],
-      alignment: AlignmentType.CENTER,
-    }),
-  );
-
-  const doc = new Document({
-    styles: {
-      default: {
-        document: {
-          run: { font: "Calibri", size: 22 },
-        },
-      },
-    },
-    sections: [{ children }],
-  });
-
-  const blob = await Packer.toBlob(doc);
+  const fullHtml  = buildExportHtml(content, runId, agentIdForExport, projectId);
+  // Word opens HTML files natively — the BOM ensures correct UTF-8 recognition
+  const blob = new Blob(["﻿", fullHtml], { type: "application/msword" });
   const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href: url, download: `${agentName}-${runId.slice(0, 8)}.docx` });
+  const a    = Object.assign(document.createElement("a"), {
+    href: url, download: `${agentName}-${runId.slice(0, 8)}.doc`,
+  });
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
@@ -361,87 +277,105 @@ async function exportWord(
 // ── PowerPoint export (.pptx) ─────────────────────────────────────────────────
 async function exportPowerPoint(
   sections: { key: string; title: string; content: string }[],
-  runId: string,
+  content:  string,   // full markdown fallback when sections is empty
+  runId:    string,
   agentIdForExport?: string,
 ) {
   const PptxGenJS = (await import("pptxgenjs")).default;
   const pptx      = new PptxGenJS();
   const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
 
-  const strip = (t: string) =>
-    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").trim();
+  pptx.layout = "LAYOUT_WIDE"; // 16:9
 
-  // Theme
-  pptx.layout  = "LAYOUT_WIDE"; // 16:9
-  pptx.theme   = { headFontFace: "Calibri", bodyFontFace: "Calibri" };
+  /** Strip markdown syntax */
+  const clean = (t: string) =>
+    t.replace(/\*\*/g, "").replace(/\*/g, "").replace(/^#{1,6}\s+/gm, "").replace(/^[-•]\s*/gm, "• ").trim();
 
-  // ── Title slide ──
-  const titleSlide = pptx.addSlide();
-  titleSlide.background = { color: "231F20" };
-  titleSlide.addText("LV Branding", {
-    x: 0.5, y: 1.2, w: 12.5, h: 0.7,
-    fontSize: 18, color: "CB2039", bold: true, align: "center",
-  });
-  titleSlide.addText(agentName, {
-    x: 0.5, y: 2.0, w: 12.5, h: 1.4,
-    fontSize: 36, color: "FFFFFF", bold: true, align: "center",
-  });
-  titleSlide.addText(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), {
-    x: 0.5, y: 3.6, w: 12.5, h: 0.5,
-    fontSize: 14, color: "888888", align: "center",
-  });
+  // ── Build slide data ──────────────────────────────────────────────────────
+  interface SlideData { title: string; body: string; index: number }
+  let slides: SlideData[] = [];
 
-  // ── Content slides ──
-  const srcSections = sections.length > 0 ? sections : [{ key: "1", title: agentName, content: "" }];
+  if (sections.length > 0) {
+    // Use structured sections (each section = 1 slide)
+    slides = sections.map((s, i) => ({
+      title: clean(s.title),
+      body:  s.content.split("\n").filter(l => l.trim()).map(clean).join("\n"),
+      index: i + 1,
+    }));
+  } else {
+    // Parse full markdown: split on H1/H2/H3 headings
+    const parts = content.split(/(?=^#{1,3}\s)/m).filter(p => p.trim());
+    if (parts.length > 1) {
+      parts.forEach((part, i) => {
+        const lines     = part.split("\n").filter(l => l.trim());
+        const firstLine = lines[0] ?? "";
+        const title     = clean(firstLine.replace(/^#{1,3}\s+/, ""));
+        const body      = lines.slice(1).map(clean).filter(l => l).join("\n");
+        slides.push({ title, body, index: i + 1 });
+      });
+    } else {
+      // No headings — chunk every 10 lines into a slide
+      const allLines = content.split("\n").filter(l => l.trim()).map(clean);
+      const CHUNK = 10;
+      for (let i = 0; i < allLines.length; i += CHUNK) {
+        slides.push({
+          title: i === 0 ? agentName : `${agentName} (cont'd)`,
+          body:  allLines.slice(i, i + CHUNK).join("\n"),
+          index: Math.floor(i / CHUNK) + 1,
+        });
+      }
+    }
+  }
 
-  for (const s of srcSections) {
+  // ── Title slide ───────────────────────────────────────────────────────────
+  const ts = pptx.addSlide();
+  ts.background = { color: "231F20" };
+  ts.addText("LV Branding", { x: 0.5, y: 1.4, w: 12.3, h: 0.7, fontSize: 20, color: "CB2039", bold: true, align: "center" });
+  ts.addText(agentName,     { x: 0.5, y: 2.2, w: 12.3, h: 1.4, fontSize: 40, color: "FFFFFF", bold: true, align: "center" });
+  ts.addText(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+             { x: 0.5, y: 3.8, w: 12.3, h: 0.5, fontSize: 14, color: "888888", align: "center" });
+  ts.addText("CONFIDENTIAL", { x: 0.5, y: 6.8, w: 12.3, h: 0.3, fontSize: 9, color: "444444", align: "center", bold: true });
+
+  // ── Content slides ────────────────────────────────────────────────────────
+  for (const s of slides) {
     const slide = pptx.addSlide();
     slide.background = { color: "FFFFFF" };
 
-    // Red accent bar
-    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.12, fill: { color: "CB2039" }, line: { color: "CB2039" } });
-
-    // Section title
-    slide.addText(strip(s.title), {
-      x: 0.5, y: 0.3, w: 12.3, h: 0.75,
-      fontSize: 24, color: "231F20", bold: true,
+    // Red accent bar (top)
+    slide.addShape(pptx.ShapeType.rect, {
+      x: 0, y: 0, w: 13.33, h: 0.09,
+      fill: { color: "CB2039" }, line: { color: "CB2039" },
     });
 
-    // Divider line
-    slide.addShape(pptx.ShapeType.line, { x: 0.5, y: 1.1, w: 12.3, h: 0, line: { color: "DDDDDD", width: 1 } });
+    // Slide title
+    slide.addText(s.title, {
+      x: 0.55, y: 0.2, w: 12.2, h: 0.85,
+      fontSize: 26, bold: true, color: "1A1A2E",
+    });
 
-    // Content as bullet points
-    const lines = s.content
-      .split("\n")
-      .map((l) => strip(l))
-      .filter((l) => l.length > 0)
-      .slice(0, 18); // cap per slide
+    // Thin separator
+    slide.addShape(pptx.ShapeType.line, {
+      x: 0.55, y: 1.12, w: 12.2, h: 0,
+      line: { color: "E5E7EB", width: 1 },
+    });
 
-    if (lines.length > 0) {
-      const bulletLines = lines.map((text) => ({
-        text,
-        options: {
-          bullet:   text.startsWith("- ") || text.startsWith("•") ? { indent: 15 } : false as const,
-          fontSize: 14,
-          color:    "333333",
-          breakLine: true,
-        } as Parameters<typeof slide.addText>[1],
-      }));
-
-      slide.addText(bulletLines, {
-        x: 0.5, y: 1.25, w: 12.3, h: 5.2,
-        fontSize: 14, color: "333333", valign: "top",
+    // Body text
+    if (s.body.trim()) {
+      slide.addText(s.body, {
+        x: 0.55, y: 1.25, w: 12.2, h: 5.4,
+        fontSize: 15, color: "374151",
+        valign: "top", wrap: true,
       });
     }
 
     // Footer
     slide.addText("LV Branding — Confidential", {
-      x: 0.5, y: 6.8, w: 9, h: 0.3,
-      fontSize: 9, color: "BBBBBB",
+      x: 0.55, y: 6.9, w: 10, h: 0.25,
+      fontSize: 9, color: "9CA3AF",
     });
-    slide.addText(`${s.key}`, {
-      x: 12.3, y: 6.8, w: 0.5, h: 0.3,
-      fontSize: 9, color: "BBBBBB", align: "right",
+    slide.addText(`${s.index} / ${slides.length}`, {
+      x: 12.0, y: 6.9, w: 0.8, h: 0.25,
+      fontSize: 9, color: "9CA3AF", align: "right",
     });
   }
 
@@ -886,10 +820,10 @@ export default function AgentRunChat({
                             <FileText size={12} /> Export as PDF
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={async () => {
+                            onClick={() => {
                               try {
-                                await exportWord(displayText, msg.runResult!.outputSections ?? [], msg.runResult!.runId, msg.agentId);
-                                toast({ description: "Exported as Word (.docx)" });
+                                exportWord(displayText, msg.runResult!.runId, msg.agentId, projectId);
+                                toast({ description: "Exported as Word (.doc)" });
                               } catch {
                                 toast({ description: "Word export failed.", variant: "destructive" });
                               }
@@ -901,7 +835,7 @@ export default function AgentRunChat({
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
-                                await exportPowerPoint(msg.runResult!.outputSections ?? [], msg.runResult!.runId, msg.agentId);
+                                await exportPowerPoint(msg.runResult!.outputSections ?? [], displayText, msg.runResult!.runId, msg.agentId);
                                 toast({ description: "Exported as PowerPoint (.pptx)" });
                               } catch {
                                 toast({ description: "PowerPoint export failed.", variant: "destructive" });
