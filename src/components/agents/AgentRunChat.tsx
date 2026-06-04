@@ -274,7 +274,7 @@ function exportWord(content: string, runId: string, agentIdForExport?: string, p
   URL.revokeObjectURL(url);
 }
 
-// ── PowerPoint export (.pptx) — rich text, branded slides ────────────────────
+// ── PowerPoint export (.pptx) ────────────────────────────────────────────────
 async function exportPowerPoint(
   sections: { key: string; title: string; content: string }[],
   content:  string,
@@ -285,189 +285,232 @@ async function exportPowerPoint(
   const pptx      = new PptxGenJS();
   const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
 
-  pptx.layout = "LAYOUT_WIDE"; // 16:9
+  pptx.layout = "LAYOUT_WIDE";
 
-  // ── Brand palette ─────────────────────────────────────────────────────────
-  const C = { red: "CB2039", dark: "231F20", body: "374151", muted: "9CA3AF", white: "FFFFFF", line: "E5E7EB" };
+  // ── Palette ───────────────────────────────────────────────────────────────
+  const C = {
+    red: "CB2039", dark: "231F20", body: "374151",
+    muted: "9CA3AF", white: "FFFFFF", line: "E5E7EB", alt: "F9FAFB",
+  };
 
-  // ── Strip bare heading/bullet markers (for slide titles) ──────────────────
-  const stripTitle = (t: string) =>
-    t.replace(/^#{1,6}\s+/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
+  const BODY_X = 0.4; const BODY_W = 12.5;
+  const BODY_TOP = 1.22; const BODY_BTM = 7.0;
 
-  // ── Rich-text markdown → pptxgenjs TextProps[] ───────────────────────────
+  // ── Types ─────────────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type TP = { text: string; options?: Record<string, any> };
+  type TxtBlock   = { kind: "text";  chunks: TP[] };
+  type TblBlock   = { kind: "table"; headers: string[]; rows: string[][] };
+  type Block = TxtBlock | TblBlock;
 
-  /** Parse **bold** within a line into mixed TextProps */
-  function inlineParts(text: string, baseColor = C.body, baseFontSize = 14): TP[] {
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const stripMd = (t: string) =>
+    t.replace(/^#{1,6}\s+/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
+
+  /** Inline **bold** → mixed TP array */
+  function inline(text: string, color = C.body, sz = 14): TP[] {
     const out: TP[] = [];
     const rx = /\*\*(.+?)\*\*/g;
     let last = 0, m: RegExpExecArray | null;
     while ((m = rx.exec(text)) !== null) {
-      if (m.index > last) out.push({ text: text.slice(last, m.index), options: { color: baseColor, fontSize: baseFontSize } });
-      out.push({ text: m[1], options: { bold: true, color: C.dark, fontSize: baseFontSize } });
+      if (m.index > last) out.push({ text: text.slice(last, m.index), options: { color, fontSize: sz } });
+      out.push({ text: m[1], options: { bold: true, color: C.dark, fontSize: sz } });
       last = m.index + m[0].length;
     }
-    if (last < text.length) out.push({ text: text.slice(last), options: { color: baseColor, fontSize: baseFontSize } });
+    if (last < text.length) out.push({ text: text.slice(last), options: { color, fontSize: sz } });
     return out.filter(p => p.text);
   }
 
-  /** Convert a markdown block to a pptxgenjs TextProps array */
-  function mdToTP(markdown: string): TP[] {
-    const out: TP[] = [];
-    const lines = markdown.split("\n");
+  /** Parse table row → string[] of cells */
+  const parseRow = (l: string) =>
+    l.split("|").map(c => c.trim()).filter((c, i, a) => i > 0 && i < a.length - 1);
 
-    for (let i = 0; i < lines.length; i++) {
-      const raw     = lines[i];
-      const trimmed = raw.trim();
+  /** Parse markdown string into semantic blocks (text or table) */
+  function parseBlocks(md: string): Block[] {
+    const blocks: Block[] = [];
+    const lines = md.split("\n");
+    let i = 0;
+    let chunks: TP[] = [];
 
-      if (!trimmed) { if (out.length) out.push({ text: "\n" }); continue; }
+    const flush = () => {
+      if (chunks.length) { blocks.push({ kind: "text", chunks: [...chunks] }); chunks = []; }
+    };
 
-      // H3
-      if (trimmed.startsWith("### ")) {
-        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.dark, fontSize: 15, underline: true } });
-        continue;
-      }
-      // H2
-      if (trimmed.startsWith("## ")) {
-        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.red, fontSize: 16 } });
-        continue;
-      }
-      // H1
-      if (trimmed.startsWith("# ")) {
-        out.push({ text: stripTitle(trimmed) + "\n", options: { bold: true, color: C.dark, fontSize: 18 } });
-        continue;
-      }
-      // Bullet (- or • or *)
-      if (/^[-•*]\s+/.test(trimmed)) {
-        const body = trimmed.replace(/^[-•*]\s+/, "");
-        out.push({ text: "  •  ", options: { color: C.red, bold: true, fontSize: 14 } });
-        out.push(...inlineParts(body));
-        out.push({ text: "\n" });
-        continue;
-      }
-      // Numbered list
-      const numMatch = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
-      if (numMatch) {
-        out.push({ text: `  ${numMatch[1]}.  `, options: { color: C.red, bold: true, fontSize: 14 } });
-        out.push(...inlineParts(numMatch[2]));
-        out.push({ text: "\n" });
-        continue;
-      }
-      // Horizontal rule
-      if (trimmed === "---") {
-        out.push({ text: "──────────────────────────────────\n", options: { color: C.line, fontSize: 8 } });
-        continue;
-      }
-      // Table row — simplify to pipe-separated text
-      if (trimmed.startsWith("|")) {
-        const cells = trimmed.split("|").map(c => c.trim()).filter(c => c && !/^[-: ]+$/.test(c));
-        if (cells.length) {
-          out.push(...inlineParts(cells.join("   │   ")));
-          out.push({ text: "\n" });
+    while (i < lines.length) {
+      const raw = lines[i]; const t = raw.trim();
+
+      // ── Markdown table detection ───────────────────────────────────────
+      if (t.startsWith("|") && i + 1 < lines.length && /^\|[\s:|-]+\|/.test(lines[i + 1].trim())) {
+        flush();
+        const headers = parseRow(t);
+        i += 2; // skip separator row
+        const rows: string[][] = [];
+        while (i < lines.length && lines[i].trim().startsWith("|")) {
+          rows.push(parseRow(lines[i].trim())); i++;
         }
+        if (headers.length) blocks.push({ kind: "table", headers, rows });
         continue;
       }
-      // Regular paragraph
-      out.push(...inlineParts(trimmed));
-      out.push({ text: "\n" });
+
+      if (!t) { if (chunks.length) chunks.push({ text: "\n" }); i++; continue; }
+
+      if (t.startsWith("### ")) { chunks.push({ text: stripMd(t) + "\n", options: { bold: true, color: C.dark, fontSize: 14, underline: true } }); i++; continue; }
+      if (t.startsWith("## "))  { chunks.push({ text: stripMd(t) + "\n", options: { bold: true, color: C.red,  fontSize: 16 } }); i++; continue; }
+      if (t.startsWith("# "))   { chunks.push({ text: stripMd(t) + "\n", options: { bold: true, color: C.dark, fontSize: 18 } }); i++; continue; }
+
+      if (/^[-•*]\s+/.test(t)) {
+        chunks.push({ text: "  •  ", options: { color: C.red, bold: true, fontSize: 14 } });
+        chunks.push(...inline(t.replace(/^[-•*]\s+/, "")));
+        chunks.push({ text: "\n" }); i++; continue;
+      }
+
+      const nm = t.match(/^(\d+)[.)]\s+(.+)$/);
+      if (nm) {
+        chunks.push({ text: `  ${nm[1]}.  `, options: { color: C.red, bold: true, fontSize: 14 } });
+        chunks.push(...inline(nm[2]));
+        chunks.push({ text: "\n" }); i++; continue;
+      }
+
+      if (t === "---" || /^─+$/.test(t)) { chunks.push({ text: "──────────────────────────────────\n", options: { color: C.line, fontSize: 8 } }); i++; continue; }
+
+      chunks.push(...inline(t)); chunks.push({ text: "\n" }); i++;
     }
 
-    // Remove trailing newlines
-    while (out.length && out[out.length - 1].text === "\n") out.pop();
-    return out.filter(p => p.text);
+    flush();
+    return blocks;
   }
 
-  // ── Build slide data ──────────────────────────────────────────────────────
-  interface SlideData { title: string; chunks: TP[]; idx: number }
-  let slides: SlideData[] = [];
+  /** Estimate text box height (inches) for a chunk array */
+  function textH(chunks: TP[]): number {
+    const lines = chunks.filter(c => c.text === "\n").length + 1;
+    return Math.max(lines * 0.255, 0.3);
+  }
+
+  /** Estimate table height (inches) */
+  function tableH(tbl: TblBlock): number {
+    return (1 + tbl.rows.length) * 0.37 + 0.1;
+  }
+
+  // ── Slide chrome ──────────────────────────────────────────────────────────
+  type Slide = ReturnType<typeof pptx.addSlide>;
+
+  function chrome(slide: Slide, title: string, idx: number, total: number) {
+    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.09, fill: { color: C.red }, line: { color: C.red } });
+    slide.addShape(pptx.ShapeType.rect, { x: 0.28, y: 0.18, w: 0.07, h: 0.88, fill: { color: C.red }, line: { color: C.red } });
+    slide.addText(title.toUpperCase(), { x: 0.48, y: 0.18, w: 12.4, h: 0.88, fontSize: 24, bold: true, color: C.dark, valign: "middle" });
+    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 1.12, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
+    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 7.05, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
+    slide.addText("LV Branding — Confidential",  { x: 0.4,  y: 7.1, w: 9,   h: 0.24, fontSize: 9, color: C.muted });
+    slide.addText(`${idx} / ${total}`, { x: 11.9, y: 7.1, w: 1.0, h: 0.24, fontSize: 9, color: C.red, bold: true, align: "right" });
+  }
+
+  // ── Section data ──────────────────────────────────────────────────────────
+  interface Section { title: string; blocks: Block[] }
+  let sectionList: Section[] = [];
 
   if (sections.length > 0) {
-    slides = sections.map((s, i) => ({
-      title:  stripTitle(s.title),
-      chunks: mdToTP(s.content),
-      idx:    i + 1,
-    }));
+    sectionList = sections.map(s => ({ title: stripMd(s.title), blocks: parseBlocks(s.content) }));
   } else {
     const parts = content.split(/(?=^#{1,3}\s)/m).filter(p => p.trim());
     if (parts.length > 1) {
-      parts.forEach((part, i) => {
-        const lines = part.split("\n").filter(l => l.trim());
-        const title = stripTitle(lines[0] ?? "");
-        slides.push({ title, chunks: mdToTP(lines.slice(1).join("\n")), idx: i + 1 });
+      parts.forEach(part => {
+        const ls = part.split("\n");
+        sectionList.push({ title: stripMd(ls[0] ?? ""), blocks: parseBlocks(ls.slice(1).join("\n")) });
       });
     } else {
-      const allLines = content.split("\n").filter(l => l.trim());
-      const CHUNK = 12;
-      for (let i = 0; i < allLines.length; i += CHUNK) {
-        slides.push({
-          title:  i === 0 ? agentName : `${agentName} (cont'd)`,
-          chunks: mdToTP(allLines.slice(i, i + CHUNK).join("\n")),
-          idx:    Math.floor(i / CHUNK) + 1,
-        });
-      }
+      sectionList = [{ title: agentName, blocks: parseBlocks(content) }];
     }
   }
+
+  const total = sectionList.length + 1;
 
   // ── Title slide ───────────────────────────────────────────────────────────
   const ts = pptx.addSlide();
   ts.background = { color: C.dark };
-  // Red top bar
   ts.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.12, fill: { color: C.red }, line: { color: C.red } });
-  // "LV Branding"
-  ts.addText("LV Branding", { x: 0.5, y: 1.3, w: 12.3, h: 0.6, fontSize: 18, color: C.red, bold: true, align: "center" });
-  // Agent name (large)
-  ts.addText(agentName, { x: 0.5, y: 2.0, w: 12.3, h: 1.6, fontSize: 44, color: C.white, bold: true, align: "center" });
-  // Date
+  ts.addText("LV Branding",   { x: 0.5, y: 1.3, w: 12.3, h: 0.6, fontSize: 18, color: C.red,   bold: true, align: "center" });
+  ts.addText(agentName,        { x: 0.5, y: 2.0, w: 12.3, h: 1.6, fontSize: 44, color: C.white, bold: true, align: "center" });
   ts.addText(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-    { x: 0.5, y: 3.8, w: 12.3, h: 0.4, fontSize: 14, color: C.muted, align: "center" });
-  // Red bottom bar
+             { x: 0.5, y: 3.8, w: 12.3, h: 0.4, fontSize: 14, color: C.muted, align: "center" });
   ts.addShape(pptx.ShapeType.rect, { x: 0, y: 7.1, w: 13.33, h: 0.4, fill: { color: C.red }, line: { color: C.red } });
   ts.addText("CONFIDENTIAL — LV Branding", { x: 0.5, y: 7.15, w: 12.3, h: 0.25, fontSize: 9, color: C.white, align: "center" });
 
-  // ── Content slides ────────────────────────────────────────────────────────
-  for (const s of slides) {
-    const slide = pptx.addSlide();
+  // ── Content slides (one per section, overflow onto continuation slides) ───
+  let slideNum = 1;
+
+  for (const sec of sectionList) {
+    slideNum++;
+    let slide = pptx.addSlide();
     slide.background = { color: C.white };
+    chrome(slide, sec.title, slideNum, total);
 
-    // Red thin top bar
-    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.09, fill: { color: C.red }, line: { color: C.red } });
+    let y = BODY_TOP;
+    let pendingChunks: TP[] = [];
 
-    // Red left accent bar (mirrors Word's border-left)
-    slide.addShape(pptx.ShapeType.rect, { x: 0.28, y: 0.18, w: 0.07, h: 0.88, fill: { color: C.red }, line: { color: C.red } });
+    const flushText = () => {
+      if (!pendingChunks.length) return;
+      const h = Math.min(textH(pendingChunks), BODY_BTM - y);
+      if (h > 0.15) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        slide.addText(pendingChunks as any, { x: BODY_X, y, w: BODY_W, h, fontSize: 14, color: C.body, valign: "top", wrap: true });
+        y += h + 0.1;
+      }
+      pendingChunks = [];
+    };
 
-    // Slide title
-    slide.addText(s.title, {
-      x: 0.48, y: 0.18, w: 12.4, h: 0.88,
-      fontSize: 26, bold: true, color: C.dark, valign: "middle",
-    });
+    const newContinuation = () => {
+      flushText();
+      slideNum++;
+      slide = pptx.addSlide();
+      slide.background = { color: C.white };
+      chrome(slide, `${sec.title} (cont'd)`, slideNum, total);
+      y = BODY_TOP;
+    };
 
-    // Thin horizontal rule under title
-    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 1.12, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
+    for (const block of sec.blocks) {
+      if (block.kind === "text") {
+        pendingChunks.push(...block.chunks);
+      } else {
+        // Flush text before table
+        flushText();
 
-    // Body rich text
-    if (s.chunks.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      slide.addText(s.chunks as any, {
-        x: 0.4, y: 1.22, w: 12.5, h: 5.65,
-        fontSize: 14, color: C.body, valign: "top", wrap: true,
-      });
+        const { headers, rows } = block;
+        const cols = Math.max(headers.length, ...rows.map(r => r.length), 1);
+        const tH   = tableH(block);
+
+        // Overflow to new slide if not enough room
+        if (y + tH > BODY_BTM - 0.3) newContinuation();
+
+        // Column widths — equal distribution
+        const colW = Array(cols).fill(parseFloat((BODY_W / cols).toFixed(2)));
+
+        // Header row — dark background, white bold text
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const headerRow: any[] = Array.from({ length: cols }, (_, ci) => ({
+          text: headers[ci] ?? "",
+          options: { bold: true, color: C.white, fill: { type: "solid", color: C.dark }, fontSize: 12, align: "left", valign: "middle" },
+        }));
+
+        // Data rows — alternating light/white background
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dataRows: any[][] = rows.map((row, ri) =>
+          Array.from({ length: cols }, (_, ci) => ({
+            text: stripMd(row[ci] ?? ""),
+            options: { color: C.body, fill: { type: "solid", color: ri % 2 === 1 ? C.alt : C.white }, fontSize: 12, align: "left", valign: "middle" },
+          }))
+        );
+
+        slide.addTable(
+          [headerRow, ...dataRows],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { x: BODY_X, y, w: BODY_W, colW, border: { type: "solid", pt: 1, color: C.line }, fontFace: "Calibri" } as any,
+        );
+
+        y += tH + 0.2;
+      }
     }
 
-    // Footer separator
-    slide.addShape(pptx.ShapeType.line, { x: 0.28, y: 7.05, w: 12.7, h: 0, line: { color: C.line, width: 1 } });
-
-    // Footer left: agency name
-    slide.addText("LV Branding — Confidential", {
-      x: 0.4, y: 7.1, w: 9, h: 0.24,
-      fontSize: 9, color: C.muted,
-    });
-
-    // Footer right: slide counter in red
-    slide.addText(`${s.idx} / ${slides.length}`, {
-      x: 11.9, y: 7.1, w: 1.0, h: 0.24,
-      fontSize: 9, color: C.red, bold: true, align: "right",
-    });
+    flushText();
   }
 
   await pptx.writeFile({ fileName: `${agentName}-${runId.slice(0, 8)}.pptx` });
