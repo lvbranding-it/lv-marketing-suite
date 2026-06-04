@@ -1,207 +1,295 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  Play, Pause, SkipForward, SkipBack, QrCode as QrCodeIcon,
-  Image as ImageIcon, Monitor, Star, ChevronDown, ChevronUp,
-  Settings,
+  Play, Pause, SkipForward, SkipBack,
+  QrCode as QrCodeIcon, Monitor, Star, Settings,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEventBySlug } from "@/hooks/useEvents";
 import { useApprovedEventPhotos, getPhotoUrl, type EventPhoto } from "@/hooks/useEventPhotos";
 import { cn } from "@/lib/utils";
 
+// ── Ken Burns animations (CSS injected) ───────────────────────────────────────
+
+const KB_CSS = `
+  @keyframes kb1{0%{transform:scale(1) translate(0%,0%)}100%{transform:scale(1.09) translate(-2%,-1%)}}
+  @keyframes kb2{0%{transform:scale(1.09) translate(-2%,-1%)}100%{transform:scale(1) translate(2%,1%)}}
+  @keyframes kb3{0%{transform:scale(1.06) translate(-3%,0%)}100%{transform:scale(1.06) translate(3%,.5%)}}
+  @keyframes kb4{0%{transform:scale(1.06) translate(3%,1%)}100%{transform:scale(1) translate(-1.5%,-1%)}}
+  @keyframes kb5{0%{transform:scale(1) translate(1%,1%)}100%{transform:scale(1.08) translate(-1%,-2%)}}
+`;
+const KB_NAMES = ["kb1", "kb2", "kb3", "kb4", "kb5"];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ScreenMode = "slideshow" | "holding" | "qr" | "featured";
 
-// ── Loading/idle placeholders ─────────────────────────────────────────────────
+// ── Blur slide (background + centered photo) ──────────────────────────────────
 
-function HoldingScreen({ headline, subheadline, primaryColor, secondaryColor, logoUrl }: {
-  headline?: string | null;
-  subheadline?: string | null;
-  primaryColor: string;
+function BlurSlide({
+  photoUrl,
+  kbIndex,
+  intervalSec,
+  visible,
+  caption,
+  attendeeName,
+  showCaption,
+  showName,
+}: {
+  photoUrl:    string;
+  kbIndex:     number;
+  intervalSec: number;
+  visible:     boolean;
+  caption:     string | null;
+  attendeeName: string | null;
+  showCaption: boolean;
+  showName:    boolean;
+}) {
+  const kb = KB_NAMES[kbIndex % KB_NAMES.length];
+  const dur = `${intervalSec + 1}s`;
+
+  return (
+    <div
+      className="absolute inset-0 transition-opacity"
+      style={{
+        opacity:          visible ? 1 : 0,
+        transitionDuration: "900ms",
+        transitionTimingFunction: "ease-in-out",
+      }}
+    >
+      {/* Blurred background — fills screen, eliminates black bars */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:    `url(${photoUrl})`,
+          backgroundSize:     "cover",
+          backgroundPosition: "center",
+          filter:             "blur(48px) brightness(0.55) saturate(1.3)",
+          transform:          "scale(1.12)", // prevents blur edge bleed
+        }}
+      />
+
+      {/* Centred photo with Ken Burns */}
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+        <img
+          src={photoUrl}
+          alt=""
+          draggable={false}
+          style={{
+            maxWidth:          "88vw",
+            maxHeight:         "88vh",
+            objectFit:         "contain",
+            boxShadow:         "0 32px 80px rgba(0,0,0,.55)",
+            borderRadius:      "4px",
+            animation:         visible ? `${kb} ${dur} ease-in-out forwards` : "none",
+          }}
+        />
+      </div>
+
+      {/* Caption overlay */}
+      {(showCaption && caption) || (showName && attendeeName) ? (
+        <div
+          className="absolute bottom-0 left-0 right-0 px-10 py-6 flex flex-col items-start gap-0.5"
+          style={{
+            background: "linear-gradient(to top, rgba(0,0,0,.75) 0%, transparent 100%)",
+          }}
+        >
+          {showName && attendeeName && (
+            <span className="text-white font-bold text-2xl drop-shadow-lg">{attendeeName}</span>
+          )}
+          {showCaption && caption && (
+            <span className="text-white/80 text-xl drop-shadow">{caption}</span>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Holding screen ────────────────────────────────────────────────────────────
+
+function HoldingScreen({
+  primaryColor, secondaryColor, logoUrl, headline, subheadline,
+}: {
+  primaryColor:  string;
   secondaryColor: string;
-  logoUrl?: string | null;
+  logoUrl?:      string | null;
+  headline?:     string | null;
+  subheadline?:  string | null;
 }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-white"
-      style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-8"
+      style={{
+        background: `linear-gradient(140deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+      }}
     >
-      {logoUrl && <img src={logoUrl} alt="" className="h-24 w-auto object-contain opacity-90 mb-2" />}
-      <div className="text-center px-8">
-        <h1 className="text-5xl font-extrabold mb-3 drop-shadow-lg">{headline ?? "Live Event Experience"}</h1>
-        {subheadline && <p className="text-2xl opacity-80 font-light">{subheadline}</p>}
+      {logoUrl && (
+        <img src={logoUrl} alt="" className="h-28 w-auto object-contain opacity-90 drop-shadow-2xl" />
+      )}
+      <div className="text-center px-16">
+        <h1 className="text-white font-extrabold text-6xl drop-shadow-lg mb-3">
+          {headline ?? "Live Event Experience"}
+        </h1>
+        {subheadline && (
+          <p className="text-white/70 text-3xl font-light">{subheadline}</p>
+        )}
       </div>
-      <p className="text-lg opacity-60 animate-pulse mt-4">
-        Photos will appear here soon. Scan the QR code and share your moment.
+      <p className="text-white/40 text-2xl animate-pulse mt-4">
+        Scan the QR code and share your moment →
       </p>
     </div>
   );
 }
 
-function QRScreen({ slug, primaryColor, secondaryColor, headline, logoUrl }: {
-  slug: string;
-  primaryColor: string;
+// ── QR Screen ─────────────────────────────────────────────────────────────────
+
+function QRScreen({
+  slug, primaryColor, secondaryColor, headline, logoUrl,
+}: {
+  slug:           string;
+  primaryColor:   string;
   secondaryColor: string;
-  headline?: string | null;
-  logoUrl?: string | null;
+  headline?:      string | null;
+  logoUrl?:       string | null;
 }) {
   const uploadUrl = `${window.location.origin}/event/${slug}/upload`;
-  const qrSrc     = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&color=FFFFFF&bgcolor=${primaryColor.replace("#","")}&data=${encodeURIComponent(uploadUrl)}`;
+  const qrSrc     = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&color=FFFFFF&bgcolor=${primaryColor.replace("#", "")}&data=${encodeURIComponent(uploadUrl)}`;
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-white"
-      style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-8"
+      style={{ background: `linear-gradient(140deg, ${primaryColor} 0%, ${secondaryColor} 100%)` }}
     >
-      {logoUrl && <img src={logoUrl} alt="" className="h-16 w-auto object-contain opacity-90" />}
-      <h2 className="text-4xl font-bold text-center drop-shadow">{headline ?? "Share Your Moment"}</h2>
-      <div className="bg-white/10 backdrop-blur-sm p-5 rounded-3xl border border-white/20">
-        <img src={qrSrc} alt="QR Code" className="w-56 h-56 rounded-xl" />
+      {logoUrl && <img src={logoUrl} alt="" className="h-20 w-auto object-contain opacity-90" />}
+      <h2 className="text-white font-extrabold text-5xl text-center drop-shadow">{headline ?? "Share Your Moment"}</h2>
+      <div className="bg-white/10 backdrop-blur p-6 rounded-3xl border border-white/20 shadow-2xl">
+        <img src={qrSrc} alt="QR Code" className="w-72 h-72 rounded-2xl" />
       </div>
-      <p className="text-2xl font-semibold opacity-90">Scan to see your photo on the big screen</p>
-      <p className="text-base opacity-50 font-mono">{uploadUrl}</p>
-    </div>
-  );
-}
-
-// ── Photo slide ───────────────────────────────────────────────────────────────
-
-function PhotoSlide({ photo, event, visible }: {
-  photo: EventPhoto;
-  event: ReturnType<typeof useEventBySlug>["data"];
-  visible: boolean;
-}) {
-  if (!event) return null;
-  const url = getPhotoUrl(photo.image_path);
-
-  return (
-    <div className={cn(
-      "absolute inset-0 transition-opacity duration-700",
-      visible ? "opacity-100" : "opacity-0 pointer-events-none"
-    )}>
-      {/* Photo — fills the inner area */}
-      <img src={url} alt="" className="absolute inset-0 w-full h-full object-contain bg-black" />
-
-      {/* Caption overlay */}
-      {event.show_captions && (photo.caption || (event.show_names && photo.attendee_name)) && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-6 py-4">
-          {event.show_names && photo.attendee_name && (
-            <p className="text-white font-semibold text-xl">{photo.attendee_name}</p>
-          )}
-          {event.show_captions && photo.caption && (
-            <p className="text-white/90 text-lg">{photo.caption}</p>
-          )}
-        </div>
-      )}
+      <p className="text-white text-3xl font-semibold opacity-90">Scan to see your photo on the big screen</p>
+      <p className="text-white/40 text-lg font-mono">{uploadUrl}</p>
     </div>
   );
 }
 
 // ── Operator controls ─────────────────────────────────────────────────────────
 
-function OperatorControls({ mode, setMode, paused, setPaused, onNext, onPrev, photoCount }: {
-  mode: ScreenMode;
-  setMode: (m: ScreenMode) => void;
-  paused: boolean;
-  setPaused: (v: boolean) => void;
-  onNext: () => void;
-  onPrev: () => void;
+function OperatorControls({
+  mode, setMode, paused, setPaused, onNext, onPrev, photoCount, visible,
+}: {
+  mode:       ScreenMode;
+  setMode:    (m: ScreenMode) => void;
+  paused:     boolean;
+  setPaused:  (v: boolean) => void;
+  onNext:     () => void;
+  onPrev:     () => void;
   photoCount: number;
+  visible:    boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <div className="fixed bottom-4 right-4 z-50">
-      {/* Toggle button */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="bg-black/70 backdrop-blur-sm text-white rounded-full p-3 shadow-lg hover:bg-black/90 transition-colors"
-        title="Operator Controls"
-      >
-        <Settings size={20} />
-      </button>
+    <div
+      className="fixed bottom-5 right-5 z-50 transition-all duration-500"
+      style={{ opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none" }}
+    >
+      <div className="bg-black/75 backdrop-blur-md text-white rounded-2xl p-4 w-64 space-y-3 border border-white/10 shadow-2xl">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Operator Controls</p>
 
-      {/* Panel */}
-      {open && (
-        <div className="absolute bottom-14 right-0 bg-black/80 backdrop-blur-sm text-white rounded-2xl p-4 w-72 shadow-2xl space-y-3 border border-white/10">
-          <p className="text-xs font-semibold uppercase tracking-wider opacity-60 mb-1">Operator Controls</p>
-
-          {/* Mode */}
-          <div className="grid grid-cols-2 gap-1.5">
-            {([
-              { m: "slideshow", icon: <Play size={12} />,    label: "Slideshow" },
-              { m: "holding",   icon: <Monitor size={12} />, label: "Holding" },
-              { m: "qr",        icon: <QrCodeIcon size={12} />, label: "QR Code" },
-              { m: "featured",  icon: <Star size={12} />,    label: "Featured" },
-            ] as { m: ScreenMode; icon: React.ReactNode; label: string }[]).map(({ m, icon, label }) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
-                  mode === m ? "bg-rose-600 text-white" : "bg-white/10 hover:bg-white/20"
-                )}
-              >
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Playback */}
-          <div className="flex items-center gap-2">
-            <button onClick={onPrev}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg p-2 flex items-center justify-center transition-colors"><SkipBack  size={14} /></button>
-            <button onClick={() => setPaused(!paused)} className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg p-2 flex items-center justify-center transition-colors">
-              {paused ? <Play size={14} /> : <Pause size={14} />}
+        {/* Modes */}
+        <div className="grid grid-cols-2 gap-1">
+          {([
+            { m: "slideshow", icon: <Play size={11} />,       label: "Slideshow" },
+            { m: "holding",   icon: <Monitor size={11} />,    label: "Holding" },
+            { m: "qr",        icon: <QrCodeIcon size={11} />, label: "QR Code" },
+            { m: "featured",  icon: <Star size={11} />,       label: "Featured" },
+          ] as { m: ScreenMode; icon: React.ReactNode; label: string }[]).map(({ m, icon, label }) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={cn(
+                "flex items-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium transition-colors",
+                mode === m ? "bg-white/20 text-white" : "text-white/50 hover:bg-white/10"
+              )}
+            >
+              {icon} {label}
             </button>
-            <button onClick={onNext}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg p-2 flex items-center justify-center transition-colors"><SkipForward size={14} /></button>
-          </div>
-
-          <p className="text-[10px] opacity-40 text-center">{photoCount} approved photo{photoCount !== 1 ? "s" : ""}</p>
+          ))}
         </div>
-      )}
+
+        {/* Playback */}
+        <div className="flex gap-1.5">
+          <button onClick={onPrev}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors"><SkipBack  size={13} /></button>
+          <button onClick={() => setPaused(!paused)} className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors">
+            {paused ? <Play size={13} /> : <Pause size={13} />}
+          </button>
+          <button onClick={onNext}  className="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2 flex justify-center items-center transition-colors"><SkipForward size={13} /></button>
+        </div>
+
+        <p className="text-[9px] text-white/25 text-center">{photoCount} approved photo{photoCount !== 1 ? "s" : ""}</p>
+      </div>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function EventLiveScreen() {
-  const { eventSlug }               = useParams<{ eventSlug: string }>();
-  const { data: event }             = useEventBySlug(eventSlug);
-  const { data: photos = [], refetch } = useApprovedEventPhotos(event?.id);
+  const { eventSlug }                   = useParams<{ eventSlug: string }>();
+  const { data: event }                 = useEventBySlug(eventSlug);
+  const { data: photos = [], refetch }  = useApprovedEventPhotos(event?.id);
 
   const [mode, setMode]             = useState<ScreenMode>("slideshow");
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [prevIdx, setPrevIdx]       = useState<number | null>(null);
+  const [kbCount, setKbCount]       = useState(0); // increments each slide to cycle KB anim
   const [paused, setPaused]         = useState(false);
-  const intervalRef                 = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showControls, setShowControls] = useState(false);
 
+  const intervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const controlsTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const TRANS_MS = 900; // must match CSS transition duration
   const intervalSec = event?.slideshow_interval_seconds ?? 7;
 
-  // ── Realtime subscription ─────────────────────────────────────────────────
+  // ── Realtime ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!event?.id) return;
-    const channel = supabase
-      .channel(`live-screen-${event.id}`)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "event_photos",
-        filter: `event_id=eq.${event.id}`,
-      }, () => refetch())
+    const ch = supabase
+      .channel(`live-${event.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_photos", filter: `event_id=eq.${event.id}` }, () => refetch())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(ch); };
   }, [event?.id, refetch]);
 
-  // ── Slideshow timer ───────────────────────────────────────────────────────
+  // ── Advance ───────────────────────────────────────────────────────────────
 
   const advance = useCallback(() => {
-    setCurrentIdx((i) => (photos.length > 1 ? (i + 1) % photos.length : 0));
+    if (photos.length < 2) return;
+    setCurrentIdx((cur) => {
+      const next = (cur + 1) % photos.length;
+      setPrevIdx(cur);
+      setKbCount((k) => k + 1);
+      // Clear prev after transition completes
+      if (transTimer.current) clearTimeout(transTimer.current);
+      transTimer.current = setTimeout(() => setPrevIdx(null), TRANS_MS + 100);
+      return next;
+    });
   }, [photos.length]);
 
   const goBack = useCallback(() => {
-    setCurrentIdx((i) => (photos.length > 1 ? (i - 1 + photos.length) % photos.length : 0));
+    if (photos.length < 2) return;
+    setCurrentIdx((cur) => {
+      const next = (cur - 1 + photos.length) % photos.length;
+      setPrevIdx(cur);
+      setKbCount((k) => k + 1);
+      if (transTimer.current) clearTimeout(transTimer.current);
+      transTimer.current = setTimeout(() => setPrevIdx(null), TRANS_MS + 100);
+      return next;
+    });
   }, [photos.length]);
+
+  // ── Auto-advance timer ────────────────────────────────────────────────────
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -211,128 +299,189 @@ export default function EventLiveScreen() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [paused, mode, photos.length, intervalSec, advance]);
 
-  // Clamp index
+  // Clamp index when photos list shrinks
   useEffect(() => {
-    if (currentIdx >= photos.length && photos.length > 0) setCurrentIdx(0);
+    if (photos.length && currentIdx >= photos.length) setCurrentIdx(0);
   }, [photos.length, currentIdx]);
+
+  // ── Mouse activity → show controls ───────────────────────────────────────
+
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    controlsTimer.current = setTimeout(() => setShowControls(false), 3000);
+  }, []);
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (!event) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white text-xl">
+      <div className="w-screen h-screen bg-black flex items-center justify-center text-white/30 text-xl select-none">
         Loading…
       </div>
     );
   }
 
-  const { primary_color, secondary_color, logo_url, screen_headline, screen_subheadline, lower_third_text, sponsor_message, slug, show_logo, show_qr_code_on_screen, show_sponsors } = event;
-  const currentPhoto = photos[currentIdx] ?? null;
+  const {
+    primary_color, secondary_color, logo_url, slug,
+    screen_headline, screen_subheadline,
+    show_captions, show_names, show_sponsors, show_logo,
+    show_qr_code_on_screen, lower_third_text, sponsor_message,
+  } = event;
+
+  const cur  = photos[currentIdx] ?? null;
+  const prev = prevIdx !== null ? photos[prevIdx] ?? null : null;
+
+  const uploadUrl = `${window.location.origin}/event/${slug}/upload`;
+  const qrSrc     = `https://api.qrserver.com/v1/create-qr-code/?size=128x128&format=png&color=FFFFFF&bgcolor=000000&data=${encodeURIComponent(uploadUrl)}`;
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden">
-      {/* 4:3 container */}
+    <>
+      {/* Inject Ken Burns keyframes */}
+      <style>{KB_CSS}</style>
+
       <div
-        className="relative w-full"
-        style={{ maxWidth: "min(100vw, 133.33vh)", aspectRatio: "4/3" }}
+        className="w-screen h-screen overflow-hidden relative bg-black select-none cursor-none"
+        onMouseMove={handleMouseMove}
       >
-        {/* ── Header bar ── */}
-        <div
-          className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-3"
-          style={{ backgroundColor: primary_color, minHeight: "10%" }}
-        >
-          <div className="flex items-center gap-3">
-            {show_logo && logo_url && (
-              <img src={logo_url} alt="" className="h-10 w-auto object-contain" />
-            )}
-            <div>
-              {screen_headline && (
-                <p className="text-white font-extrabold text-xl leading-tight drop-shadow">{screen_headline}</p>
-              )}
-              {screen_subheadline && (
-                <p className="text-white/70 text-sm leading-tight">{screen_subheadline}</p>
-              )}
-            </div>
-          </div>
-          {show_qr_code_on_screen && slug && (
-            <div className="flex flex-col items-center gap-0.5 opacity-90">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&format=png&color=FFFFFF&bgcolor=${primary_color.replace("#", "")}&data=${encodeURIComponent(`${window.location.origin}/event/${slug}/upload`)}`}
-                alt="QR"
-                className="w-14 h-14 rounded"
+        {/* ── Slideshow / Featured mode ── */}
+        {(mode === "slideshow" || mode === "featured") && (
+          <>
+            {photos.length === 0 ? (
+              <HoldingScreen
+                primaryColor={primary_color}
+                secondaryColor={secondary_color}
+                logoUrl={show_logo ? logo_url : null}
+                headline={screen_headline}
+                subheadline={screen_subheadline}
               />
-              <p className="text-white text-[8px] opacity-60">Scan to share</p>
-            </div>
-          )}
-        </div>
-
-        {/* ── Main content area ── */}
-        <div className="absolute top-[10%] bottom-[12%] left-0 right-0 overflow-hidden">
-          {mode === "holding" && (
-            <HoldingScreen headline={screen_headline} subheadline={screen_subheadline} primaryColor={primary_color} secondaryColor={secondary_color} logoUrl={logo_url} />
-          )}
-          {mode === "qr" && (
-            <QRScreen slug={slug} primaryColor={primary_color} secondaryColor={secondary_color} headline={screen_headline} logoUrl={logo_url} />
-          )}
-          {(mode === "slideshow" || mode === "featured") && (
-            <>
-              {photos.length === 0 ? (
-                <HoldingScreen headline={screen_headline} subheadline={screen_subheadline} primaryColor={primary_color} secondaryColor={secondary_color} logoUrl={logo_url} />
-              ) : (
-                photos.map((photo, i) => (
-                  <PhotoSlide
-                    key={photo.id}
-                    photo={photo}
-                    event={event}
-                    visible={i === currentIdx}
+            ) : (
+              <>
+                {/* Previous slide (fades out) */}
+                {prev && (
+                  <BlurSlide
+                    key={`prev-${prevIdx}`}
+                    photoUrl={getPhotoUrl(prev.image_path)}
+                    kbIndex={kbCount - 1}
+                    intervalSec={intervalSec}
+                    visible={false}
+                    caption={prev.caption}
+                    attendeeName={prev.attendee_name}
+                    showCaption={show_captions}
+                    showName={show_names}
                   />
-                ))
-              )}
-            </>
-          )}
-        </div>
+                )}
 
-        {/* ── Footer bar ── */}
-        <div
-          className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-2"
-          style={{ backgroundColor: secondary_color, minHeight: "12%" }}
-        >
-          {/* Lower third */}
-          <div className="flex-1 min-w-0">
+                {/* Current slide (fades in) */}
+                {cur && (
+                  <BlurSlide
+                    key={`cur-${currentIdx}`}
+                    photoUrl={getPhotoUrl(cur.image_path)}
+                    kbIndex={kbCount}
+                    intervalSec={intervalSec}
+                    visible={true}
+                    caption={cur.caption}
+                    attendeeName={cur.attendee_name}
+                    showCaption={show_captions}
+                    showName={show_names}
+                  />
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Holding mode ── */}
+        {mode === "holding" && (
+          <HoldingScreen
+            primaryColor={primary_color}
+            secondaryColor={secondary_color}
+            logoUrl={show_logo ? logo_url : null}
+            headline={screen_headline}
+            subheadline={screen_subheadline}
+          />
+        )}
+
+        {/* ── QR mode ── */}
+        {mode === "qr" && (
+          <QRScreen
+            slug={slug}
+            primaryColor={primary_color}
+            secondaryColor={secondary_color}
+            headline={screen_headline}
+            logoUrl={show_logo ? logo_url : null}
+          />
+        )}
+
+        {/* ── Persistent overlays (non-header/footer) ── */}
+
+        {/* Logo watermark — top left */}
+        {show_logo && logo_url && mode === "slideshow" && photos.length > 0 && (
+          <div className="absolute top-6 left-8 z-20 pointer-events-none">
+            <img src={logo_url} alt="" className="h-12 w-auto object-contain opacity-70 drop-shadow-lg" />
+          </div>
+        )}
+
+        {/* Lower third + sponsor — bottom strip */}
+        {mode === "slideshow" && photos.length > 0 && (lower_third_text || (show_sponsors && sponsor_message)) && (
+          <div
+            className="absolute bottom-0 left-0 right-0 z-20 px-10 pb-5 pt-8 pointer-events-none"
+            style={{ background: "linear-gradient(to top, rgba(0,0,0,.6) 0%, transparent 100%)" }}
+          >
             {lower_third_text && (
-              <p className="text-white font-semibold text-lg truncate drop-shadow">{lower_third_text}</p>
+              <p className="text-white font-semibold text-xl drop-shadow">{lower_third_text}</p>
             )}
             {show_sponsors && sponsor_message && (
-              <p className="text-white/60 text-sm">{sponsor_message}</p>
+              <p className="text-white/50 text-base">{sponsor_message}</p>
             )}
           </div>
+        )}
 
-          {/* Progress dots */}
-          {mode === "slideshow" && photos.length > 1 && (
-            <div className="flex items-center gap-1.5 shrink-0 ml-4">
-              {photos.slice(0, 12).map((_, i) => (
-                <div
-                  key={i}
-                  onClick={() => setCurrentIdx(i)}
-                  className={cn(
-                    "rounded-full transition-all cursor-pointer",
-                    i === currentIdx ? "w-3 h-3 bg-white" : "w-2 h-2 bg-white/30"
-                  )}
-                />
-              ))}
-            </div>
-          )}
+        {/* QR corner — bottom right */}
+        {show_qr_code_on_screen && mode === "slideshow" && photos.length > 0 && (
+          <div className="absolute bottom-6 right-8 z-20 flex flex-col items-center gap-1 pointer-events-none">
+            <img src={qrSrc} alt="QR" className="w-20 h-20 rounded-lg opacity-80" />
+            <p className="text-white/40 text-[10px] font-medium">Scan to share</p>
+          </div>
+        )}
+
+        {/* Progress dots — center bottom */}
+        {mode === "slideshow" && photos.length > 1 && photos.length <= 16 && (
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none">
+            {photos.map((_, i) => (
+              <div
+                key={i}
+                className="rounded-full transition-all duration-500"
+                style={{
+                  width:           i === currentIdx ? 10 : 5,
+                  height:          i === currentIdx ? 10 : 5,
+                  backgroundColor: i === currentIdx ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.3)",
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Operator controls (appear on mouse move) */}
+        <OperatorControls
+          mode={mode}
+          setMode={setMode}
+          paused={paused}
+          setPaused={setPaused}
+          onNext={advance}
+          onPrev={goBack}
+          photoCount={photos.length}
+          visible={showControls}
+        />
+
+        {/* Settings hint — top right, only visible on mouse move */}
+        <div
+          className="fixed top-4 right-4 z-50 transition-opacity duration-500 pointer-events-none"
+          style={{ opacity: showControls ? 0.4 : 0 }}
+        >
+          <Settings size={16} className="text-white" />
         </div>
       </div>
-
-      {/* Operator controls */}
-      <OperatorControls
-        mode={mode}
-        setMode={setMode}
-        paused={paused}
-        setPaused={setPaused}
-        onNext={advance}
-        onPrev={goBack}
-        photoCount={photos.length}
-      />
-    </div>
+    </>
   );
 }
