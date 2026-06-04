@@ -218,22 +218,18 @@ function QRPanel({
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function EventLiveScreen() {
-  const { eventSlug }                   = useParams<{ eventSlug: string }>();
-  const { data: event }                 = useEventBySlug(eventSlug);
-  const { data: photos = [], refetch }  = useApprovedEventPhotos(event?.id);
+  const { eventSlug }                  = useParams<{ eventSlug: string }>();
+  const { data: event }                = useEventBySlug(eventSlug);
+  const { data: photos = [], refetch } = useApprovedEventPhotos(event?.id);
 
-  const [mode, setMode]             = useState<ScreenMode>("slideshow");
   const [currentIdx, setCurrentIdx] = useState(0);
   const [prevIdx, setPrevIdx]       = useState<number | null>(null);
-  const [kbCount, setKbCount]       = useState(0); // increments each slide to cycle KB anim
-  const [paused, setPaused]         = useState(false);
-  const [showControls, setShowControls] = useState(false);
+  const [kbCount, setKbCount]       = useState(0);
 
-  const intervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const controlsTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const TRANS_MS = 900; // must match CSS transition duration
+  const TRANS_MS    = 900;
   const intervalSec = event?.slideshow_interval_seconds ?? 7;
 
   // ── Realtime ──────────────────────────────────────────────────────────────
@@ -255,47 +251,25 @@ export default function EventLiveScreen() {
       const next = (cur + 1) % photos.length;
       setPrevIdx(cur);
       setKbCount((k) => k + 1);
-      // Clear prev after transition completes
       if (transTimer.current) clearTimeout(transTimer.current);
       transTimer.current = setTimeout(() => setPrevIdx(null), TRANS_MS + 100);
       return next;
     });
   }, [photos.length]);
 
-  const goBack = useCallback(() => {
-    if (photos.length < 2) return;
-    setCurrentIdx((cur) => {
-      const next = (cur - 1 + photos.length) % photos.length;
-      setPrevIdx(cur);
-      setKbCount((k) => k + 1);
-      if (transTimer.current) clearTimeout(transTimer.current);
-      transTimer.current = setTimeout(() => setPrevIdx(null), TRANS_MS + 100);
-      return next;
-    });
-  }, [photos.length]);
-
-  // ── Auto-advance timer ────────────────────────────────────────────────────
+  // ── Auto-advance ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (!paused && mode === "slideshow" && photos.length > 1) {
+    if (photos.length > 1) {
       intervalRef.current = setInterval(advance, intervalSec * 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [paused, mode, photos.length, intervalSec, advance]);
+  }, [photos.length, intervalSec, advance]);
 
-  // Clamp index when photos list shrinks
   useEffect(() => {
     if (photos.length && currentIdx >= photos.length) setCurrentIdx(0);
   }, [photos.length, currentIdx]);
-
-  // ── Mouse activity → show controls ───────────────────────────────────────
-
-  const handleMouseMove = useCallback(() => {
-    setShowControls(true);
-    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    controlsTimer.current = setTimeout(() => setShowControls(false), 3000);
-  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -310,162 +284,75 @@ export default function EventLiveScreen() {
   const {
     primary_color, secondary_color, logo_url, slug,
     screen_headline, screen_subheadline,
-    show_captions, show_names, show_sponsors, show_logo,
-    show_qr_code_on_screen, lower_third_text, sponsor_message,
+    show_captions, show_names, show_qr_code_on_screen,
+    upload_headline,
   } = event;
 
   const cur  = photos[currentIdx] ?? null;
-  const prev = prevIdx !== null ? photos[prevIdx] ?? null : null;
+  const prev = prevIdx !== null ? (photos[prevIdx] ?? null) : null;
 
   const uploadUrl = `${window.location.origin}/event/${slug}/upload`;
-  const qrSrc     = `https://api.qrserver.com/v1/create-qr-code/?size=128x128&format=png&color=FFFFFF&bgcolor=000000&data=${encodeURIComponent(uploadUrl)}`;
+
+  // CTA headline: prefer a punchy phrase, fall back to upload_headline
+  const ctaHeadline = upload_headline || "See yourself on the big screen!";
 
   return (
     <>
-      {/* Inject Ken Burns keyframes */}
       <style>{KB_CSS}</style>
 
-      <div
-        className="w-screen h-screen overflow-hidden relative bg-black select-none cursor-none"
-        onMouseMove={handleMouseMove}
-      >
-        {/* ── Slideshow / Featured mode ── */}
-        {(mode === "slideshow" || mode === "featured") && (
-          <>
-            {photos.length === 0 ? (
-              <HoldingScreen
-                primaryColor={primary_color}
-                secondaryColor={secondary_color}
-                logoUrl={show_logo ? logo_url : null}
-                headline={screen_headline}
-                subheadline={screen_subheadline}
-              />
-            ) : (
-              <>
-                {/* Previous slide (fades out) */}
-                {prev && (
-                  <BlurSlide
-                    key={`prev-${prevIdx}`}
-                    photoUrl={getPhotoUrl(prev.image_path)}
-                    kbIndex={kbCount - 1}
-                    intervalSec={intervalSec}
-                    visible={false}
-                    caption={prev.caption}
-                    attendeeName={prev.attendee_name}
-                    showCaption={show_captions}
-                    showName={show_names}
-                  />
-                )}
+      <div className="w-screen h-screen overflow-hidden relative bg-black select-none cursor-none">
 
-                {/* Current slide (fades in) */}
-                {cur && (
-                  <BlurSlide
-                    key={`cur-${currentIdx}`}
-                    photoUrl={getPhotoUrl(cur.image_path)}
-                    kbIndex={kbCount}
-                    intervalSec={intervalSec}
-                    visible={true}
-                    caption={cur.caption}
-                    attendeeName={cur.attendee_name}
-                    showCaption={show_captions}
-                    showName={show_names}
-                  />
-                )}
-              </>
+        {/* ── Photo slideshow ── */}
+        {photos.length === 0 ? (
+          <HoldingScreen
+            primaryColor={primary_color}
+            secondaryColor={secondary_color}
+            logoUrl={logo_url}
+            headline={screen_headline}
+            subheadline={screen_subheadline}
+          />
+        ) : (
+          <>
+            {/* Outgoing slide */}
+            {prev && (
+              <BlurSlide
+                key={`prev-${prevIdx}`}
+                photoUrl={getPhotoUrl(prev.image_path)}
+                kbIndex={kbCount - 1}
+                intervalSec={intervalSec}
+                visible={false}
+                caption={prev.caption}
+                attendeeName={prev.attendee_name}
+                showCaption={show_captions}
+                showName={show_names}
+              />
+            )}
+
+            {/* Incoming slide */}
+            {cur && (
+              <BlurSlide
+                key={`cur-${currentIdx}`}
+                photoUrl={getPhotoUrl(cur.image_path)}
+                kbIndex={kbCount}
+                intervalSec={intervalSec}
+                visible={true}
+                caption={cur.caption}
+                attendeeName={cur.attendee_name}
+                showCaption={show_captions}
+                showName={show_names}
+              />
             )}
           </>
         )}
 
-        {/* ── Holding mode ── */}
-        {mode === "holding" && (
-          <HoldingScreen
-            primaryColor={primary_color}
+        {/* ── QR Call-to-Action panel (right side) ── */}
+        {show_qr_code_on_screen && (
+          <QRPanel
+            uploadUrl={uploadUrl}
+            headline={ctaHeadline}
             secondaryColor={secondary_color}
-            logoUrl={show_logo ? logo_url : null}
-            headline={screen_headline}
-            subheadline={screen_subheadline}
           />
         )}
-
-        {/* ── QR mode ── */}
-        {mode === "qr" && (
-          <QRScreen
-            slug={slug}
-            primaryColor={primary_color}
-            secondaryColor={secondary_color}
-            headline={screen_headline}
-            logoUrl={show_logo ? logo_url : null}
-          />
-        )}
-
-        {/* ── Persistent overlays (non-header/footer) ── */}
-
-        {/* Logo watermark — top left */}
-        {show_logo && logo_url && mode === "slideshow" && photos.length > 0 && (
-          <div className="absolute top-6 left-8 z-20 pointer-events-none">
-            <img src={logo_url} alt="" className="h-12 w-auto object-contain opacity-70 drop-shadow-lg" />
-          </div>
-        )}
-
-        {/* Lower third + sponsor — bottom strip */}
-        {mode === "slideshow" && photos.length > 0 && (lower_third_text || (show_sponsors && sponsor_message)) && (
-          <div
-            className="absolute bottom-0 left-0 right-0 z-20 px-10 pb-5 pt-8 pointer-events-none"
-            style={{ background: "linear-gradient(to top, rgba(0,0,0,.6) 0%, transparent 100%)" }}
-          >
-            {lower_third_text && (
-              <p className="text-white font-semibold text-xl drop-shadow">{lower_third_text}</p>
-            )}
-            {show_sponsors && sponsor_message && (
-              <p className="text-white/50 text-base">{sponsor_message}</p>
-            )}
-          </div>
-        )}
-
-        {/* QR corner — bottom right */}
-        {show_qr_code_on_screen && mode === "slideshow" && photos.length > 0 && (
-          <div className="absolute bottom-6 right-8 z-20 flex flex-col items-center gap-1 pointer-events-none">
-            <img src={qrSrc} alt="QR" className="w-20 h-20 rounded-lg opacity-80" />
-            <p className="text-white/40 text-[10px] font-medium">Scan to share</p>
-          </div>
-        )}
-
-        {/* Progress dots — center bottom */}
-        {mode === "slideshow" && photos.length > 1 && photos.length <= 16 && (
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none">
-            {photos.map((_, i) => (
-              <div
-                key={i}
-                className="rounded-full transition-all duration-500"
-                style={{
-                  width:           i === currentIdx ? 10 : 5,
-                  height:          i === currentIdx ? 10 : 5,
-                  backgroundColor: i === currentIdx ? "rgba(255,255,255,.9)" : "rgba(255,255,255,.3)",
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Operator controls (appear on mouse move) */}
-        <OperatorControls
-          mode={mode}
-          setMode={setMode}
-          paused={paused}
-          setPaused={setPaused}
-          onNext={advance}
-          onPrev={goBack}
-          photoCount={photos.length}
-          visible={showControls}
-        />
-
-        {/* Settings hint — top right, only visible on mouse move */}
-        <div
-          className="fixed top-4 right-4 z-50 transition-opacity duration-500 pointer-events-none"
-          style={{ opacity: showControls ? 0.4 : 0 }}
-        >
-          <Settings size={16} className="text-white" />
-        </div>
       </div>
     </>
   );
