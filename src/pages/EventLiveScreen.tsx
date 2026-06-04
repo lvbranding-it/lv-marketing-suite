@@ -178,39 +178,36 @@ function QRPanel({
   headline:       string;
   secondaryColor: string;
 }) {
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&color=000000&bgcolor=FFFFFF&qzone=2&data=${encodeURIComponent(uploadUrl)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&color=000000&bgcolor=FFFFFF&qzone=2&data=${encodeURIComponent(uploadUrl)}`;
 
   return (
     <div
-      className="absolute right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-4 pointer-events-none"
+      className="absolute right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-5 pointer-events-none"
       style={{
-        background:     "rgba(0,0,0,.58)",
-        backdropFilter: "blur(16px)",
+        background:           "rgba(0,0,0,.58)",
+        backdropFilter:       "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
-        border:         "1px solid rgba(255,255,255,.12)",
-        borderRadius:   "24px",
-        padding:        "28px 24px",
-        width:          "220px",
+        border:               "1px solid rgba(255,255,255,.12)",
+        borderRadius:         "24px",
+        padding:              "28px 24px",
+        width:                "260px",
       }}
     >
       {/* CTA headline */}
       <p
         className="text-center font-extrabold leading-tight"
-        style={{ color: secondaryColor, fontSize: "19px" }}
+        style={{ color: secondaryColor, fontSize: "20px" }}
       >
         {headline}
       </p>
 
       {/* QR code */}
-      <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ padding: "6px", background: "#fff" }}>
-        <img src={qrSrc} alt="Scan to upload" width={168} height={168} className="block rounded-xl" />
+      <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ padding: "8px", background: "#fff" }}>
+        <img src={qrSrc} alt="Scan to upload" width={210} height={210} className="block rounded-xl" />
       </div>
 
       {/* Sub-CTA */}
-      <div className="text-center space-y-0.5">
-        <p className="text-white font-semibold text-sm">Scan &amp; appear on screen</p>
-        <p className="text-white/40 text-[11px] break-all font-mono leading-tight">{uploadUrl.replace("https://", "")}</p>
-      </div>
+      <p className="text-white font-semibold text-sm text-center">Scan &amp; appear on screen</p>
     </div>
   );
 }
