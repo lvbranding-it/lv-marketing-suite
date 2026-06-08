@@ -167,6 +167,8 @@ export default function IntakeForm() {
     setSubmitting(true);
     setError(null);
     try {
+      const submissionId = crypto.randomUUID();
+
       // 15-second timeout — protects users on slow connections (e.g. high-latency regions)
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(
@@ -176,10 +178,11 @@ export default function IntakeForm() {
         )), 15_000)
       );
 
-      const { data: newSub, error: dbErr } = await Promise.race([
+      const { error: dbErr } = await Promise.race([
         supabase
           .from("intake_submissions")
           .insert({
+            id:            submissionId,
             org_id:        orgId,
             contact_name:  data.contact_name,
             contact_email: data.contact_email,
@@ -187,9 +190,7 @@ export default function IntakeForm() {
             company_name:  data.company_name,
             form_data:     { ...data, language: lang } as unknown as import("@/integrations/supabase/types").Json,
             ...(contactId ? { contact_id: contactId } : {}),
-          })
-          .select("id")
-          .single(),
+          }),
         timeoutPromise,
       ]);
       if (dbErr) throw dbErr;
@@ -197,7 +198,7 @@ export default function IntakeForm() {
       // Fire-and-forget team notification email (non-blocking)
       supabase.functions.invoke("intake-notify", {
         body: {
-          submission_id:  newSub.id,
+          submission_id:  submissionId,
           contact_name:   data.contact_name,
           contact_email:  data.contact_email,
           contact_role:   data.contact_role || null,
