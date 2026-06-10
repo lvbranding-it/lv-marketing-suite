@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, MessageSquare, ZoomIn } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import LVLogo from "@/components/LVLogo";
 import type { SessionPhoto } from "@/integrations/supabase/types";
 
 interface ClientPhotoCardProps {
@@ -26,6 +27,7 @@ export default function ClientPhotoCard({
 }: ClientPhotoCardProps) {
   const isSelected = photo.status === "selected";
   const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   return (
     <div
@@ -44,15 +46,22 @@ export default function ClientPhotoCard({
         className={`absolute inset-0 cursor-pointer ${disabled && !isSelected ? "cursor-not-allowed" : ""}`}
         onClick={() => onViewPhoto(photo)}
       >
-        {!signedUrl ? (
-          <Skeleton className="absolute inset-0 rounded-none" />
-        ) : !imgError ? (
+        {(!signedUrl || !imgLoaded) && !imgError && (
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+            <Skeleton className="absolute inset-0 rounded-none" />
+            <LVLogo size={36} className="relative animate-pulse" />
+          </div>
+        )}
+        {!signedUrl ? null : !imgError ? (
           <>
             <img
               src={signedUrl}
               alt={photo.file_name}
-              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+              className={`w-full h-full object-cover transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
               draggable={false}
+              onLoad={() => setImgLoaded(true)}
               onError={() => setImgError(true)}
               onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
               style={protectImages ? {

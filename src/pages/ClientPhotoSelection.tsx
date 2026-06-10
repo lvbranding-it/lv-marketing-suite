@@ -551,10 +551,16 @@ export default function ClientPhotoSelection() {
 
           {/* Photo grid */}
           {photosLoading || urlsLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Skeleton key={i} className="aspect-square w-full rounded-xl" />
-              ))}
+            <div className="space-y-4">
+              <div className="flex flex-col items-center justify-center py-6 gap-2">
+                <LVLogo size={40} className="animate-pulse" />
+                <p className="text-xs text-muted-foreground">Loading your photos…</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Skeleton key={i} className="aspect-square w-full rounded-xl" />
+                ))}
+              </div>
             </div>
           ) : roundPhotos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">

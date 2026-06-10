@@ -59,17 +59,29 @@ serve(async (req) => {
       );
     }
 
-    // 3. Generate a 1-hour signed URL for each photo
+    // 3. Generate a 1-hour signed URL for each photo, downscaled for grid thumbnails
     const results: { photo_id: string; signed_url: string | null }[] = [];
 
     for (const photo of photos ?? []) {
       const { data: urlData } = await supabaseAdmin.storage
         .from("session-photos")
-        .createSignedUrl(photo.storage_path, 3600); // 1 hour
+        .createSignedUrl(photo.storage_path, 3600, {
+          transform: { width: 600, height: 600, resize: "contain", quality: 70 },
+        }); // 1 hour, resized for thumbnail grid
+
+      let signedUrl = urlData?.signedUrl ?? null;
+
+      // Fall back to a full-size signed URL if transformations aren't available
+      if (!signedUrl) {
+        const { data: fallback } = await supabaseAdmin.storage
+          .from("session-photos")
+          .createSignedUrl(photo.storage_path, 3600);
+        signedUrl = fallback?.signedUrl ?? null;
+      }
 
       results.push({
         photo_id: photo.id,
-        signed_url: urlData?.signedUrl ?? null,
+        signed_url: signedUrl,
       });
     }
 
