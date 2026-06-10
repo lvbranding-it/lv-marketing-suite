@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive } from "lucide-react";
+import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive, RotateCcw } from "lucide-react";
 import JSZip from "jszip";
 import LVLogo from "@/components/LVLogo";
 import ClientPhotoCard from "@/components/photo-sessions/ClientPhotoCard";
@@ -120,11 +120,15 @@ export default function ClientPhotoSelection() {
     if (updated) setLightboxPhoto(updated);
   }, [roundPhotos]);
 
-  // If session was already finalized on a prior visit, show done state immediately
+  // If session was already finalized on a prior visit, show done state immediately.
+  // If a photographer re-opens the session for another round, finalized_at is
+  // cleared server-side — reset back to the active selection view.
   useEffect(() => {
     if (session?.finalized_at) {
       setSubmitDone(true);
       setInvoiceUrl(session.wave_invoice_url ?? null);
+    } else {
+      setSubmitDone(false);
     }
   }, [session?.finalized_at]);
 
@@ -295,7 +299,7 @@ export default function ClientPhotoSelection() {
           {/* Selection counter */}
           <div className="text-right">
             {multiRoundEnabled && (
-              <p className="text-xs text-muted-foreground font-medium">
+              <p className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 inline-block mb-0.5">
                 Round {currentRound} of {maxRounds}
               </p>
             )}
@@ -322,6 +326,20 @@ export default function ClientPhotoSelection() {
             <p className="font-semibold">{session.name}</p>
             <p className="text-sm text-muted-foreground">For {session.client_name}</p>
           </div>
+
+          {/* ── Persistent "new round" indicator — visible on fresh loads/reloads, not just right after confirming ── */}
+          {multiRoundEnabled && currentRound > 1 && !submitDone && !roundBanner && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+              <RotateCcw size={20} className="text-blue-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                <p className="font-semibold text-blue-800 text-sm">Round {currentRound} of {maxRounds} — narrow down your selection</p>
+                <p className="text-blue-700 text-xs">
+                  Below are the photos you picked last round. Tap to deselect any you no longer want, then confirm
+                  {isFinalRound ? " your final selection" : " this round"} when you're ready.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Round confirmed banner — offer to narrow further or finalize ── */}
           {roundBanner && !submitDone && (

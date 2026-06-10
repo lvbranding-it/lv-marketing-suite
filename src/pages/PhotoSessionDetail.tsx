@@ -2,9 +2,20 @@ import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ChevronRight, Settings2, Camera, CheckCircle2,
-  Send, Loader2,
+  Send, Loader2, RotateCcw,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +36,7 @@ import {
   useSessionPhotos,
   useSessionDeliverables,
   usePublishDeliverables,
+  useStartNextRound,
 } from "@/hooks/usePhotoSessions";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
@@ -41,6 +53,7 @@ export default function PhotoSessionDetail() {
   const { data: photos = [], isLoading: photosLoading } = useSessionPhotos(sessionId);
   const { data: deliverables = [] } = useSessionDeliverables(sessionId);
   const publishDeliverables = usePublishDeliverables();
+  const startNextRound = useStartNextRound();
 
   const [activeTab, setActiveTab] = useState("photos");
   const [selectedPhoto, setSelectedPhoto] = useState<SessionPhoto | null>(null);
@@ -64,6 +77,20 @@ export default function PhotoSessionDetail() {
       });
     } catch {
       toast({ description: "Failed to publish deliverables.", variant: "destructive" });
+    }
+  };
+
+  const handleStartNextRound = async () => {
+    if (!session) return;
+    try {
+      const result = await startNextRound.mutateAsync({
+        sessionId: session.id,
+        currentRound: session.current_round ?? 1,
+        maxRounds: session.max_rounds ?? 1,
+      });
+      toast({ description: `Round ${result.nextRound} started — the client can revisit their share link to narrow down further.` });
+    } catch {
+      toast({ description: "Failed to start the next round.", variant: "destructive" });
     }
   };
 
@@ -96,6 +123,11 @@ export default function PhotoSessionDetail() {
 
   const isPublished = !!session.deliverables_ready_at;
   const hasDeliverables = deliverables.length > 0;
+  const currentRound = session.current_round ?? 1;
+  const selectedInRound = photos.filter(
+    (p) => p.status === "selected" && (p.selection_round ?? 1) === currentRound
+  ).length;
+  const canStartNextRound = !!session.finalized_at && selectedInRound > 0;
 
   return (
     <AppShell>
@@ -151,7 +183,7 @@ export default function PhotoSessionDetail() {
 
         {/* ── Client confirmed banner ── */}
         {session.finalized_at && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-3 text-sm">
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex flex-wrap items-center gap-3 text-sm">
             <CheckCircle2 size={18} className="text-green-600 shrink-0" />
             <div className="flex-1 min-w-0">
               <span className="font-semibold text-green-800">Client confirmed selection</span>
@@ -162,6 +194,34 @@ export default function PhotoSessionDetail() {
                 })}
               </span>
             </div>
+
+            {canStartNextRound && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5 shrink-0" disabled={startNextRound.isPending}>
+                    {startNextRound.isPending
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <RotateCcw size={14} />
+                    }
+                    Start Another Round
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Start round {currentRound + 1}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      The client's {selectedInRound} currently selected photo{selectedInRound !== 1 ? "s" : ""} will become
+                      the new pool to choose from. Their existing share link will reopen so they can narrow it down further
+                      and confirm again.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleStartNextRound}>Start Round {currentRound + 1}</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         )}
 

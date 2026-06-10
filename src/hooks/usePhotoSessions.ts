@@ -445,6 +445,56 @@ export function useAdvanceRound() {
   });
 }
 
+// Photographer-side: re-open a session for another round of client selection.
+// Carries the currently-selected photos forward into the next round's pool,
+// bumps current_round/max_rounds, enables multi-round mode, and clears
+// finalized_at so the client can pick up where they left off on the same
+// share link.
+export function useStartNextRound() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      currentRound,
+      maxRounds,
+    }: {
+      sessionId: string;
+      currentRound: number;
+      maxRounds: number;
+    }) => {
+      const nextRound = currentRound + 1;
+
+      const { error: photosErr } = await supabase
+        .from("session_photos")
+        .update({ selection_round: nextRound })
+        .eq("session_id", sessionId)
+        .eq("selection_round", currentRound)
+        .eq("status", "selected");
+      if (photosErr) throw photosErr;
+
+      const { error: sessionErr } = await supabase
+        .from("photo_sessions")
+        .update({
+          multi_round_enabled: true,
+          current_round: nextRound,
+          max_rounds: Math.max(maxRounds, nextRound),
+          finalized_at: null,
+        })
+        .eq("id", sessionId);
+      if (sessionErr) throw sessionErr;
+
+      return { sessionId, nextRound };
+    },
+    onSuccess: ({ sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: ["photo-session", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["photo-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["session-photos", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["session-photos-public", sessionId] });
+    },
+  });
+}
+
 export function useAddComment() {
   const queryClient = useQueryClient();
 
