@@ -22,6 +22,7 @@ import {
   useSessionComments,
   useUpdatePhotoStatus,
   useFinalizeSession,
+  useAdvanceRound,
 } from "@/hooks/usePhotoSessions";
 import type { SessionPhoto } from "@/integrations/supabase/types";
 
@@ -76,6 +77,7 @@ export default function ClientPhotoSelection() {
   const { data: allComments = [] } = useSessionComments(session?.id);
   const updatePhotoStatus = useUpdatePhotoStatus();
   const finalizeSession = useFinalizeSession();
+  const advanceRound = useAdvanceRound();
 
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [urlsLoading, setUrlsLoading] = useState(false);
@@ -85,6 +87,7 @@ export default function ClientPhotoSelection() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitDone, setSubmitDone] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+  const [roundBanner, setRoundBanner] = useState<{ round: number; selectedCount: number } | null>(null);
 
   // Deliverables / download
   type DeliverableFile = { id: string; file_name: string; quality: string; signed_url: string };
@@ -93,21 +96,29 @@ export default function ClientPhotoSelection() {
   const [zipProgress, setZipProgress] = useState(0);
   const [zipping, setZipping] = useState(false);
 
+  const currentRound = session?.current_round ?? 1;
+  const maxRounds = session?.max_rounds ?? 1;
+  const multiRoundEnabled = session?.multi_round_enabled ?? false;
+  const isFinalRound = !multiRoundEnabled || currentRound >= maxRounds;
+
+  // The pool of photos the client can select from in the current round
+  const roundPhotos = photos.filter((p) => p.selection_round === currentRound);
+
   // Fetch signed URLs once photos load
   useEffect(() => {
-    if (!shareToken || photos.length === 0) return;
+    if (!shareToken || roundPhotos.length === 0) return;
     setUrlsLoading(true);
-    fetchSignedUrls(shareToken, photos.map((p) => p.id))
+    fetchSignedUrls(shareToken, roundPhotos.map((p) => p.id))
       .then(setSignedUrls)
       .finally(() => setUrlsLoading(false));
-  }, [shareToken, photos.length]);
+  }, [shareToken, roundPhotos.length, currentRound]);
 
   // Keep lightbox photo in sync with latest status from the query cache
   useEffect(() => {
     if (!lightboxPhoto) return;
-    const updated = photos.find((p) => p.id === lightboxPhoto.id);
+    const updated = roundPhotos.find((p) => p.id === lightboxPhoto.id);
     if (updated) setLightboxPhoto(updated);
-  }, [photos]);
+  }, [roundPhotos]);
 
   // If session was already finalized on a prior visit, show done state immediately
   useEffect(() => {
@@ -175,14 +186,17 @@ export default function ClientPhotoSelection() {
   // Photos are protected (no right-click / long-press save) until editing is complete
   const protectImages = !session?.deliverables_ready_at;
 
-  const selectedCount = photos.filter((p) => p.status === "selected").length;
-  const photoLimit = session?.photo_limit ?? 0;
+  const selectedCount = roundPhotos.filter((p) => p.status === "selected").length;
+  const photoLimit = isFinalRound ? session?.photo_limit ?? 0 : 0;
   const extraPrice = Number(session?.extra_photo_price ?? 0);
   const overLimit = photoLimit > 0 ? Math.max(0, selectedCount - photoLimit) : 0;
   const extraTotal = overLimit * extraPrice;
 
+  // Read-only while finalized, or while waiting on the client to start the next round
+  const readOnly = submitDone || roundBanner !== null;
+
   const handleToggle = (photo: SessionPhoto) => {
-    if (submitDone) return; // read-only after confirmation
+    if (readOnly) return;
     const newStatus: SessionPhoto["status"] =
       photo.status === "selected" ? "not_selected" : "selected";
     updatePhotoStatus.mutate({
@@ -194,17 +208,40 @@ export default function ClientPhotoSelection() {
 
   // Soft limit: only disable photos after the client has confirmed (read-only).
   // Selecting beyond the limit is always allowed — extras are invoiced.
-  const isDisabled = (photo: SessionPhoto) => submitDone && photo.status !== "selected";
+  const isDisabled = (photo: SessionPhoto) => readOnly && photo.status !== "selected";
 
   const handleConfirmSubmit = async () => {
+    if (!shareToken) return;
+    try {
+      if (isFinalRound) {
+        const result = await finalizeSession.mutateAsync(shareToken);
+        setInvoiceUrl(result.wave_invoice_url);
+        setSubmitDone(true);
+      } else {
+        const result = await advanceRound.mutateAsync(shareToken);
+        setRoundBanner({ round: result.current_round, selectedCount: result.selected_count });
+      }
+      setConfirmOpen(false);
+    } catch {
+      // error toast handled by react-query; keep modal open
+    }
+  };
+
+  // From the round-confirmed banner: client chooses to keep narrowing
+  const handleNarrowDown = () => {
+    setRoundBanner(null);
+  };
+
+  // From the round-confirmed banner: client is satisfied, finalize now
+  const handleFinalizeNow = async () => {
     if (!shareToken) return;
     try {
       const result = await finalizeSession.mutateAsync(shareToken);
       setInvoiceUrl(result.wave_invoice_url);
       setSubmitDone(true);
-      setConfirmOpen(false);
+      setRoundBanner(null);
     } catch {
-      // error toast handled by react-query; keep modal open
+      // error toast handled by react-query
     }
   };
 
@@ -257,6 +294,11 @@ export default function ClientPhotoSelection() {
 
           {/* Selection counter */}
           <div className="text-right">
+            {multiRoundEnabled && (
+              <p className="text-xs text-muted-foreground font-medium">
+                Round {currentRound} of {maxRounds}
+              </p>
+            )}
             <p className="text-sm font-semibold">
               {selectedCount}
               {photoLimit > 0 ? ` / ${photoLimit}` : ""} selected
@@ -280,6 +322,38 @@ export default function ClientPhotoSelection() {
             <p className="font-semibold">{session.name}</p>
             <p className="text-sm text-muted-foreground">For {session.client_name}</p>
           </div>
+
+          {/* ── Round confirmed banner — offer to narrow further or finalize ── */}
+          {roundBanner && !submitDone && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={20} className="text-blue-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 flex-1">
+                  <p className="font-semibold text-blue-800 text-sm">Round {roundBanner.round - 1} confirmed!</p>
+                  <p className="text-blue-700 text-xs">
+                    You've narrowed your selection down to {roundBanner.selectedCount} photo{roundBanner.selectedCount !== 1 ? "s" : ""}.
+                    Ready to narrow it down further, or are you happy with this selection?
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="flex-1" onClick={handleNarrowDown}>
+                  Narrow down further
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  disabled={finalizeSession.isPending}
+                  onClick={handleFinalizeNow}
+                >
+                  {finalizeSession.isPending
+                    ? <><Loader2 size={14} className="animate-spin" /> Finalizing…</>
+                    : <>I'm done, finalize selection</>
+                  }
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* ── Finalized banner ── */}
           {submitDone && (
@@ -464,14 +538,14 @@ export default function ClientPhotoSelection() {
                 <Skeleton key={i} className="aspect-square w-full rounded-xl" />
               ))}
             </div>
-          ) : photos.length === 0 ? (
+          ) : roundPhotos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <p className="text-4xl mb-3">📷</p>
               <p className="text-muted-foreground text-sm">No images are available for this session yet. Please check back shortly.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
-              {photos.map((photo) => (
+              {roundPhotos.map((photo) => (
                 <ClientPhotoCard
                   key={photo.id}
                   photo={photo}
@@ -492,7 +566,7 @@ export default function ClientPhotoSelection() {
         </div>
 
         {/* ── Sticky bottom CTA — Confirm Selection ── */}
-        {!submitDone && selectedCount > 0 && !photosLoading && !urlsLoading && (
+        {!readOnly && selectedCount > 0 && !photosLoading && !urlsLoading && (
           <div className="fixed bottom-0 left-0 right-0 z-20 bg-background/95 backdrop-blur border-t px-4 py-3 flex items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-semibold">{selectedCount} photo{selectedCount !== 1 ? "s" : ""} selected</span>
@@ -504,7 +578,7 @@ export default function ClientPhotoSelection() {
             </div>
             <Button size="sm" onClick={() => setConfirmOpen(true)} className="gap-1.5 shrink-0">
               <CheckCircle2 size={15} />
-              Confirm My Selection
+              {isFinalRound ? "Confirm My Selection" : `Confirm Round ${currentRound}`}
             </Button>
           </div>
         )}
@@ -514,9 +588,13 @@ export default function ClientPhotoSelection() {
       <Sheet open={confirmOpen} onOpenChange={setConfirmOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-8 pt-4 max-h-[80vh] overflow-y-auto">
           <SheetHeader className="text-left mb-4">
-            <SheetTitle>Review &amp; Confirm Your Selection</SheetTitle>
+            <SheetTitle>
+              {isFinalRound ? "Review & Confirm Your Selection" : `Review & Confirm Round ${currentRound}`}
+            </SheetTitle>
             <SheetDescription>
-              Please review the summary below before submitting. Once confirmed, our team will begin processing your photos.
+              {isFinalRound
+                ? "Please review the summary below before submitting. Once confirmed, our team will begin processing your photos."
+                : "Please review your picks for this round. After confirming, you'll be able to narrow your selection down further."}
             </SheetDescription>
           </SheetHeader>
 
@@ -551,12 +629,14 @@ export default function ClientPhotoSelection() {
             </Button>
             <Button
               className="flex-1 gap-1.5"
-              disabled={finalizeSession.isPending}
+              disabled={finalizeSession.isPending || advanceRound.isPending}
               onClick={handleConfirmSubmit}
             >
-              {finalizeSession.isPending
+              {finalizeSession.isPending || advanceRound.isPending
                 ? <><Loader2 size={14} className="animate-spin" /> Submitting…</>
-                : <><CheckCircle2 size={15} /> Confirm &amp; Submit</>
+                : isFinalRound
+                  ? <><CheckCircle2 size={15} /> Confirm &amp; Submit</>
+                  : <><CheckCircle2 size={15} /> Confirm Round {currentRound}</>
               }
             </Button>
           </div>
@@ -566,7 +646,7 @@ export default function ClientPhotoSelection() {
       {/* Lightbox — full-screen photo viewer */}
       <ClientLightbox
         photo={lightboxPhoto}
-        photos={photos}
+        photos={roundPhotos}
         signedUrls={signedUrls}
         commentCountByPhotoId={commentCountByPhotoId}
         onClose={() => setLightboxPhoto(null)}

@@ -769,6 +769,9 @@ export type Database = {
           topup_invoice_paid_at: string | null;
           deliverables_ready_at: string | null;
           deliverables_notified_at: string | null;
+          multi_round_enabled: boolean;
+          max_rounds: number;
+          current_round: number;
           created_at: string;
           updated_at: string;
         };
@@ -799,6 +802,9 @@ export type Database = {
           topup_invoice_paid_at?: string | null;
           deliverables_ready_at?: string | null;
           deliverables_notified_at?: string | null;
+          multi_round_enabled?: boolean;
+          max_rounds?: number;
+          current_round?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -829,6 +835,9 @@ export type Database = {
           topup_invoice_paid_at?: string | null;
           deliverables_ready_at?: string | null;
           deliverables_notified_at?: string | null;
+          multi_round_enabled?: boolean;
+          max_rounds?: number;
+          current_round?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -881,6 +890,7 @@ export type Database = {
           mime_type: string;
           status: "not_selected" | "selected" | "editing" | "ready" | "ready_for_download";
           display_order: number;
+          selection_round: number;
           created_at: string;
           updated_at: string;
         };
@@ -894,6 +904,7 @@ export type Database = {
           mime_type?: string;
           status?: "not_selected" | "selected" | "editing" | "ready" | "ready_for_download";
           display_order?: number;
+          selection_round?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -907,6 +918,7 @@ export type Database = {
           mime_type?: string;
           status?: "not_selected" | "selected" | "editing" | "ready" | "ready_for_download";
           display_order?: number;
+          selection_round?: number;
           created_at?: string;
           updated_at?: string;
         };

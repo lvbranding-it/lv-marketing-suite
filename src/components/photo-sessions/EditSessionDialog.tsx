@@ -38,6 +38,8 @@ const schema = z.object({
   allow_zip_download: z.boolean().default(false),
   invoice_type:       z.enum(["none", "session", "manual"]).default("none"),
   session_fee:        z.coerce.number().min(0).default(0),
+  multi_round_enabled: z.boolean().default(false),
+  max_rounds:         z.coerce.number().min(2).max(10).default(3),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -64,6 +66,7 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
   });
 
   const invoiceType = watch("invoice_type");
+  const multiRoundEnabled = watch("multi_round_enabled");
 
   useEffect(() => {
     if (open) {
@@ -76,6 +79,8 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
         allow_zip_download: session.allow_zip_download,
         invoice_type:       session.invoice_type ?? "none",
         session_fee:        Number(session.session_fee ?? 0),
+        multi_round_enabled: session.multi_round_enabled ?? false,
+        max_rounds:         session.max_rounds ?? 3,
       });
       const existing = session.cc_emails ?? [];
       setCcEmails(existing);
@@ -127,6 +132,8 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
         allow_zip_download: values.allow_zip_download,
         invoice_type: values.invoice_type,
         session_fee: values.invoice_type === "session" ? values.session_fee : 0,
+        multi_round_enabled: values.multi_round_enabled,
+        max_rounds: values.multi_round_enabled ? values.max_rounds : 1,
       });
       toast({ description: "Session updated!" });
       onClose();
@@ -219,6 +226,22 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
             <input id="edit-zip" type="checkbox" className="h-4 w-4 rounded" {...register("allow_zip_download")} />
             <Label htmlFor="edit-zip" className="cursor-pointer">Allow client to download edited photos (ZIP)</Label>
           </div>
+
+          <div className="flex items-center gap-2">
+            <input id="edit-multi-round" type="checkbox" className="h-4 w-4 rounded" {...register("multi_round_enabled")} />
+            <Label htmlFor="edit-multi-round" className="cursor-pointer">Allow multiple selection rounds (for retainer/ongoing clients)</Label>
+          </div>
+
+          {multiRoundEnabled && (
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-max-rounds">Maximum Rounds</Label>
+              <Input id="edit-max-rounds" type="number" min={2} max={10} {...register("max_rounds")} />
+              <p className="text-xs text-muted-foreground">
+                Currently on round {session.current_round ?? 1} of {session.max_rounds ?? 1}.
+                After confirming a round, the client can narrow their selection down further, up to this many rounds.
+              </p>
+            </div>
+          )}
 
           <Separator />
 

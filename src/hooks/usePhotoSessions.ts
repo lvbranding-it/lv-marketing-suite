@@ -185,6 +185,8 @@ type CreateSessionInput = {
   allow_zip_download?: boolean;
   invoice_type?: "none" | "session" | "manual";
   session_fee?: number;
+  multi_round_enabled?: boolean;
+  max_rounds?: number;
 };
 
 export function useCreateSession() {
@@ -210,6 +212,8 @@ export function useCreateSession() {
           allow_zip_download: values.allow_zip_download ?? false,
           invoice_type: values.invoice_type ?? "none",
           session_fee: values.session_fee ?? 0,
+          multi_round_enabled: values.multi_round_enabled ?? false,
+          max_rounds: values.max_rounds ?? 1,
         })
         .select()
         .single();
@@ -401,6 +405,42 @@ export function useFinalizeSession() {
     },
     onSuccess: (_data, shareToken) => {
       queryClient.invalidateQueries({ queryKey: ["session-share", shareToken] });
+    },
+  });
+}
+
+export function useAdvanceRound() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (shareToken: string) => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/advance-round`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseKey,
+        },
+        body: JSON.stringify({ share_token: shareToken }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Failed to advance round");
+      }
+
+      return (await res.json()) as {
+        ok: boolean;
+        current_round: number;
+        max_rounds: number;
+        selected_count: number;
+      };
+    },
+    onSuccess: (_data, shareToken) => {
+      queryClient.invalidateQueries({ queryKey: ["session-share", shareToken] });
+      queryClient.invalidateQueries({ queryKey: ["session-photos-public"] });
     },
   });
 }

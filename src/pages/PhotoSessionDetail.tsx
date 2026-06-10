@@ -144,6 +144,9 @@ export default function PhotoSessionDetail() {
           {Number(session.extra_photo_price) > 0 && (
             <span><strong className="text-foreground">Extra:</strong> ${Number(session.extra_photo_price).toFixed(2)}/photo</span>
           )}
+          {session.multi_round_enabled && (
+            <span><strong className="text-foreground">Selection round:</strong> {session.current_round} of {session.max_rounds}</span>
+          )}
         </div>
 
         {/* ── Client confirmed banner ── */}

@@ -30,6 +30,8 @@ const schema = z.object({
   allow_zip_download: z.boolean().default(false),
   invoice_type:       z.enum(["none", "session", "manual"]).default("none"),
   session_fee:        z.coerce.number().min(0).default(0),
+  multi_round_enabled: z.boolean().default(false),
+  max_rounds:         z.coerce.number().min(2).max(10).default(3),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -63,10 +65,13 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
       allow_zip_download: false,
       invoice_type: "none",
       session_fee: 0,
+      multi_round_enabled: false,
+      max_rounds: 3,
     },
   });
 
   const invoiceType = watch("invoice_type");
+  const multiRoundEnabled = watch("multi_round_enabled");
 
   const addCc = () => {
     if (ccEmails.length < 3) {
@@ -116,6 +121,8 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
         allow_zip_download: values.allow_zip_download,
         invoice_type: values.invoice_type,
         session_fee: values.invoice_type === "session" ? values.session_fee : 0,
+        multi_round_enabled: values.multi_round_enabled,
+        max_rounds: values.multi_round_enabled ? values.max_rounds : 1,
       });
       toast({ description: "Session created!" });
       handleClose();
@@ -197,6 +204,21 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
               <Input id="extra_photo_price" type="number" min={0} step="0.01" placeholder="0.00" {...register("extra_photo_price")} />
             </div>
           </div>
+
+          <div className="flex items-center gap-2">
+            <input id="multi_round_enabled" type="checkbox" className="h-4 w-4 rounded" {...register("multi_round_enabled")} />
+            <Label htmlFor="multi_round_enabled" className="cursor-pointer">Allow multiple selection rounds (for retainer/ongoing clients)</Label>
+          </div>
+
+          {multiRoundEnabled && (
+            <div className="space-y-1.5">
+              <Label htmlFor="max_rounds">Maximum Rounds</Label>
+              <Input id="max_rounds" type="number" min={2} max={10} {...register("max_rounds")} />
+              <p className="text-xs text-muted-foreground">
+                After confirming a round, the client can narrow their selection down further, up to this many rounds.
+              </p>
+            </div>
+          )}
 
           <Separator />
 
