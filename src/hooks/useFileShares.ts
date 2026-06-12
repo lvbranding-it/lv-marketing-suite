@@ -146,6 +146,28 @@ export function useUpdateFileShareExpiry() {
   });
 }
 
+export function useRegenerateFileShareToken() {
+  const { org } = useOrg();
+  const qc = useQueryClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }): Promise<string> => {
+      const newToken = crypto.randomUUID().replace(/-/g, "");
+      const { error } = await db
+        .from("file_shares")
+        .update({ token: newToken, download_count: 0 })
+        .eq("id", id);
+      if (error) throw error;
+      return newToken;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["file_shares", org?.id] });
+    },
+  });
+}
+
 export function useDeleteFileShare() {
   const { org } = useOrg();
   const qc = useQueryClient();

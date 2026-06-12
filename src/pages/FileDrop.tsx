@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   Copy, Check, FolderDown, Plus, ChevronDown, ChevronUp,
   Download, X, Loader2, Share2, FileIcon, Trash2, LinkIcon,
-  UploadCloud, CalendarClock,
+  UploadCloud, CalendarClock, RefreshCw,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -44,6 +44,7 @@ import {
   useFileShares,
   useCreateFileShare,
   useUpdateFileShareExpiry,
+  useRegenerateFileShareToken,
   useDeleteFileShare,
   type FileShare,
 } from "@/hooks/useFileShares";
@@ -324,10 +325,12 @@ function ShareCard({
   share,
   onDelete,
   onEditExpiry,
+  onRegenerate,
 }: {
   share: FileShare;
   onDelete: (s: FileShare) => void;
   onEditExpiry: (s: FileShare) => void;
+  onRegenerate: (s: FileShare) => void;
 }) {
   const downloadUrl = `${window.location.origin}/download/${share.token}`;
   const isExpired = share.expires_at ? new Date(share.expires_at) < new Date() : false;
@@ -361,6 +364,14 @@ function ShareCard({
             onClick={() => onEditExpiry(share)}
           >
             <CalendarClock size={11} /> {share.expires_at ? "Edit Expiry" : "Set Expiry"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => onRegenerate(share)}
+          >
+            <RefreshCw size={11} /> Regenerate Link
           </Button>
           <Button
             size="sm"
@@ -627,6 +638,7 @@ export default function FileDrop() {
   const { data: shares = [], isLoading: sharesLoading } = useFileShares();
   const closeRequest = useCloseFileRequest();
   const deleteShare = useDeleteFileShare();
+  const regenerateToken = useRegenerateFileShareToken();
   const { toast } = useToast();
 
   const [tab, setTab] = useState<"receive" | "send">("receive");
@@ -635,6 +647,7 @@ export default function FileDrop() {
   const [closeTarget, setCloseTarget] = useState<FileRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileShare | null>(null);
   const [editExpiryTarget, setEditExpiryTarget] = useState<FileShare | null>(null);
+  const [regenerateTarget, setRegenerateTarget] = useState<FileShare | null>(null);
 
   const handleConfirmClose = async () => {
     if (!closeTarget) return;
@@ -656,6 +669,17 @@ export default function FileDrop() {
       toast({ variant: "destructive", description: "Failed to delete share." });
     }
     setDeleteTarget(null);
+  };
+
+  const handleConfirmRegenerate = async () => {
+    if (!regenerateTarget) return;
+    try {
+      await regenerateToken.mutateAsync({ id: regenerateTarget.id });
+      toast({ description: `New link generated for "${regenerateTarget.label}".` });
+    } catch {
+      toast({ variant: "destructive", description: "Failed to regenerate link." });
+    }
+    setRegenerateTarget(null);
   };
 
   return (
@@ -741,7 +765,7 @@ export default function FileDrop() {
           ) : (
             <div className="space-y-3">
               {shares.map((s) => (
-                <ShareCard key={s.id} share={s} onDelete={setDeleteTarget} onEditExpiry={setEditExpiryTarget} />
+                <ShareCard key={s.id} share={s} onDelete={setDeleteTarget} onEditExpiry={setEditExpiryTarget} onRegenerate={setRegenerateTarget} />
               ))}
             </div>
           )
@@ -769,6 +793,24 @@ export default function FileDrop() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Close Link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Regenerate link confirm */}
+      <AlertDialog open={!!regenerateTarget} onOpenChange={(open) => !open && setRegenerateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate this link?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A new download link will be generated for "{regenerateTarget?.label}". The old link will stop working immediately, and the download count will reset to 0.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmRegenerate}>
+              Regenerate Link
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
