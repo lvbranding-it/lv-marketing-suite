@@ -126,6 +126,26 @@ export function useCreateFileShare() {
   });
 }
 
+export function useUpdateFileShareExpiry() {
+  const { org } = useOrg();
+  const qc = useQueryClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+
+  return useMutation({
+    mutationFn: async ({ id, expiresAt }: { id: string; expiresAt: string | null }) => {
+      const { error } = await db
+        .from("file_shares")
+        .update({ expires_at: expiresAt })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["file_shares", org?.id] });
+    },
+  });
+}
+
 export function useDeleteFileShare() {
   const { org } = useOrg();
   const qc = useQueryClient();

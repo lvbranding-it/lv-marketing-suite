@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   Copy, Check, FolderDown, Plus, ChevronDown, ChevronUp,
   Download, X, Loader2, Share2, FileIcon, Trash2, LinkIcon,
-  UploadCloud,
+  UploadCloud, CalendarClock,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -43,6 +43,7 @@ import {
 import {
   useFileShares,
   useCreateFileShare,
+  useUpdateFileShareExpiry,
   useDeleteFileShare,
   type FileShare,
 } from "@/hooks/useFileShares";
@@ -322,9 +323,11 @@ function NewDropDialog({
 function ShareCard({
   share,
   onDelete,
+  onEditExpiry,
 }: {
   share: FileShare;
   onDelete: (s: FileShare) => void;
+  onEditExpiry: (s: FileShare) => void;
 }) {
   const downloadUrl = `${window.location.origin}/download/${share.token}`;
   const isExpired = share.expires_at ? new Date(share.expires_at) < new Date() : false;
@@ -351,6 +354,14 @@ function ShareCard({
               Expired
             </Badge>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={() => onEditExpiry(share)}
+          >
+            <CalendarClock size={11} /> {share.expires_at ? "Edit Expiry" : "Set Expiry"}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -540,6 +551,76 @@ function NewShareDialog({
   );
 }
 
+// ── Edit Expiry Dialog ────────────────────────────────────────────────────────
+function EditExpiryDialog({
+  share,
+  onOpenChange,
+}: {
+  share: FileShare | null;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const updateExpiry = useUpdateFileShareExpiry();
+  const [expiresAt, setExpiresAt] = useState("");
+
+  // Sync local state whenever the target share changes
+  if (share && expiresAt === "" && share.expires_at) {
+    setExpiresAt(share.expires_at.slice(0, 10));
+  }
+
+  const handleClose = (v: boolean) => {
+    if (!v) setExpiresAt("");
+    onOpenChange(v);
+  };
+
+  const handleSave = async () => {
+    if (!share) return;
+    try {
+      await updateExpiry.mutateAsync({ id: share.id, expiresAt: expiresAt || null });
+      toast({ description: "Expiration date updated." });
+      handleClose(false);
+    } catch {
+      toast({ variant: "destructive", description: "Failed to update expiration date." });
+    }
+  };
+
+  return (
+    <Dialog open={!!share} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Expiration</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <p className="text-sm text-muted-foreground">
+            Update or remove the expiration date for "{share?.label}".
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Expiry date</label>
+            <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          </div>
+          <div className="flex justify-between gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => setExpiresAt("")}
+              disabled={!expiresAt}
+            >
+              Remove expiration
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
+              <Button type="button" onClick={handleSave} disabled={updateExpiry.isPending}>
+                {updateExpiry.isPending ? <><Loader2 size={14} className="animate-spin mr-1.5" />Saving…</> : "Save"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function FileDrop() {
   const { data: requests = [], isLoading: requestsLoading } = useFileRequests();
@@ -553,6 +634,7 @@ export default function FileDrop() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<FileRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileShare | null>(null);
+  const [editExpiryTarget, setEditExpiryTarget] = useState<FileShare | null>(null);
 
   const handleConfirmClose = async () => {
     if (!closeTarget) return;
@@ -659,7 +741,7 @@ export default function FileDrop() {
           ) : (
             <div className="space-y-3">
               {shares.map((s) => (
-                <ShareCard key={s.id} share={s} onDelete={setDeleteTarget} />
+                <ShareCard key={s.id} share={s} onDelete={setDeleteTarget} onEditExpiry={setEditExpiryTarget} />
               ))}
             </div>
           )
@@ -669,6 +751,7 @@ export default function FileDrop() {
       {/* Dialogs */}
       <NewDropDialog open={dropDialogOpen} onOpenChange={setDropDialogOpen} />
       <NewShareDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} />
+      <EditExpiryDialog share={editExpiryTarget} onOpenChange={(v) => !v && setEditExpiryTarget(null)} />
 
       {/* Close drop confirm */}
       <AlertDialog open={!!closeTarget} onOpenChange={(open) => !open && setCloseTarget(null)}>
