@@ -161,45 +161,65 @@ export default function FileDownload() {
                   {info.files.map((file, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-3 border border-border rounded-lg px-3 py-2.5"
+                      className="relative overflow-hidden border border-border rounded-lg"
                     >
-                      <div className="w-8 h-8 rounded-md bg-rose-50 flex items-center justify-center shrink-0">
-                        <FileIcon size={14} className="text-rose-500" />
+                      <div className="flex items-center gap-3 px-3 py-2.5">
+                        <div className="w-8 h-8 rounded-md bg-rose-50 flex items-center justify-center shrink-0">
+                          <FileIcon size={14} className="text-rose-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate" title={file.fileName}>
+                            {file.fileName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {downloading[i] ? "Downloading…" : formatBytes(file.fileSize)}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={downloading[i] ? "secondary" : "outline"}
+                          className="h-7 text-xs gap-1 shrink-0"
+                          onClick={() => handleDownloadOne(file, i)}
+                          disabled={downloading[i]}
+                        >
+                          {downloading[i]
+                            ? <><Loader2 size={11} className="animate-spin" /> Downloading…</>
+                            : <><Download size={11} /> Download</>}
+                        </Button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate" title={file.fileName}>
-                          {file.fileName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{formatBytes(file.fileSize)}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs gap-1 shrink-0"
-                        onClick={() => handleDownloadOne(file, i)}
-                        disabled={downloading[i]}
-                      >
-                        {downloading[i]
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : <Download size={11} />}
-                        Download
-                      </Button>
+                      {/* Progress bar */}
+                      {downloading[i] && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-100 overflow-hidden">
+                          <div className="h-full w-2/5 bg-rose-500"
+                            style={{ animation: "indeterminate 1.4s ease-in-out infinite" }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
 
                 {/* Download all (only when multiple files) */}
                 {info.files.length > 1 && (
-                  <Button
-                    size="lg"
-                    className="w-full gap-2 bg-rose-500 hover:bg-rose-600 text-white"
-                    onClick={handleDownloadAll}
-                    disabled={downloadingAll}
-                  >
-                    {downloadingAll
-                      ? <><Loader2 size={16} className="animate-spin" /> Downloading…</>
-                      : <><Download size={16} /> Download All</>}
-                  </Button>
+                  <div className="space-y-1.5">
+                    <Button
+                      size="lg"
+                      className="w-full gap-2 bg-rose-500 hover:bg-rose-600 text-white"
+                      onClick={handleDownloadAll}
+                      disabled={downloadingAll}
+                    >
+                      {downloadingAll
+                        ? <><Loader2 size={16} className="animate-spin" /> Downloading files…</>
+                        : <><Download size={16} /> Download All</>}
+                    </Button>
+                    {downloadingAll && (
+                      <div className="w-full h-1 bg-rose-100 rounded-full overflow-hidden">
+                        <div className="h-full w-2/5 bg-rose-500 rounded-full"
+                          style={{ animation: "indeterminate 1.4s ease-in-out infinite" }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Single file: big download button */}
