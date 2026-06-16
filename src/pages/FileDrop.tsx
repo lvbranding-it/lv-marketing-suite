@@ -83,8 +83,10 @@ function CopyButton({ text }: { text: string }) {
 function SubmissionsPanel({ requestId }: { requestId: string }) {
   const { data: submissions = [], isLoading } = useFileSubmissions(requestId);
   const { toast } = useToast();
+  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
 
   const handleDownload = async (submission: FileSubmission) => {
+    setDownloading(prev => ({ ...prev, [submission.id]: true }));
     try {
       const { data, error } = await supabase.storage
         .from("client-uploads")
@@ -102,6 +104,8 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
       URL.revokeObjectURL(url);
     } catch {
       toast({ variant: "destructive", description: "Failed to download file." });
+    } finally {
+      setDownloading(prev => ({ ...prev, [submission.id]: false }));
     }
   };
 
@@ -147,11 +151,14 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
               <td className="py-2">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant={downloading[s.id] ? "secondary" : "outline"}
                   className="h-6 text-[10px] gap-1"
                   onClick={() => handleDownload(s)}
+                  disabled={downloading[s.id]}
                 >
-                  <Download size={10} /> Download
+                  {downloading[s.id]
+                    ? <><Loader2 size={10} className="animate-spin" /> Downloading…</>
+                    : <><Download size={10} /> Download</>}
                 </Button>
               </td>
             </tr>
