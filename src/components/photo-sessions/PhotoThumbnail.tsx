@@ -142,6 +142,13 @@ export default function PhotoThumbnail({ photo, photoNumber, comments = [], onCl
         </div>
       </div>
 
+      {/* Filename */}
+      <div className="px-2 py-1.5 border-t border-border">
+        <p className="text-[10px] text-muted-foreground truncate" title={photo.file_name}>
+          {photo.file_name}
+        </p>
+      </div>
+
       {/* Comments below the image */}
       {comments.length > 0 && (
         <div className="px-2 py-1.5 space-y-1 border-t border-border bg-muted/30">
