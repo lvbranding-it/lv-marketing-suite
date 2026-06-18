@@ -85,7 +85,7 @@ export function useSessionByShareToken(shareToken: string | undefined) {
   });
 }
 
-// All comments for a session — used to compute per-photo comment counts in one query
+// All comments for a session — used to show inline comment previews and counts in the grid
 export function useSessionComments(sessionId: string | undefined) {
   return useQuery({
     queryKey: ["session-comments", sessionId],
@@ -93,10 +93,11 @@ export function useSessionComments(sessionId: string | undefined) {
       if (!sessionId) return [];
       const { data, error } = await supabase
         .from("photo_comments")
-        .select("id, photo_id")
-        .eq("session_id", sessionId);
+        .select("id, photo_id, body, author_label")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as { id: string; photo_id: string }[];
+      return (data ?? []) as { id: string; photo_id: string; body: string; author_label: string }[];
     },
     enabled: !!sessionId,
   });

@@ -262,6 +262,7 @@ export default function PhotoSessionDetail() {
               ) : (
                 <SessionPhotoGrid
                   photos={filteredPhotos}
+                  sessionId={session.id}
                   onPhotoClick={setSelectedPhoto}
                 />
               )}
