@@ -62,6 +62,8 @@ export default function PhotoSessionDetail() {
   const filteredPhotos =
     activeTab === "selected"
       ? photos.filter((p) => p.status === "selected")
+      : activeTab === "editing"
+      ? photos.filter((p) => p.status === "editing")
       : activeTab === "ready"
       ? photos.filter((p) => p.status === "ready" || p.status === "ready_for_download")
       : photos;
@@ -241,6 +243,9 @@ export default function PhotoSessionDetail() {
             <TabsTrigger value="selected">
               Selected ({photos.filter(p => p.status === "selected").length})
             </TabsTrigger>
+            <TabsTrigger value="editing">
+              Editing ({photos.filter(p => p.status === "editing").length})
+            </TabsTrigger>
             <TabsTrigger value="ready">
               Ready ({photos.filter(p => p.status === "ready" || p.status === "ready_for_download").length})
             </TabsTrigger>
@@ -250,7 +255,7 @@ export default function PhotoSessionDetail() {
           </TabsList>
 
           {/* ── Photos tabs ── */}
-          {["photos", "selected", "ready"].map((tab) => (
+          {["photos", "selected", "editing", "ready"].map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-4 space-y-4">
               {tab === "photos" && org && (
                 <PhotoUploadZone sessionId={session.id} orgId={org.id} />
