@@ -335,6 +335,23 @@ export default function ImageStudio() {
           </div>
         </aside>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-slate-200 py-4 text-center shrink-0">
+        <p className="text-xs text-muted-foreground">
+          Made with{" "}
+          <span className="text-rose-500">&hearts;</span>{" "}
+          by{" "}
+          <a
+            href="https://www.lvbranding.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-slate-600 hover:text-rose-500 transition-colors"
+          >
+            LV Branding
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }
