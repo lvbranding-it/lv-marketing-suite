@@ -42,6 +42,7 @@ const EventExperienceEditor  = lazy(() => import("@/pages/EventExperienceEditor"
 const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration"));
 const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
 const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
+const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -228,6 +229,8 @@ function AppRoutes() {
         path="/download/:token"
         element={<Suspense fallback={null}><FileDownload /></Suspense>}
       />
+      {/* Image Studio — public in-browser image framing tool (no auth) */}
+      <Route path="/image-studio" element={<Suspense fallback={null}><ImageStudio /></Suspense>} />
       {/* Event Experiences — public pages (no auth) */}
       <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />
