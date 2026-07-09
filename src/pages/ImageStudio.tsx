@@ -74,7 +74,13 @@ export default function ImageStudio() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const boardRef     = useRef<HTMLDivElement>(null);
-  const drag         = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
+  // Active touch/mouse pointers on the board + the current gesture baseline
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const gesture  = useRef<
+    | { type: "pan";   startX: number; startY: number; ox: number; oy: number }
+    | { type: "pinch"; startDist: number; startZoom: number }
+    | null
+  >(null);
 
   const ratio = RATIOS.find((r) => r.key === ratioKey)!;
 
@@ -110,29 +116,59 @@ export default function ImageStudio() {
     return () => window.removeEventListener("paste", onPaste);
   }, [loadFile]);
 
-  // ── Drag to reposition ──────────────────────────────────────────────────────
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (!img) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    drag.current = { startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
-  };
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current || !boardRef.current) return;
-    const rect = boardRef.current.getBoundingClientRect();
-    const dx = (e.clientX - drag.current.startX) / rect.width;
-    const dy = (e.clientY - drag.current.startY) / rect.height;
-    setOffset({ x: drag.current.ox + dx, y: drag.current.oy + dy });
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    drag.current = null;
-    try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  // ── Drag to reposition + pinch to zoom (mouse & touch) ──────────────────────
+  const clampZoom = (z: number) => Math.min(6, Math.max(0.1, z));
+  const twoPointerDist = () => {
+    const [p1, p2] = [...pointers.current.values()];
+    return Math.hypot(p2.x - p1.x, p2.y - p1.y);
   };
 
-  // ── Wheel to zoom ───────────────────────────────────────────────────────────
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!img) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 1) {
+      gesture.current = { type: "pan", startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
+    } else if (pointers.current.size === 2) {
+      gesture.current = { type: "pinch", startDist: twoPointerDist(), startZoom: zoom };
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = gesture.current;
+    if (!g) return;
+
+    if (g.type === "pan" && boardRef.current) {
+      const rect = boardRef.current.getBoundingClientRect();
+      const dx = (e.clientX - g.startX) / rect.width;
+      const dy = (e.clientY - g.startY) / rect.height;
+      setOffset({ x: g.ox + dx, y: g.oy + dy });
+    } else if (g.type === "pinch" && pointers.current.size >= 2) {
+      setZoom(clampZoom(g.startZoom * (twoPointerDist() / g.startDist)));
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+
+    if (pointers.current.size === 1) {
+      // Dropped from pinch back to a single finger — restart the pan from here
+      const [p] = [...pointers.current.values()];
+      gesture.current = { type: "pan", startX: p.x, startY: p.y, ox: offset.x, oy: offset.y };
+    } else if (pointers.current.size === 0) {
+      gesture.current = null;
+    }
+  };
+
+  // ── Wheel to zoom (desktop) ─────────────────────────────────────────────────
   const onWheel = (e: React.WheelEvent) => {
     if (!img) return;
     const factor = e.deltaY < 0 ? 1.06 : 1 / 1.06;
-    setZoom((z) => Math.min(6, Math.max(0.1, z * factor)));
+    setZoom((z) => clampZoom(z * factor));
   };
 
   // ── Placement helpers ───────────────────────────────────────────────────────
@@ -191,31 +227,34 @@ export default function ImageStudio() {
 
       <div className="flex-1 flex flex-col lg:flex-row">
         {/* ── Board ── */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 min-h-0">
           <div
-            className="w-full flex items-center justify-center"
-            style={{ maxWidth: 640 }}
+            ref={boardRef}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) loadFile(f);
+            }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onWheel={onWheel}
+            className={`relative overflow-hidden rounded-lg shadow-xl ring-1 transition-shadow ${
+              dragOver ? "ring-2 ring-rose-400" : "ring-slate-200"
+            } ${img ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+            style={{
+              aspectRatio: `${ratio.w} / ${ratio.h}`,
+              // Fit within both the available width (max 640) and height (68vh) for any orientation
+              width: `min(100%, 640px, calc(68vh * ${ratio.w} / ${ratio.h}))`,
+              background: bg,
+              touchAction: "none",
+            }}
+            onClick={() => { if (!img) fileInputRef.current?.click(); }}
           >
-            <div
-              ref={boardRef}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) loadFile(f);
-              }}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onWheel={onWheel}
-              className={`relative w-full overflow-hidden rounded-lg shadow-xl ring-1 transition-shadow ${
-                dragOver ? "ring-2 ring-rose-400" : "ring-slate-200"
-              } ${img ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
-              style={{ aspectRatio: `${ratio.w} / ${ratio.h}`, background: bg }}
-              onClick={() => { if (!img) fileInputRef.current?.click(); }}
-            >
               {img && imgSrc ? (
                 <img
                   src={imgSrc}
@@ -236,7 +275,6 @@ export default function ImageStudio() {
                   <p className="text-xs">PNG · JPG · WebP</p>
                 </div>
               )}
-            </div>
           </div>
         </div>
 
