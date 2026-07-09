@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Upload, Download, Maximize2, Crop, RotateCcw, ImageIcon,
   Square, RectangleHorizontal, RectangleVertical, Loader2,
@@ -71,6 +71,7 @@ export default function ImageStudio() {
   const [bg, setBg]           = useState("#ffffff");
   const [dragOver, setDragOver] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [boardW, setBoardW] = useState(0);   // board width in CSS px — used to size the image proportionally
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const boardRef     = useRef<HTMLDivElement>(null);
@@ -207,12 +208,26 @@ export default function ImageStudio() {
     }
   };
 
-  // ── On-screen placement (percent of board — resolution independent) ─────────
+  // ── Track the board's rendered width so we can size the image in real pixels ─
+  useLayoutEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const measure = () => setBoardW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ── On-screen placement ──────────────────────────────────────────────────────
+  // One scale factor (board px per export px) drives every dimension, so the
+  // image's width:height always equals the photo's natural ratio — never distorts.
+  const k = boardW / ratio.w;
   const L = img ? layout(natural.w, natural.h, ratio.w, ratio.h, zoom, offset.x, offset.y) : null;
-  const wPct    = L ? (L.drawW / ratio.w) * 100 : 0;
-  const hPct    = L ? (L.drawH / ratio.h) * 100 : 0;
-  const leftPct = L ? (L.x / ratio.w) * 100 : 0;
-  const topPct  = L ? (L.y / ratio.h) * 100 : 0;
+  const imgW = L ? L.drawW * k : 0;
+  const imgH = L ? L.drawH * k : 0;
+  const imgX = L ? L.x * k : 0;
+  const imgY = L ? L.y * k : 0;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
@@ -260,12 +275,12 @@ export default function ImageStudio() {
                   src={imgSrc}
                   alt="Adjustable"
                   draggable={false}
-                  className="absolute select-none pointer-events-none"
+                  className="absolute select-none pointer-events-none max-w-none"
                   style={{
-                    width:  `${wPct}%`,
-                    height: `${hPct}%`,
-                    left:   `${leftPct}%`,
-                    top:    `${topPct}%`,
+                    width:  `${imgW}px`,
+                    height: `${imgH}px`,
+                    left:   `${imgX}px`,
+                    top:    `${imgY}px`,
                   }}
                 />
               ) : (
