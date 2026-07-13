@@ -26,6 +26,7 @@ export default function AvEventProduction() {
   const [email, setEmail]   = useState("");
   const [phone, setPhone]   = useState("");
   const [company, setCompany] = useState("");
+  const [venue, setVenue]   = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone]     = useState(false);
@@ -48,6 +49,7 @@ export default function AvEventProduction() {
           contact_email: email,
           contact_phone: phone || null,
           company:       company || null,
+          venue:         venue || null,
           message:       message || null,
           hp:            hp.current,
         },
@@ -84,12 +86,10 @@ export default function AvEventProduction() {
             ) : (
               <form onSubmit={submit} className="space-y-5">
                 {/* Header */}
-                <div className="flex items-center gap-3">
-                  <LVLogo size={34} />
-                  <div className="leading-tight">
-                    <h1 className="text-lg font-extrabold tracking-tight text-slate-900">Book a Discovery Call</h1>
-                    <p className="text-xs text-slate-500">AV &amp; Live Event Production · Houston, TX</p>
-                  </div>
+                <div className="text-center">
+                  <LVLogo size={44} className="mx-auto mb-3" />
+                  <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Book a Discovery Call</h1>
+                  <p className="text-sm text-slate-500 mt-0.5">AV &amp; Live Event Production</p>
                 </div>
 
                 {/* Event type */}
@@ -137,6 +137,12 @@ export default function AvEventProduction() {
                     <label className="text-sm font-medium text-slate-700 block mb-1.5">Company <span className="text-slate-400 font-normal">(optional)</span></label>
                     <Input value={company} onChange={(e) => setCompany(e.target.value)} autoComplete="organization" />
                   </div>
+                </div>
+
+                {/* Venue / location (optional) */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 block mb-1.5">Where will the event be? <span className="text-slate-400 font-normal">(optional)</span></label>
+                  <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Hotel, convention center, venue name, or city" />
                 </div>
 
                 {/* Message (optional) */}
