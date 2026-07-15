@@ -66,6 +66,16 @@ const FORM_CONFIGS: Record<string, FormConfig> = {
     replyContext: "photography & video request",
     fields: { type: "Shoot type", timeframe: "Timeframe", date: "Shoot date", venue: "Location", attendees: "Company size" },
   },
+  "brand-strategy": {
+    label: "Brand Strategy", emoji: "🧭", tag: "Brand Strategy Lead",
+    replyContext: "brand strategy request",
+    fields: { type: "Project type", timeframe: "Timeline", date: "Target date", venue: "Current website", attendees: "Company size" },
+  },
+  "digital-marketing": {
+    label: "Digital Marketing", emoji: "📈", tag: "Digital Marketing Lead",
+    replyContext: "digital marketing request",
+    fields: { type: "Goal", timeframe: "Timeline", date: "Start date", venue: "Website", attendees: "Company size" },
+  },
 };
 
 const cors = {
