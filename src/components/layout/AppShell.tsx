@@ -24,6 +24,7 @@ import {
   FolderDown,
   Trophy,
   Bot,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
   { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
   { to: "/workspace", labelKey: "nav.workspace", icon: BookOpen },
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
+  { to: "/lead-forms", labelKey: "nav.leadForms", icon: Link2 },
   { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
   { to: "/contests",          labelKey: "nav.contests",          icon: Trophy },

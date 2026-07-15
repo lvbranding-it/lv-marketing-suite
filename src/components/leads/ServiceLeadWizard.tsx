@@ -95,6 +95,17 @@ export default function ServiceLeadWizard({ config }: { config: ServiceLeadWizar
   const toggleService = (s: string) =>
     setServices((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
+  // Record a page view once per browser session (best-effort, non-blocking)
+  useEffect(() => {
+    const key = `lead-form-viewed:${config.source}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch { /* private mode — count anyway */ }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from("lead_form_views").insert({ source: config.source }).then(() => {});
+  }, [config.source]);
+
   const canProceed =
     step === 0 ? !!projType :
     step === 3 ? name.trim() !== "" && emailValid(email) :

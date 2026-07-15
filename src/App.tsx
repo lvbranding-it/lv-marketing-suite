@@ -50,6 +50,7 @@ const CreativeContentLead    = lazy(() => import("@/pages/CreativeContentLead"))
 const PhotoVideoLead         = lazy(() => import("@/pages/PhotoVideoLead"));
 const BrandStrategyLead      = lazy(() => import("@/pages/BrandStrategyLead"));
 const DigitalMarketingLead   = lazy(() => import("@/pages/DigitalMarketingLead"));
+const LeadForms              = lazy(() => import("@/pages/LeadForms"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -216,6 +217,15 @@ function AppRoutes() {
       <Route
         path="/share/:shareToken"
         element={<Suspense fallback={null}><ClientPhotoSelection /></Suspense>}
+      />
+      {/* Lead Forms directory — agency (protected) */}
+      <Route
+        path="/lead-forms"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><LeadForms /></Suspense>
+          </ProtectedRoute>
+        }
       />
       {/* File Drop — agency (protected) */}
       <Route
