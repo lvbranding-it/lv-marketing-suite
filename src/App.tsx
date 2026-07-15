@@ -46,6 +46,8 @@ const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
+const CreativeContentLead    = lazy(() => import("@/pages/CreativeContentLead"));
+const PhotoVideoLead         = lazy(() => import("@/pages/PhotoVideoLead"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -238,6 +240,8 @@ function AppRoutes() {
       <Route path="/av-event-production-houston" element={<Suspense fallback={null}><AvEventProduction /></Suspense>} />
       <Route path="/industry-web-solutions-web-app-development" element={<Suspense fallback={null}><WebSolutionsLead /></Suspense>} />
       <Route path="/ux-ui-web-design-user-experiences-web-development" element={<Suspense fallback={null}><UxUiDesignLead /></Suspense>} />
+      <Route path="/creative-strategy-content-design-houston" element={<Suspense fallback={null}><CreativeContentLead /></Suspense>} />
+      <Route path="/commercial-photography-video-production-houston" element={<Suspense fallback={null}><PhotoVideoLead /></Suspense>} />
       {/* Event Experiences — public pages (no auth) */}
       <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />

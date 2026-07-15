@@ -56,6 +56,16 @@ const FORM_CONFIGS: Record<string, FormConfig> = {
     replyContext: "UX/UI design request",
     fields: { type: "Project type", timeframe: "Timeline", date: "Target launch", venue: "Current website", attendees: "Company size" },
   },
+  "creative-content": {
+    label: "Creative & Content", emoji: "🖌️", tag: "Creative Content Lead",
+    replyContext: "creative & content request",
+    fields: { type: "Request type", timeframe: "Timeline", date: "Deadline", venue: "Channels", attendees: "Company size" },
+  },
+  "photo-video": {
+    label: "Photo & Video", emoji: "📸", tag: "Photo & Video Lead",
+    replyContext: "photography & video request",
+    fields: { type: "Shoot type", timeframe: "Timeframe", date: "Shoot date", venue: "Location", attendees: "Company size" },
+  },
 };
 
 const cors = {
