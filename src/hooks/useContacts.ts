@@ -106,14 +106,3 @@ export function useUpdateContact() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts"] }),
   });
 }
-
-export function useUpdateContactApolloId() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, apollo_id }: { id: string; apollo_id: string }) => {
-      const { error } = await supabase.from("contacts").update({ apollo_id }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts"] }),
-  });
-}
