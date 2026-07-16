@@ -68,5 +68,8 @@ export const ccsClient = {
   savePriorUse: (token: string, payload: Record<string, unknown>) => call({ action: "save_prior_use", token, payload }),
   correction: (token: string, corrections: Array<Record<string, unknown>>) => call({ action: "correction", token, corrections }),
   submit: (token: string) => call({ action: "submit", token }),
-  sign: (token: string, signature: SignaturePayload) => call<{ ok: boolean; confirmation_number: string }>({ action: "sign", token, signature }),
+  sign: (token: string, signature: SignaturePayload) => call<{ ok: boolean; confirmation_number: string }>({
+    action: "sign", token, signature,
+    origin: typeof window !== "undefined" ? window.location.origin : undefined,
+  }),
 };

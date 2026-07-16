@@ -24,6 +24,7 @@ const DEFAULT_REVISION_DEF = "One revision round consists of one complete, conso
 type FormState = Record<string, string>;
 const EMPTY: FormState = {
   project_name: "", client_id: "", linked_project_id: "", project_number: "", description: "",
+  primary_client_contact: "", final_client_approver: "", additional_reviewers: "", cost_authorizer: "",
   start_date: "", estimated_completion_date: "", included_revision_rounds: "2",
   revision_definition: DEFAULT_REVISION_DEF, additional_revision_minimum: "", hourly_production_rate: "",
   strategic_consultation_rate: "", reopened_phase_fee_type: "percentage", reopened_phase_fee_value: "",
@@ -49,6 +50,8 @@ export default function CcsProjects() {
     setForm({
       id: p.id, project_name: p.project_name, client_id: p.client_id, linked_project_id: p.linked_project_id ?? "", project_number: p.project_number ?? "",
       description: p.description ?? "",
+      primary_client_contact: p.primary_client_contact ?? "", final_client_approver: p.final_client_approver ?? "",
+      additional_reviewers: (p.additional_reviewers ?? []).join(", "), cost_authorizer: p.cost_authorizer ?? "",
       start_date: p.start_date ?? "", estimated_completion_date: p.estimated_completion_date ?? "",
       included_revision_rounds: String(p.included_revision_rounds ?? 0), revision_definition: p.revision_definition ?? DEFAULT_REVISION_DEF,
       additional_revision_minimum: p.additional_revision_minimum?.toString() ?? "", hourly_production_rate: p.hourly_production_rate?.toString() ?? "",
@@ -81,6 +84,10 @@ export default function CcsProjects() {
         project_number: form.project_number || null,
         service_types: services, project_type: services.length ? services.join(" → ") : null,
         description: form.description || null,
+        primary_client_contact: form.primary_client_contact || null,
+        final_client_approver: form.final_client_approver || null,
+        cost_authorizer: form.cost_authorizer || null,
+        additional_reviewers: form.additional_reviewers.split(",").map((s) => s.trim()).filter(Boolean),
         start_date: form.start_date || null, estimated_completion_date: form.estimated_completion_date || null,
         included_revision_rounds: Number(form.included_revision_rounds || 0),
         revision_definition: form.revision_definition || null,
@@ -196,6 +203,16 @@ export default function CcsProjects() {
             <div className="grid gap-4 sm:grid-cols-2">
               <F label="Start date"><Input type="date" value={form.start_date} onChange={(e) => set("start_date", e.target.value)} /></F>
               <F label="Estimated completion"><Input type="date" value={form.estimated_completion_date} onChange={(e) => set("estimated_completion_date", e.target.value)} /></F>
+            </div>
+
+            <div className="rounded-lg border border-border p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Participants</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <F label="Client representative (primary contact)"><Input value={form.primary_client_contact} onChange={(e) => set("primary_client_contact", e.target.value)} /></F>
+                <F label="Final client approver"><Input value={form.final_client_approver} onChange={(e) => set("final_client_approver", e.target.value)} /></F>
+                <F label="Authorized to approve additional costs"><Input value={form.cost_authorizer} onChange={(e) => set("cost_authorizer", e.target.value)} /></F>
+                <F label="Additional reviewers (comma-separated)"><Input value={form.additional_reviewers} onChange={(e) => set("additional_reviewers", e.target.value)} /></F>
+              </div>
             </div>
 
             <div className="rounded-lg border border-border p-3">

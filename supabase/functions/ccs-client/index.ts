@@ -1,4 +1,4 @@
-// ccs-client — mediates all Creative Collaboration Standard client-wizard I/O.
+// ccs-client - mediates all Creative Collaboration Standard client-wizard I/O.
 // Public (verify_jwt = false). Every request carries a `token`; only its SHA-256
 // hash is stored server-side. The function validates the token, then reads/writes
 // with the service-role key (clients never touch the database directly).
@@ -11,11 +11,17 @@ const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
 const FROM_EMAIL = "admin@lvbranding.com";
 const FROM_NAME = "LV Branding";
 const ADMIN_EMAIL = "admin@lvbranding.com";
+const APP_URL = "https://marketing.lvbranding.com";
 const LV_LOGO_URL = "https://lv-marketing-suite.vercel.app/lv-logo.png";
 
 // Best-effort branded completion email (does not block signing on failure).
-async function sendCompletionEmail(to: string, opts: { confirmation: string; projectName: string; heading: string; body: string }) {
+async function sendCompletionEmail(to: string, opts: { confirmation: string; projectName: string; heading: string; body: string; documentUrl?: string }) {
   if (!SENDGRID_API_KEY || !to) return;
+  const button = opts.documentUrl
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0 6px;"><tr><td align="center" style="border-radius:10px;background:#CB2039;">
+         <a href="${opts.documentUrl}" target="_blank" style="display:inline-block;padding:13px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">View &amp; download acknowledgment &rarr;</a>
+       </td></tr></table>`
+    : "";
   const html = `<!DOCTYPE html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px;">
   <table role="presentation" style="max-width:560px;width:100%;">
@@ -27,8 +33,10 @@ async function sendCompletionEmail(to: string, opts: { confirmation: string; pro
       <p style="margin:0 0 14px;font-size:15px;font-weight:600;color:#231F20;">${opts.projectName}</p>
       <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Confirmation number</p>
       <p style="margin:0;font-size:15px;font-weight:700;color:#CB2039;">${opts.confirmation}</p>
+      ${button}
+      ${opts.documentUrl ? `<p style="margin:10px 0 0;font-size:12px;color:#9ca3af;">Open the link and use &ldquo;Print / Save PDF&rdquo; to download a copy.</p>` : ""}
     </td></tr>
-    <tr><td align="center" style="padding:20px 0;font-size:11px;color:#9ca3af;">LV Branding · Houston, TX</td></tr>
+    <tr><td align="center" style="padding:20px 0;font-size:11px;color:#9ca3af;">LV Branding &middot; Houston, TX</td></tr>
   </table></td></tr></table></body></html>`;
   await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
@@ -36,7 +44,7 @@ async function sendCompletionEmail(to: string, opts: { confirmation: string; pro
     body: JSON.stringify({
       personalizations: [{ to: [{ email: to }] }],
       from: { email: FROM_EMAIL, name: FROM_NAME }, reply_to: { email: FROM_EMAIL, name: FROM_NAME },
-      subject: `${opts.heading} — ${opts.projectName}`, content: [{ type: "text/html", value: html }],
+      subject: `${opts.heading} - ${opts.projectName}`, content: [{ type: "text/html", value: html }],
     }),
   });
 }
@@ -237,9 +245,12 @@ serve(async (req) => {
         await audit("client", "signed", { confirmation });
         // Completion emails (best-effort) to the client and LV Branding admin.
         const projectName = project.data?.project_name ?? "your project";
+        let origin = (typeof body.origin === "string" && body.origin) ? body.origin : APP_URL;
+        while (origin.endsWith("/")) origin = origin.slice(0, -1);
+        const documentUrl = `${origin}/review/${token}/document`;
         try {
-          await sendCompletionEmail(String(request.recipient_email ?? ""), { confirmation, projectName, heading: "Thank you — your acknowledgment is signed", body: "Your Creative Collaboration Standard has been signed and submitted to LV Branding. Please keep this confirmation number for your records." });
-          await sendCompletionEmail(ADMIN_EMAIL, { confirmation, projectName, heading: "A Creative Collaboration Standard was signed", body: `${request.recipient_name ?? "A client"} has completed and signed the acknowledgment.` });
+          await sendCompletionEmail(String(request.recipient_email ?? ""), { confirmation, projectName, documentUrl, heading: "Thank you - your acknowledgment is signed", body: "Your Creative Collaboration Standard has been signed and submitted to LV Branding. Please keep this confirmation number for your records." });
+          await sendCompletionEmail(ADMIN_EMAIL, { confirmation, projectName, documentUrl, heading: "A Creative Collaboration Standard was signed", body: `${request.recipient_name ?? "A client"} has completed and signed the acknowledgment.` });
         } catch (mailErr) { console.error("completion email failed:", mailErr); }
         return json({ ok: true, confirmation_number: confirmation });
       }

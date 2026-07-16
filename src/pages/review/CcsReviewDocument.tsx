@@ -40,13 +40,23 @@ export default function CcsReviewDocument() {
 
   return (
     <div className="min-h-screen bg-muted/40 py-8">
-      <style>{`@media print { .ccs-noprint { display:none !important; } body { background:#fff !important; } .ccs-doc { box-shadow:none !important; } }`}</style>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .ccs-print, .ccs-print * { visibility: visible !important; }
+          .ccs-print { position: absolute; left: 0; top: 0; right: 0; margin: 0 auto; }
+          .ccs-noprint { display: none !important; }
+          body { background: #fff !important; }
+          .ccs-doc { box-shadow: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        @page { margin: 0.5in; }
+      `}</style>
       <div className="ccs-noprint mx-auto mb-4 flex max-w-[760px] justify-end px-4">
         <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <Printer size={16} /> Print / Save PDF
         </button>
       </div>
-      <div className="mx-auto max-w-[760px] px-4">
+      <div className="ccs-print mx-auto max-w-[760px] px-4">
         <div className="rounded-lg bg-white shadow-sm">
           <CcsAcknowledgmentDoc data={data} />
         </div>
