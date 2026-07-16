@@ -83,6 +83,7 @@ export interface CcsProject {
   project_number: string | null;
   project_name: string;
   project_type: string | null;
+  service_types: string[];
   description: string | null;
   start_date: string | null;
   estimated_completion_date: string | null;

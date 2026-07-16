@@ -39,8 +39,12 @@ Client (public, token-gated):
 - `ccs_projects.linked_project_id` → `projects(id)` — a CCS project can be linked to a marketing
   project so its AI marketing context (nature/strategy) is on file and shown in the review.
 - Clients can be deleted from the Clients page (cascades to their projects, requests, and records).
+- `ccs_projects.service_types` (ordered `jsonb` array) captures a phased service bundle
+  (e.g. Consulting → Creativity → Photography → Website); `project_type` holds a readable summary.
+- `ccs_projects.project_number` is assigned automatically (`LV-YYYY-NNN`, per org, per year) by a
+  BEFORE INSERT trigger — the field is read-only in the UI.
 
-### Data model (migrations `036`–`038`)
+### Data model (migrations `036`–`039`)
 
 `ccs_clients`, `ccs_projects`, `ccs_templates`, `ccs_requests`, `ccs_responses`,
 `ccs_intended_external_input`, `ccs_prior_use_disclosures`, `ccs_signatures`,
@@ -90,7 +94,7 @@ receive a confirmation number and emailed copy. Progress autosaves; the client c
 ## Deployment
 
 - DB: `036_collaboration_standard.sql`, `037_ccs_request_config.sql`,
-  `038_ccs_client_contact_link.sql` applied via migrations.
+  `038_ccs_client_contact_link.sql`, `039_ccs_services_and_autonumber.sql` applied via migrations.
   Seed default template + example data with `supabase/seed_ccs.sql`.
 - Functions: `supabase functions deploy ccs-client` and `ccs-send-invite`
   (`ccs-client` is registered `verify_jwt = false` in `config.toml`).

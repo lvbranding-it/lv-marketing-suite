@@ -19,16 +19,16 @@ import {
   type CcsProject, type CcsProjectPhase, type CcsFeeType, type CcsClient,
 } from "@/hooks/useCcs";
 import { useImportedContacts } from "@/hooks/useContacts";
+import ServicePicker from "@/components/ccs/ServicePicker";
 
 const STEPS = ["Client & project", "Participants", "Revision terms", "Collaboration", "Intellectual property", "Review & send"];
-const PROJECT_TYPES = ["Branding", "Graphic design", "Website design", "Website development", "UX/UI", "Photography", "Video production", "Advertising campaign", "Social media content", "AV production", "Consulting", "Marketing strategy", "Content development", "Other"];
 const PHASES: CcsProjectPhase[] = ["brief_approval", "strategic_direction", "concept_approval", "refinement", "final_production"];
 const DEFAULT_REVISION_DEF = "One revision round consists of one complete, consolidated, and internally approved collection of feedback submitted by the client's designated representative.";
 
 interface Form {
   clientMode: string; clientId: string; newClientName: string; newClientEmail: string;
   projectMode: string; projectId: string;
-  project_name: string; project_number: string; project_type: string; description: string;
+  project_name: string; project_number: string; project_type: string; service_types: string[]; description: string;
   start_date: string; estimated_completion_date: string; current_phase: string;
   primary_client_contact: string; final_client_approver: string; additional_reviewers: string; cost_authorizer: string;
   lvProjectLead: string; lvAdditionalContact: string;
@@ -45,7 +45,7 @@ interface Form {
 const initialForm = (): Form => ({
   clientMode: "existing", clientId: "", newClientName: "", newClientEmail: "",
   projectMode: "existing", projectId: "",
-  project_name: "", project_number: "", project_type: "Branding", description: "",
+  project_name: "", project_number: "", project_type: "", service_types: [], description: "",
   start_date: "", estimated_completion_date: "", current_phase: "brief_approval",
   primary_client_contact: "", final_client_approver: "", additional_reviewers: "", cost_authorizer: "",
   lvProjectLead: "", lvAdditionalContact: "",
@@ -95,7 +95,7 @@ export default function CcsRequestBuilder() {
   const loadProject = (p: CcsProject) => {
     setForm((f) => ({
       ...f, projectId: p.id, project_name: p.project_name, project_number: p.project_number ?? "",
-      project_type: p.project_type ?? "Branding", description: p.description ?? "",
+      project_type: p.project_type ?? "", service_types: p.service_types ?? [], description: p.description ?? "",
       start_date: p.start_date ?? "", estimated_completion_date: p.estimated_completion_date ?? "",
       current_phase: p.current_phase, primary_client_contact: p.primary_client_contact ?? "",
       final_client_approver: p.final_client_approver ?? "", additional_reviewers: (p.additional_reviewers ?? []).join(", "),
@@ -126,6 +126,7 @@ export default function CcsRequestBuilder() {
       recipient_email: f.recipient_email || client.primary_contact_email || "",
     }));
   };
+  const setServices = (arr: string[]) => setForm((f) => ({ ...f, service_types: arr }));
 
   const canContinue = (): boolean => {
     if (step === 0) {
@@ -149,7 +150,8 @@ export default function CcsRequestBuilder() {
       // 2. Project (create or update with participants + terms)
       const projectFields = {
         client_id: clientId, project_name: form.project_name || "Untitled project", project_number: form.project_number || null,
-        project_type: form.project_type || null, description: form.description || null,
+        service_types: form.service_types, project_type: form.service_types.length ? form.service_types.join(" → ") : null,
+        description: form.description || null,
         start_date: form.start_date || null, estimated_completion_date: form.estimated_completion_date || null,
         current_phase: form.current_phase as CcsProjectPhase,
         primary_client_contact: form.primary_client_contact || null, final_client_approver: form.final_client_approver || null,
@@ -260,7 +262,7 @@ export default function CcsRequestBuilder() {
         </ol>
 
         <div className="rounded-xl border border-border bg-card p-6">
-          {step === 0 && <StepClientProject form={form} set={set} clients={clients} clientProjects={clientProjects} selectClient={selectClient} loadProject={loadProject} onCrmImport={onCrmImport} />}
+          {step === 0 && <StepClientProject form={form} set={set} clients={clients} clientProjects={clientProjects} selectClient={selectClient} loadProject={loadProject} onCrmImport={onCrmImport} onServices={setServices} />}
           {step === 1 && <StepParticipants form={form} set={set} />}
           {step === 2 && <StepRevision form={form} set={set} />}
           {step === 3 && <StepToggles title="Collaboration terms" description="Enable the acknowledgments this project requires." terms={COLLABORATION_TERMS} values={form.collaboration} onToggle={(k, v) => setToggle("collaboration", k, v)} />}
@@ -313,12 +315,13 @@ function F({ label, required, hint, children }: { label: string; required?: bool
 
 type StepProps = { form: Form; set: (k: string, v: string | boolean) => void };
 
-function StepClientProject({ form, set, clients, clientProjects, selectClient, loadProject, onCrmImport }: StepProps & {
+function StepClientProject({ form, set, clients, clientProjects, selectClient, loadProject, onCrmImport, onServices }: StepProps & {
   clients: { id: string; company_name: string }[];
   clientProjects: CcsProject[];
   selectClient: (id: string) => void;
   loadProject: (p: CcsProject) => void;
   onCrmImport: (client: CcsClient) => void;
+  onServices: (arr: string[]) => void;
 }) {
   const { data: contacts = [] } = useImportedContacts();
   const importContact = useImportContactAsClient();
@@ -413,21 +416,20 @@ function StepClientProject({ form, set, clients, clientProjects, selectClient, l
             </Select>
           )
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <F label="Project name" required><Input value={form.project_name} onChange={(e) => set("project_name", e.target.value)} /></F>
-            <F label="Project number"><Input value={form.project_number} onChange={(e) => set("project_number", e.target.value)} /></F>
-            <F label="Project type">
-              <Select value={form.project_type} onValueChange={(v) => set("project_type", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <F label="Project name" required><Input value={form.project_name} onChange={(e) => set("project_name", e.target.value)} /></F>
+              <F label="Current phase">
+                <Select value={form.current_phase} onValueChange={(v) => set("current_phase", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{PHASES.map((p) => <SelectItem key={p} value={p}>{PROJECT_PHASE_LABEL[p]}</SelectItem>)}</SelectContent>
+                </Select>
+              </F>
+            </div>
+            <F label="Services (add in project order for a phased bundle)">
+              <ServicePicker value={form.service_types} onChange={onServices} />
             </F>
-            <F label="Current phase">
-              <Select value={form.current_phase} onValueChange={(v) => set("current_phase", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{PHASES.map((p) => <SelectItem key={p} value={p}>{PROJECT_PHASE_LABEL[p]}</SelectItem>)}</SelectContent>
-              </Select>
-            </F>
+            <p className="text-xs text-muted-foreground">A project number (LV-YYYY-NNN) is assigned automatically.</p>
           </div>
         )}
       </div>

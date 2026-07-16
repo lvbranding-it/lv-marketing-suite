@@ -14,6 +14,17 @@ export const REQUEST_STATUS_META: Record<CcsRequestStatus, { label: string; clas
   archived:      { label: "Archived",       className: "bg-zinc-200 text-zinc-500" },
 };
 
+export const PROJECT_TYPES = [
+  "Branding", "Graphic design", "Website design", "Website development", "UX/UI",
+  "Photography", "Video production", "Advertising campaign", "Social media content",
+  "AV production", "Consulting", "Marketing strategy", "Content development", "Other",
+];
+
+export function servicesSummary(services: string[] | null | undefined, fallback?: string | null): string {
+  if (services && services.length) return services.join(" → ");
+  return fallback || "—";
+}
+
 export const PROJECT_PHASE_LABEL: Record<CcsProjectPhase, string> = {
   brief_approval: "Brief Approval",
   strategic_direction: "Strategic Direction",

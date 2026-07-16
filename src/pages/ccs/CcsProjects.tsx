@@ -11,23 +11,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useProjects } from "@/hooks/useProjects";
-import { PROJECT_PHASE_LABEL } from "@/components/ccs/ccsMeta";
+import { PROJECT_PHASE_LABEL, servicesSummary } from "@/components/ccs/ccsMeta";
+import ServicePicker from "@/components/ccs/ServicePicker";
 import {
   useCcsProjects, useCcsClients, useSaveCcsProject,
   type CcsProject, type CcsProjectPhase,
 } from "@/hooks/useCcs";
 
-const PROJECT_TYPES = [
-  "Branding", "Graphic design", "Website design", "Website development", "UX/UI",
-  "Photography", "Video production", "Advertising campaign", "Social media content",
-  "AV production", "Consulting", "Marketing strategy", "Content development", "Other",
-];
 const PHASES: CcsProjectPhase[] = ["brief_approval", "strategic_direction", "concept_approval", "refinement", "final_production"];
 const DEFAULT_REVISION_DEF = "One revision round consists of one complete, consolidated, and internally approved collection of feedback submitted by the client's designated representative.";
 
 type FormState = Record<string, string>;
 const EMPTY: FormState = {
-  project_name: "", client_id: "", linked_project_id: "", project_number: "", project_type: "Branding", description: "",
+  project_name: "", client_id: "", linked_project_id: "", project_number: "", description: "",
   start_date: "", estimated_completion_date: "", included_revision_rounds: "2",
   revision_definition: DEFAULT_REVISION_DEF, additional_revision_minimum: "", hourly_production_rate: "",
   strategic_consultation_rate: "", reopened_phase_fee_type: "percentage", reopened_phase_fee_value: "",
@@ -45,12 +41,14 @@ export default function CcsProjects() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [services, setServices] = useState<string[]>([]);
 
-  const openNew = () => { setForm(EMPTY); setOpen(true); };
+  const openNew = () => { setForm(EMPTY); setServices([]); setOpen(true); };
   const openEdit = (p: CcsProject) => {
+    setServices(p.service_types ?? []);
     setForm({
       id: p.id, project_name: p.project_name, client_id: p.client_id, linked_project_id: p.linked_project_id ?? "", project_number: p.project_number ?? "",
-      project_type: p.project_type ?? "Branding", description: p.description ?? "",
+      description: p.description ?? "",
       start_date: p.start_date ?? "", estimated_completion_date: p.estimated_completion_date ?? "",
       included_revision_rounds: String(p.included_revision_rounds ?? 0), revision_definition: p.revision_definition ?? DEFAULT_REVISION_DEF,
       additional_revision_minimum: p.additional_revision_minimum?.toString() ?? "", hourly_production_rate: p.hourly_production_rate?.toString() ?? "",
@@ -80,7 +78,8 @@ export default function CcsProjects() {
         id: form.id || undefined,
         project_name: form.project_name, client_id: form.client_id,
         linked_project_id: form.linked_project_id || null,
-        project_number: form.project_number || null, project_type: form.project_type || null,
+        project_number: form.project_number || null,
+        service_types: services, project_type: services.length ? services.join(" → ") : null,
         description: form.description || null,
         start_date: form.start_date || null, estimated_completion_date: form.estimated_completion_date || null,
         included_revision_rounds: Number(form.included_revision_rounds || 0),
@@ -144,7 +143,7 @@ export default function CcsProjects() {
                   <tr key={p.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-3">
                       <Link to={`/ccs/projects/${p.id}`} className="font-medium text-foreground hover:text-primary">{p.project_name}</Link>
-                      <p className="text-xs text-muted-foreground">{p.project_number || "—"} · {p.project_type || "—"}</p>
+                      <p className="text-xs text-muted-foreground">{p.project_number || "—"} · {servicesSummary(p.service_types, p.project_type)}</p>
                     </td>
                     <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{p.client?.company_name ?? "—"}</td>
                     <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{PROJECT_PHASE_LABEL[p.current_phase]}</td>
@@ -176,15 +175,12 @@ export default function CcsProjects() {
                 </Select>
               </F>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <F label="Project number"><Input value={form.project_number} onChange={(e) => set("project_number", e.target.value)} placeholder="LV-2026-000" /></F>
-              <F label="Project type">
-                <Select value={form.project_type} onValueChange={(v) => set("project_type", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                </Select>
-              </F>
-            </div>
+            <F label="Project number">
+              <Input value={form.project_number} disabled placeholder="Assigned automatically (LV-YYYY-NNN)" />
+            </F>
+            <F label="Services (add in project order for a phased bundle)">
+              <ServicePicker value={services} onChange={setServices} />
+            </F>
             <F label="Description"><Textarea rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} /></F>
             {marketingProjects.length > 0 && (
               <F label="Link to marketing project (optional)">
