@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Copy, Link2, Save, ShieldCheck, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Link2, Save, ShieldCheck, Loader2, Mail, Search, UserPlus } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,11 @@ import { cn } from "@/lib/utils";
 import { PROJECT_PHASE_LABEL } from "@/components/ccs/ccsMeta";
 import {
   useCcsClients, useCcsProjects, useSaveCcsClient, useSaveCcsProject, useSaveCcsRequest,
-  useCcsActiveTemplate, generateSecureToken,
+  useCcsActiveTemplate, generateSecureToken, useImportContactAsClient,
   COLLABORATION_TERMS, IP_TERMS, defaultCollaborationConfig, defaultIpConfig,
-  type CcsProject, type CcsProjectPhase, type CcsFeeType,
+  type CcsProject, type CcsProjectPhase, type CcsFeeType, type CcsClient,
 } from "@/hooks/useCcs";
+import { useImportedContacts } from "@/hooks/useContacts";
 
 const STEPS = ["Client & project", "Participants", "Revision terms", "Collaboration", "Intellectual property", "Review & send"];
 const PROJECT_TYPES = ["Branding", "Graphic design", "Website design", "Website development", "UX/UI", "Photography", "Video production", "Advertising campaign", "Social media content", "AV production", "Consulting", "Marketing strategy", "Content development", "Other"];
@@ -118,9 +119,17 @@ export default function CcsRequestBuilder() {
     }));
   };
 
+  const onCrmImport = (client: CcsClient) => {
+    setForm((f) => ({
+      ...f, clientId: client.id, projectId: "",
+      recipient_name: f.recipient_name || client.primary_contact_name || "",
+      recipient_email: f.recipient_email || client.primary_contact_email || "",
+    }));
+  };
+
   const canContinue = (): boolean => {
     if (step === 0) {
-      const clientOk = form.clientMode === "existing" ? !!form.clientId : !!form.newClientName.trim();
+      const clientOk = form.clientMode === "new" ? !!form.newClientName.trim() : !!form.clientId;
       const projectOk = form.projectMode === "existing" ? !!form.projectId : !!form.project_name.trim();
       return clientOk && projectOk;
     }
@@ -251,7 +260,7 @@ export default function CcsRequestBuilder() {
         </ol>
 
         <div className="rounded-xl border border-border bg-card p-6">
-          {step === 0 && <StepClientProject form={form} set={set} clients={clients} clientProjects={clientProjects} selectClient={selectClient} loadProject={loadProject} />}
+          {step === 0 && <StepClientProject form={form} set={set} clients={clients} clientProjects={clientProjects} selectClient={selectClient} loadProject={loadProject} onCrmImport={onCrmImport} />}
           {step === 1 && <StepParticipants form={form} set={set} />}
           {step === 2 && <StepRevision form={form} set={set} />}
           {step === 3 && <StepToggles title="Collaboration terms" description="Enable the acknowledgments this project requires." terms={COLLABORATION_TERMS} values={form.collaboration} onToggle={(k, v) => setToggle("collaboration", k, v)} />}
@@ -304,22 +313,78 @@ function F({ label, required, hint, children }: { label: string; required?: bool
 
 type StepProps = { form: Form; set: (k: string, v: string | boolean) => void };
 
-function StepClientProject({ form, set, clients, clientProjects, selectClient, loadProject }: StepProps & {
+function StepClientProject({ form, set, clients, clientProjects, selectClient, loadProject, onCrmImport }: StepProps & {
   clients: { id: string; company_name: string }[];
   clientProjects: CcsProject[];
   selectClient: (id: string) => void;
   loadProject: (p: CcsProject) => void;
+  onCrmImport: (client: CcsClient) => void;
 }) {
+  const { data: contacts = [] } = useImportedContacts();
+  const importContact = useImportContactAsClient();
+  const { toast } = useToast();
+  const [crmQuery, setCrmQuery] = useState("");
+  const [imported, setImported] = useState<{ id: string; label: string } | null>(null);
+
+  const crmMatches = contacts.filter((c) => {
+    const term = crmQuery.trim().toLowerCase();
+    const hay = `${c.first_name ?? ""} ${c.last_name ?? ""} ${c.company ?? ""} ${c.email ?? ""}`.toLowerCase();
+    return !term || hay.includes(term);
+  }).slice(0, 30);
+
+  const addFromCrm = async (c: (typeof contacts)[number]) => {
+    try {
+      const client = (await importContact.mutateAsync({ id: c.id, first_name: c.first_name, last_name: c.last_name, company: c.company, email: c.email, phone: c.phone })) as CcsClient;
+      onCrmImport(client);
+      const label = client.company_name || c.company || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Client";
+      setImported({ id: client.id, label });
+      toast({ title: `Imported ${label} from CRM` });
+    } catch (e) {
+      toast({ title: "Could not import", description: String((e as Error).message), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="grid gap-5">
       <div>
         <h2 className="mb-1 text-base font-semibold text-foreground">Client</h2>
-        <p className="mb-3 text-sm text-muted-foreground">Choose an existing client or add a new one.</p>
-        <div className="mb-3 flex gap-2">
+        <p className="mb-3 text-sm text-muted-foreground">Bring a client from your CRM, choose an existing one, or add a new one.</p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <ModeToggle active={form.clientMode === "crm"} onClick={() => set("clientMode", "crm")} label="From CRM" />
           <ModeToggle active={form.clientMode === "existing"} onClick={() => set("clientMode", "existing")} label="Existing" />
           <ModeToggle active={form.clientMode === "new"} onClick={() => set("clientMode", "new")} label="New client" />
         </div>
-        {form.clientMode === "existing" ? (
+        {form.clientMode === "crm" ? (
+          imported && form.clientId === imported.id ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm">
+              <span className="flex items-center gap-2 text-emerald-700"><Check size={15} /> {imported.label} imported from CRM</span>
+              <button type="button" onClick={() => { setImported(null); set("clientId", ""); }} className="text-xs text-muted-foreground hover:text-foreground">Change</button>
+            </div>
+          ) : (
+            <div>
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={crmQuery} onChange={(e) => setCrmQuery(e.target.value)} placeholder="Search CRM contacts…" className="pl-9" />
+              </div>
+              <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-border">
+                {crmMatches.length === 0 ? (
+                  <p className="p-4 text-center text-sm text-muted-foreground">No matching contacts.</p>
+                ) : crmMatches.map((c) => {
+                  const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+                  return (
+                    <div key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2 last:border-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{c.company || name || c.email || "Contact"}</p>
+                        <p className="truncate text-xs text-muted-foreground">{[name, c.email].filter(Boolean).join(" · ") || "—"}</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => addFromCrm(c)} disabled={importContact.isPending}><UserPlus size={13} className="mr-1" /> Use</Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ) : form.clientMode === "existing" ? (
           <Select value={form.clientId} onValueChange={selectClient}>
             <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
             <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>)}</SelectContent>

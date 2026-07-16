@@ -1,11 +1,12 @@
 import { useParams, Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, FileText, Users, Coins } from "lucide-react";
+import { ArrowLeft, FileText, Users, Coins, Sparkles, ExternalLink } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import CcsStatusBadge from "@/components/ccs/CcsStatusBadge";
 import { PROJECT_PHASE_LABEL, feeLabel, money } from "@/components/ccs/ccsMeta";
 import { useCcsProject, useCcsRequests } from "@/hooks/useCcs";
+import { useProject } from "@/hooks/useProjects";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -20,6 +21,7 @@ export default function CcsProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const { data: project, isLoading } = useCcsProject(projectId);
   const { data: requests = [] } = useCcsRequests({ projectId });
+  const { data: linkedProject } = useProject(project?.linked_project_id ?? undefined);
 
   return (
     <AppShell>
@@ -69,6 +71,25 @@ export default function CcsProjectDetail() {
               <p className="mt-4 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Revision round: </span>{project.revision_definition}
               </p>
+            )}
+
+            {linkedProject && (
+              <section className="mt-6 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><Sparkles size={16} className="text-primary" /> Marketing project context</h2>
+                  <a href={`/projects/${linkedProject.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    Open project <ExternalLink size={12} />
+                  </a>
+                </div>
+                <p className="mt-2 text-sm font-medium text-foreground">{linkedProject.name}</p>
+                {linkedProject.client_name && <p className="text-xs text-muted-foreground">Client: {linkedProject.client_name}</p>}
+                {linkedProject.description && <p className="mt-1.5 text-sm text-muted-foreground">{linkedProject.description}</p>}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {linkedProject.context_complete
+                    ? "AI marketing context is set — the project's strategy and nature are on file."
+                    : "This project has no completed marketing context yet."}
+                </p>
+              </section>
             )}
 
             <section className="mt-8">

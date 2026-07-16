@@ -32,7 +32,15 @@ Client (public, token-gated):
 - `/review/:token` — 9-step wizard (+ optional prior-use step)
 - `/review/:token/document` — printable acknowledgment (after signing)
 
-### Data model (migration `036`, `037`)
+### CRM & project-context links
+
+- `ccs_clients.contact_id` → `contacts(id)` — a CCS client can be brought in directly from the
+  CRM ("Import from CRM" on the Clients page); the source contact is remembered.
+- `ccs_projects.linked_project_id` → `projects(id)` — a CCS project can be linked to a marketing
+  project so its AI marketing context (nature/strategy) is on file and shown in the review.
+- Clients can be deleted from the Clients page (cascades to their projects, requests, and records).
+
+### Data model (migrations `036`–`038`)
 
 `ccs_clients`, `ccs_projects`, `ccs_templates`, `ccs_requests`, `ccs_responses`,
 `ccs_intended_external_input`, `ccs_prior_use_disclosures`, `ccs_signatures`,
@@ -81,7 +89,8 @@ receive a confirmation number and emailed copy. Progress autosaves; the client c
 
 ## Deployment
 
-- DB: `036_collaboration_standard.sql`, `037_ccs_request_config.sql` applied via migrations.
+- DB: `036_collaboration_standard.sql`, `037_ccs_request_config.sql`,
+  `038_ccs_client_contact_link.sql` applied via migrations.
   Seed default template + example data with `supabase/seed_ccs.sql`.
 - Functions: `supabase functions deploy ccs-client` and `ccs-send-invite`
   (`ccs-client` is registered `verify_jwt = false` in `config.toml`).

@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useProjects } from "@/hooks/useProjects";
 import { PROJECT_PHASE_LABEL } from "@/components/ccs/ccsMeta";
 import {
   useCcsProjects, useCcsClients, useSaveCcsProject,
@@ -26,7 +27,7 @@ const DEFAULT_REVISION_DEF = "One revision round consists of one complete, conso
 
 type FormState = Record<string, string>;
 const EMPTY: FormState = {
-  project_name: "", client_id: "", project_number: "", project_type: "Branding", description: "",
+  project_name: "", client_id: "", linked_project_id: "", project_number: "", project_type: "Branding", description: "",
   start_date: "", estimated_completion_date: "", included_revision_rounds: "2",
   revision_definition: DEFAULT_REVISION_DEF, additional_revision_minimum: "", hourly_production_rate: "",
   strategic_consultation_rate: "", reopened_phase_fee_type: "percentage", reopened_phase_fee_value: "",
@@ -39,6 +40,7 @@ const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 export default function CcsProjects() {
   const { data: projects = [], isLoading } = useCcsProjects();
   const { data: clients = [] } = useCcsClients();
+  const { data: marketingProjects = [] } = useProjects();
   const save = useSaveCcsProject();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -47,7 +49,7 @@ export default function CcsProjects() {
   const openNew = () => { setForm(EMPTY); setOpen(true); };
   const openEdit = (p: CcsProject) => {
     setForm({
-      id: p.id, project_name: p.project_name, client_id: p.client_id, project_number: p.project_number ?? "",
+      id: p.id, project_name: p.project_name, client_id: p.client_id, linked_project_id: p.linked_project_id ?? "", project_number: p.project_number ?? "",
       project_type: p.project_type ?? "Branding", description: p.description ?? "",
       start_date: p.start_date ?? "", estimated_completion_date: p.estimated_completion_date ?? "",
       included_revision_rounds: String(p.included_revision_rounds ?? 0), revision_definition: p.revision_definition ?? DEFAULT_REVISION_DEF,
@@ -60,6 +62,15 @@ export default function CcsProjects() {
     setOpen(true);
   };
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const linkMarketing = (id: string) => {
+    const mp = marketingProjects.find((m) => m.id === id);
+    setForm((f) => ({
+      ...f,
+      linked_project_id: id === "none" ? "" : id,
+      project_name: f.project_name || (mp?.name ?? ""),
+      description: f.description || (mp?.description ?? ""),
+    }));
+  };
 
   const submit = async () => {
     if (!form.project_name.trim()) { toast({ title: "Project name is required", variant: "destructive" }); return; }
@@ -68,6 +79,7 @@ export default function CcsProjects() {
       await save.mutateAsync({
         id: form.id || undefined,
         project_name: form.project_name, client_id: form.client_id,
+        linked_project_id: form.linked_project_id || null,
         project_number: form.project_number || null, project_type: form.project_type || null,
         description: form.description || null,
         start_date: form.start_date || null, estimated_completion_date: form.estimated_completion_date || null,
@@ -174,6 +186,17 @@ export default function CcsProjects() {
               </F>
             </div>
             <F label="Description"><Textarea rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} /></F>
+            {marketingProjects.length > 0 && (
+              <F label="Link to marketing project (optional)">
+                <Select value={form.linked_project_id || "none"} onValueChange={linkMarketing}>
+                  <SelectTrigger><SelectValue placeholder="Not linked" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not linked</SelectItem>
+                    {marketingProjects.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}{m.context_complete ? " · context ✓" : ""}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </F>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <F label="Start date"><Input type="date" value={form.start_date} onChange={(e) => set("start_date", e.target.value)} /></F>
               <F label="Estimated completion"><Input type="date" value={form.estimated_completion_date} onChange={(e) => set("estimated_completion_date", e.target.value)} /></F>

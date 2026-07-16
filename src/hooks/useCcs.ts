@@ -61,6 +61,7 @@ export function defaultIpConfig(): Record<string, boolean> {
 export interface CcsClient {
   id: string;
   org_id: string;
+  contact_id: string | null;
   company_name: string;
   primary_contact_name: string | null;
   primary_contact_email: string | null;
@@ -78,6 +79,7 @@ export interface CcsProject {
   id: string;
   org_id: string;
   client_id: string;
+  linked_project_id: string | null;
   project_number: string | null;
   project_name: string;
   project_type: string | null;
@@ -198,6 +200,55 @@ export function useSaveCcsClient() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ccs_clients"] });
       qc.invalidateQueries({ queryKey: ["ccs_client"] });
+    },
+  });
+}
+
+// A CRM contact (subset) that can be brought into CCS as a client.
+export interface CrmContactLite {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export function useImportContactAsClient() {
+  const { org } = useOrg();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (contact: CrmContactLite) => {
+      if (!org) throw new Error("No organization");
+      const fullName = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim();
+      // Reuse an existing CCS client already linked to this contact, if any.
+      const { data: existing } = await db.from("ccs_clients").select("id").eq("org_id", org.id).eq("contact_id", contact.id).maybeSingle();
+      if (existing) return existing as { id: string };
+      const { data, error } = await db.from("ccs_clients").insert({
+        org_id: org.id, contact_id: contact.id,
+        company_name: contact.company || fullName || contact.email || "New client",
+        primary_contact_name: fullName || null, primary_contact_email: contact.email || null, phone: contact.phone || null,
+        created_by: user?.id ?? null,
+      }).select().single();
+      if (error) throw error;
+      return data as CcsClient;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ccs_clients"] }),
+  });
+}
+
+export function useDeleteCcsClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from("ccs_clients").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ccs_clients"] });
+      qc.invalidateQueries({ queryKey: ["ccs_projects"] });
+      qc.invalidateQueries({ queryKey: ["ccs_requests"] });
     },
   });
 }
