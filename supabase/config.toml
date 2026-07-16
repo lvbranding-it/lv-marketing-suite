@@ -386,6 +386,9 @@ verify_jwt = false
 [functions.contest-verify]
 verify_jwt = false
 
+[functions.ccs-client]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

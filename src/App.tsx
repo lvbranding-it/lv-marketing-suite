@@ -51,6 +51,17 @@ const PhotoVideoLead         = lazy(() => import("@/pages/PhotoVideoLead"));
 const BrandStrategyLead      = lazy(() => import("@/pages/BrandStrategyLead"));
 const DigitalMarketingLead   = lazy(() => import("@/pages/DigitalMarketingLead"));
 const LeadForms              = lazy(() => import("@/pages/LeadForms"));
+// Creative Collaboration Standard (CCS)
+const CcsDashboard           = lazy(() => import("@/pages/ccs/CcsDashboard"));
+const CcsClients             = lazy(() => import("@/pages/ccs/CcsClients"));
+const CcsClientDetail        = lazy(() => import("@/pages/ccs/CcsClientDetail"));
+const CcsProjects            = lazy(() => import("@/pages/ccs/CcsProjects"));
+const CcsProjectDetail       = lazy(() => import("@/pages/ccs/CcsProjectDetail"));
+const CcsRequestBuilder      = lazy(() => import("@/pages/ccs/CcsRequestBuilder"));
+const CcsRequestReview       = lazy(() => import("@/pages/ccs/CcsRequestReview"));
+const CcsRequestDocument     = lazy(() => import("@/pages/ccs/CcsRequestDocument"));
+const CcsReviewWizard        = lazy(() => import("@/pages/review/CcsReviewWizard"));
+const CcsReviewDocument      = lazy(() => import("@/pages/review/CcsReviewDocument"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -311,6 +322,18 @@ function AppRoutes() {
       <Route path="/event-experiences" element={<ProtectedRoute><Suspense fallback={null}><EventExperiences /></Suspense></ProtectedRoute>} />
       <Route path="/event-experiences/:eventId" element={<ProtectedRoute><Suspense fallback={null}><EventExperienceEditor /></Suspense></ProtectedRoute>} />
       <Route path="/event-experiences/:eventId/photos" element={<ProtectedRoute><Suspense fallback={null}><EventPhotoModeration /></Suspense></ProtectedRoute>} />
+      {/* Creative Collaboration Standard — client wizard (public, token-gated) */}
+      <Route path="/review/:token" element={<Suspense fallback={null}><CcsReviewWizard /></Suspense>} />
+      <Route path="/review/:token/document" element={<Suspense fallback={null}><CcsReviewDocument /></Suspense>} />
+      {/* Creative Collaboration Standard — admin (protected) */}
+      <Route path="/ccs" element={<ProtectedRoute><Suspense fallback={null}><CcsDashboard /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/requests/new" element={<ProtectedRoute><Suspense fallback={null}><CcsRequestBuilder /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/requests/:requestId" element={<ProtectedRoute><Suspense fallback={null}><CcsRequestReview /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/requests/:requestId/document" element={<ProtectedRoute><Suspense fallback={null}><CcsRequestDocument /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/clients" element={<ProtectedRoute><Suspense fallback={null}><CcsClients /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/clients/:clientId" element={<ProtectedRoute><Suspense fallback={null}><CcsClientDetail /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/projects" element={<ProtectedRoute><Suspense fallback={null}><CcsProjects /></Suspense></ProtectedRoute>} />
+      <Route path="/ccs/projects/:projectId" element={<ProtectedRoute><Suspense fallback={null}><CcsProjectDetail /></Suspense></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
