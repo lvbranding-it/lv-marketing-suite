@@ -104,7 +104,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-2 space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1">
         {(() => {
           const visibleNavItems = NAV_ITEMS.filter(({ to }) => {
             if (to === "/campaigns")    return perms.canAccessCampaigns;
