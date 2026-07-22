@@ -1,4 +1,4 @@
-import { Search, Megaphone, TrendingUp, Mail, Target, PartyPopper } from "lucide-react";
+import { Search, Megaphone, TrendingUp, Mail, Target, PartyPopper, Sparkles, MessageSquare } from "lucide-react";
 import ServiceLeadWizard, { type ServiceLeadWizardConfig } from "@/components/leads/ServiceLeadWizard";
 
 const config: ServiceLeadWizardConfig = {
@@ -20,7 +20,9 @@ const config: ServiceLeadWizardConfig = {
   services: [
     { title: "Paid search (Google Ads)",       desc: "Capture demand that's already searching",        icon: Search },
     { title: "Paid social",                    desc: "Meta, Instagram, LinkedIn, and TikTok ads",      icon: Megaphone },
-    { title: "SEO",                            desc: "Rank for the searches that matter",              icon: TrendingUp },
+    { title: "SEO",                            desc: "Search Engine Optimization — rank for the searches that matter",        icon: TrendingUp },
+    { title: "GEO",                            desc: "Generative Engine Optimization — show up in AI answers (ChatGPT, Gemini)", icon: Sparkles },
+    { title: "AEO",                            desc: "Answer Engine Optimization — own featured snippets & voice answers",     icon: MessageSquare },
     { title: "Email marketing",                desc: "Campaigns and automations that convert",         icon: Mail },
     { title: "Campaign strategy",              desc: "Full-funnel planning tied to business goals",    icon: Target },
     { title: "Not sure yet — help me scope it", desc: "We'll recommend the right mix",                 icon: PartyPopper },
