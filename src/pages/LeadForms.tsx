@@ -170,6 +170,7 @@ export default function LeadForms() {
         <div className="space-y-3">
           {FORMS.map((f) => {
             const url = `${origin}${f.path}`;
+            const esUrl = `${origin}/es${f.path}`;
             const stats = statsBySource.get(f.source);
             return (
               <div key={f.source} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-3">
@@ -185,16 +186,24 @@ export default function LeadForms() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" asChild title="Open form">
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" asChild title="Open English form">
                       <a href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /></a>
                     </Button>
-                    <CopyLinkButton url={url} />
                   </div>
                 </div>
 
-                {/* Link */}
-                <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-md px-3 py-2">
-                  <code className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{url}</code>
+                {/* Links — English + Spanish */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-md px-3 py-1.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground shrink-0 w-6">EN</span>
+                    <code className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{url}</code>
+                    <CopyLinkButton url={url} />
+                  </div>
+                  <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-md px-3 py-1.5">
+                    <span className="text-[9px] font-semibold text-muted-foreground shrink-0 w-6">ES</span>
+                    <code className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">{esUrl}</code>
+                    <CopyLinkButton url={esUrl} />
+                  </div>
                 </div>
 
                 {/* Stats */}

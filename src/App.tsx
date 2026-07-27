@@ -51,6 +51,13 @@ const PhotoVideoLead         = lazy(() => import("@/pages/PhotoVideoLead"));
 const BrandStrategyLead      = lazy(() => import("@/pages/BrandStrategyLead"));
 const DigitalMarketingLead   = lazy(() => import("@/pages/DigitalMarketingLead"));
 const LeadForms              = lazy(() => import("@/pages/LeadForms"));
+const AvEventProductionEs    = lazy(() => import("@/pages/es/AvEventProductionEs"));
+const WebSolutionsLeadEs     = lazy(() => import("@/pages/es/WebSolutionsLeadEs"));
+const UxUiDesignLeadEs       = lazy(() => import("@/pages/es/UxUiDesignLeadEs"));
+const CreativeContentLeadEs  = lazy(() => import("@/pages/es/CreativeContentLeadEs"));
+const PhotoVideoLeadEs       = lazy(() => import("@/pages/es/PhotoVideoLeadEs"));
+const BrandStrategyLeadEs    = lazy(() => import("@/pages/es/BrandStrategyLeadEs"));
+const DigitalMarketingLeadEs = lazy(() => import("@/pages/es/DigitalMarketingLeadEs"));
 // Creative Collaboration Standard (CCS)
 const CcsDashboard           = lazy(() => import("@/pages/ccs/CcsDashboard"));
 const CcsClients             = lazy(() => import("@/pages/ccs/CcsClients"));
@@ -267,6 +274,14 @@ function AppRoutes() {
       <Route path="/commercial-photography-video-production-houston" element={<Suspense fallback={null}><PhotoVideoLead /></Suspense>} />
       <Route path="/brand-strategy-identity-houston" element={<Suspense fallback={null}><BrandStrategyLead /></Suspense>} />
       <Route path="/digital-marketing-paid-media-houston" element={<Suspense fallback={null}><DigitalMarketingLead /></Suspense>} />
+      {/* Spanish forms (es.lvbranding.com) — same CRM, tagged Español */}
+      <Route path="/es/av-event-production-houston" element={<Suspense fallback={null}><AvEventProductionEs /></Suspense>} />
+      <Route path="/es/industry-web-solutions-web-app-development" element={<Suspense fallback={null}><WebSolutionsLeadEs /></Suspense>} />
+      <Route path="/es/ux-ui-web-design-user-experiences-web-development" element={<Suspense fallback={null}><UxUiDesignLeadEs /></Suspense>} />
+      <Route path="/es/creative-strategy-content-design-houston" element={<Suspense fallback={null}><CreativeContentLeadEs /></Suspense>} />
+      <Route path="/es/commercial-photography-video-production-houston" element={<Suspense fallback={null}><PhotoVideoLeadEs /></Suspense>} />
+      <Route path="/es/brand-strategy-identity-houston" element={<Suspense fallback={null}><BrandStrategyLeadEs /></Suspense>} />
+      <Route path="/es/digital-marketing-paid-media-houston" element={<Suspense fallback={null}><DigitalMarketingLeadEs /></Suspense>} />
       {/* Event Experiences — public pages (no auth) */}
       <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />
