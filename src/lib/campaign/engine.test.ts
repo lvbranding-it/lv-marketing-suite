@@ -1,0 +1,370 @@
+import { describe, expect, it } from "vitest";
+import {
+  allocationAmounts, balanceNotes, breakEven, buildScenario, calculate, clamp,
+  displayPercents, estimateMediaSpend, readinessScore, rebalanceShares,
+  recommendedShares, roundTotal, safeDiv, shareStatus,
+} from "./engine";
+import { ALLOCATION_RANGES, CATEGORY_KEYS, formatMoney } from "./config";
+import { EMPTY_READINESS, emptyAnswers } from "./persist";
+import type { CalculatorAnswers, CategoryKey, Shares } from "./types";
+
+// ── Fixtures ────────────────────────────────────────────────────────────────────
+
+function budgetAnswers(overrides?: Partial<CalculatorAnswers["financial"]>): CalculatorAnswers {
+  const a = emptyAnswers();
+  a.profile = { businessType: "b2c", stage: "growing", reach: "local", industry: "Restaurants & food", currency: "USD" };
+  a.objective = "leads";
+  a.scope = { durationDays: 90, customDuration: false, channels: ["google-search", "meta-facebook"], audience: "10k-100k", timeSensitive: false };
+  a.readiness = { ...EMPTY_READINESS, positioning: true, message: true, visualIdentity: true, landingPage: true, tracking: true };
+  a.financial = { ...a.financial, mode: "budget", budgetTotal: 25_000, avgValue: 400, marginPct: 0.5, ...overrides };
+  return a;
+}
+
+function goalAnswers(overrides?: Partial<CalculatorAnswers["financial"]>): CalculatorAnswers {
+  const a = budgetAnswers();
+  a.financial = {
+    ...a.financial,
+    mode: "goal", budgetTotal: null,
+    goalCount: 100, avgValue: 400, conversionRate: 0.2, costPerResult: 40, marginPct: 0.5,
+    ...overrides,
+  };
+  return a;
+}
+
+const shareSum = (s: Shares) => CATEGORY_KEYS.reduce((sum, k) => sum + s[k], 0);
+
+// ── Shares ──────────────────────────────────────────────────────────────────────
+
+describe("recommendedShares", () => {
+  it("always sums to 1 across many input combinations", () => {
+    const variants = [budgetAnswers(), goalAnswers(), emptyAnswers()];
+    const noReadiness = budgetAnswers();
+    noReadiness.readiness = { ...EMPTY_READINESS };
+    const fullReadiness = budgetAnswers();
+    for (const k of Object.keys(fullReadiness.readiness)) {
+      fullReadiness.readiness[k as keyof typeof fullReadiness.readiness] = true;
+    }
+    variants.push(noReadiness, fullReadiness);
+    for (const a of variants) {
+      for (const scenario of ["essential", "growth", "expansion"] as const) {
+        expect(shareSum(recommendedShares(a, scenario))).toBeCloseTo(1, 9);
+      }
+    }
+  });
+
+  it("keeps every category within (or extremely near) its hard bounds", () => {
+    const shares = recommendedShares(budgetAnswers(), "growth");
+    for (const key of CATEGORY_KEYS) {
+      const [lo, hi] = ALLOCATION_RANGES[key].hard;
+      expect(shares[key] * 100).toBeGreaterThanOrEqual(lo - 1.5);
+      expect(shares[key] * 100).toBeLessThanOrEqual(hi + 1.5);
+    }
+  });
+
+  it("shifts budget toward strategy/creative when the foundation is missing", () => {
+    const unready = budgetAnswers();
+    unready.readiness = { ...EMPTY_READINESS };
+    const ready = budgetAnswers();
+    for (const k of Object.keys(ready.readiness)) ready.readiness[k as keyof typeof ready.readiness] = true;
+
+    const su = recommendedShares(unready, "growth");
+    const sr = recommendedShares(ready, "growth");
+    expect(su.strategy).toBeGreaterThan(sr.strategy);
+    expect(su.creative).toBeGreaterThan(sr.creative);
+    expect(su.media).toBeLessThan(sr.media);
+  });
+
+  it("adds digital-experience weight when the landing page is missing", () => {
+    const withPage = budgetAnswers();
+    const withoutPage = budgetAnswers();
+    withoutPage.readiness = { ...withoutPage.readiness, landingPage: false };
+    expect(recommendedShares(withoutPage, "growth").digital)
+      .toBeGreaterThan(recommendedShares(withPage, "growth").digital);
+  });
+
+  it("gives expansion a larger testing share than essential (scenario ≠ flat multiplier)", () => {
+    const a = budgetAnswers();
+    expect(recommendedShares(a, "expansion").testing).toBeGreaterThan(recommendedShares(a, "essential").testing);
+  });
+});
+
+// ── Amounts ─────────────────────────────────────────────────────────────────────
+
+describe("allocationAmounts", () => {
+  it("amounts always total the investment exactly", () => {
+    for (const total of [500, 2_000, 7_450, 25_000, 100_000, 1_234_500]) {
+      const shares = recommendedShares(budgetAnswers(), "growth");
+      const amounts = allocationAmounts(total, shares);
+      expect(CATEGORY_KEYS.reduce((s, k) => s + amounts[k], 0)).toBe(total);
+    }
+  });
+
+  it("handles zero and negative totals without NaN", () => {
+    const shares = recommendedShares(budgetAnswers(), "growth");
+    expect(CATEGORY_KEYS.reduce((s, k) => s + allocationAmounts(0, shares)[k], 0)).toBe(0);
+    for (const k of CATEGORY_KEYS) {
+      expect(Number.isFinite(allocationAmounts(-500, shares)[k])).toBe(true);
+    }
+  });
+});
+
+// ── Rebalancing ─────────────────────────────────────────────────────────────────
+
+describe("rebalanceShares", () => {
+  const base = recommendedShares(budgetAnswers(), "growth");
+
+  it("keeps the sum at exactly 1 after adjustments", () => {
+    const next = rebalanceShares(base, "media", 0.6, []);
+    expect(shareSum(next)).toBeCloseTo(1, 9);
+    expect(next.media).toBeCloseTo(0.6, 9);
+  });
+
+  it("never moves locked categories", () => {
+    const next = rebalanceShares(base, "media", 0.55, ["strategy", "testing"]);
+    expect(next.strategy).toBeCloseTo(base.strategy, 9);
+    expect(next.testing).toBeCloseTo(base.testing, 9);
+    expect(shareSum(next)).toBeCloseTo(1, 9);
+  });
+
+  it("clamps requests that would starve other categories", () => {
+    const next = rebalanceShares(base, "media", 1.5, []);
+    expect(next.media).toBeLessThan(1);
+    expect(shareSum(next)).toBeCloseTo(1, 9);
+    for (const k of CATEGORY_KEYS) expect(next[k]).toBeGreaterThanOrEqual(0.01 - 1e-9);
+  });
+
+  it("returns the input unchanged when the target itself is locked", () => {
+    expect(rebalanceShares(base, "media", 0.2, ["media"])).toBe(base);
+  });
+
+  it("redistributes proportionally among unlocked categories", () => {
+    const next = rebalanceShares(base, "media", base.media - 0.1, []);
+    // Everything else should have grown, in proportion.
+    const ratioStrategy = next.strategy / base.strategy;
+    const ratioCreative = next.creative / base.creative;
+    expect(ratioStrategy).toBeGreaterThan(1);
+    expect(ratioStrategy).toBeCloseTo(ratioCreative, 2);
+  });
+});
+
+// ── Readiness ───────────────────────────────────────────────────────────────────
+
+describe("readinessScore", () => {
+  it("is 0 with nothing and 100 with everything", () => {
+    expect(readinessScore({ ...EMPTY_READINESS }).score).toBe(0);
+    const all = { ...EMPTY_READINESS };
+    for (const k of Object.keys(all)) all[k as keyof typeof all] = true;
+    expect(readinessScore(all).score).toBe(100);
+  });
+
+  it("maps scores to the right bands", () => {
+    expect(readinessScore({ ...EMPTY_READINESS }).band).toBe("foundation");
+    const some = { ...EMPTY_READINESS, positioning: true, message: true, landingPage: true, tracking: true };
+    const r = readinessScore(some);
+    expect(r.score).toBe(49);
+    expect(r.band).toBe("partial");
+  });
+});
+
+// ── Goal-first formulas ─────────────────────────────────────────────────────────
+
+describe("estimateMediaSpend", () => {
+  it("computes leads × cost per lead for lead generation", () => {
+    const a = goalAnswers({ costPerResult: 40 });
+    a.objective = "leads";
+    // 100 leads × $40
+    expect(estimateMediaSpend(a, 100)).toBeCloseTo(4_000);
+  });
+
+  it("applies the lead step for sales objectives (goal ÷ conversion × CPL)", () => {
+    const a = goalAnswers({ conversionRate: 0.2, costPerResult: 40 });
+    a.objective = "sales";
+    // 100 sales ÷ 0.2 = 500 leads × $40 = $20,000
+    expect(estimateMediaSpend(a, 100)).toBeCloseTo(20_000);
+  });
+
+  it("prices awareness per 1,000 reached", () => {
+    const a = goalAnswers({ costPerResult: 12 });
+    a.objective = "awareness";
+    expect(estimateMediaSpend(a, 50_000)).toBeCloseTo(600);
+  });
+
+  it("returns null when required inputs are missing", () => {
+    const a = goalAnswers({ costPerResult: null });
+    expect(estimateMediaSpend(a, 100)).toBeNull();
+    const b = goalAnswers({ conversionRate: null });
+    b.objective = "sales";
+    expect(estimateMediaSpend(b, 100)).toBeNull();
+  });
+});
+
+// ── Scenarios ───────────────────────────────────────────────────────────────────
+
+describe("buildScenario / calculate", () => {
+  it("budget-first totals scale by scenario factor, not category-flat multiplication", () => {
+    const a = budgetAnswers({ budgetTotal: 25_000 });
+    const result = calculate(a);
+    expect(result.scenarios.growth.total).toBe(25_000);
+    expect(result.scenarios.essential.total).toBe(20_000);   // 0.8 ×
+    expect(result.scenarios.expansion.total).toBe(31_300);   // 1.25 ×, rounded to $100
+    // Different shares per scenario prove it's not a flat multiplier.
+    expect(result.scenarios.expansion.shares.testing).toBeGreaterThan(result.scenarios.essential.shares.testing);
+  });
+
+  it("goal-first total derives from media need ÷ media share", () => {
+    const a = goalAnswers(); // leads objective: 100 leads × $40 = $4,000 media
+    a.objective = "leads";
+    const plan = buildScenario(a, "growth");
+    expect(plan.total).toBeGreaterThan(4_000); // total covers more than media
+    // Media amount should be within rounding distance of the $4,000 requirement.
+    expect(Math.abs(plan.amounts.media - 4_000)).toBeLessThan(300);
+  });
+
+  it("scenario amounts always equal the scenario total", () => {
+    for (const answers of [budgetAnswers(), goalAnswers()]) {
+      const result = calculate(answers);
+      for (const key of ["essential", "growth", "expansion"] as const) {
+        const plan = result.scenarios[key];
+        expect(CATEGORY_KEYS.reduce((s, k) => s + plan.amounts[k], 0)).toBe(plan.total);
+      }
+    }
+  });
+
+  it("recommends Essential for small stated budgets, Growth otherwise", () => {
+    expect(calculate(budgetAnswers({ budgetTotal: 3_000 })).recommendedScenario).toBe("essential");
+    expect(calculate(budgetAnswers({ budgetTotal: 25_000 })).recommendedScenario).toBe("growth");
+    expect(calculate(goalAnswers()).recommendedScenario).toBe("growth");
+  });
+
+  it("survives zero/absent financial inputs without NaN or Infinity", () => {
+    const a = emptyAnswers();
+    const result = calculate(a);
+    for (const key of ["essential", "growth", "expansion"] as const) {
+      const plan = result.scenarios[key];
+      expect(Number.isFinite(plan.total)).toBe(true);
+      for (const k of CATEGORY_KEYS) expect(Number.isFinite(plan.amounts[k])).toBe(true);
+    }
+  });
+});
+
+// ── Break-even ──────────────────────────────────────────────────────────────────
+
+describe("breakEven", () => {
+  it("computes gross profit per unit and break-even units", () => {
+    const a = budgetAnswers({ avgValue: 400, marginPct: 0.5 });
+    const be = breakEven(25_000, a, null);
+    expect(be).not.toBeNull();
+    expect(be?.grossProfitPerUnit).toBeCloseTo(200);
+    expect(be?.breakEvenUnits).toBe(125); // 25,000 / 200
+  });
+
+  it("returns null when value or margin is missing", () => {
+    expect(breakEven(25_000, budgetAnswers({ avgValue: null }), null)).toBeNull();
+    expect(breakEven(25_000, budgetAnswers({ marginPct: null }), null)).toBeNull();
+  });
+
+  it("never divides by zero", () => {
+    expect(breakEven(25_000, budgetAnswers({ avgValue: 0 }), null)).toBeNull();
+    expect(breakEven(25_000, budgetAnswers({ marginPct: 0 }), null)).toBeNull();
+  });
+
+  it("translates lead goals into customers through the conversion rate", () => {
+    const a = goalAnswers({ conversionRate: 0.2 });
+    a.objective = "leads";
+    const be = breakEven(10_000, a, 500); // 500 leads × 0.2 = 100 customers
+    expect(be?.goalUnits).toBe(100);
+    expect(be?.unitNoun).toBe("customers");
+  });
+
+  it("does not label projected revenue as profit (both fields exist separately)", () => {
+    const a = goalAnswers();
+    a.objective = "leads";
+    const be = breakEven(10_000, a, 500);
+    expect(be?.projectedRevenue).not.toBeNull();
+    expect(be?.projectedGrossProfit).not.toBeNull();
+    expect(be?.projectedGrossProfit).toBeLessThan(be?.projectedRevenue ?? 0);
+  });
+});
+
+// ── Balance notes ───────────────────────────────────────────────────────────────
+
+describe("balanceNotes", () => {
+  it("flags media-heavy allocations when creative is missing", () => {
+    const a = budgetAnswers();
+    a.readiness = { ...EMPTY_READINESS, landingPage: true, tracking: true };
+    const plan = buildScenario(a, "growth");
+    const heavy: Shares = { ...plan.shares, media: 0.62 };
+    const rest = 0.38 / 5;
+    for (const k of CATEGORY_KEYS) if (k !== "media") heavy[k] = rest;
+    const notes = balanceNotes(a, plan, heavy);
+    expect(notes.some((n) => n.id === "media-heavy")).toBe(true);
+  });
+
+  it("flags missing tracking and low testing reserves", () => {
+    const a = budgetAnswers();
+    a.readiness = { ...a.readiness, tracking: false };
+    const plan = buildScenario(a, "growth");
+    const low: Shares = { ...plan.shares };
+    const delta = low.testing - 0.03;
+    low.testing = 0.03;
+    low.media += delta;
+    const notes = balanceNotes(a, plan, low);
+    expect(notes.some((n) => n.id === "tracking")).toBe(true);
+    expect(notes.some((n) => n.id === "testing")).toBe(true);
+  });
+
+  it("orders attention notes before info notes", () => {
+    const a = budgetAnswers();
+    a.readiness = { ...EMPTY_READINESS };
+    const plan = buildScenario(a, "growth");
+    const notes = balanceNotes(a, plan);
+    const firstInfo = notes.findIndex((n) => n.tone === "info");
+    const lastAttention = notes.map((n) => n.tone).lastIndexOf("attention");
+    if (firstInfo !== -1 && lastAttention !== -1) expect(lastAttention).toBeLessThan(firstInfo);
+  });
+});
+
+// ── Guards, rounding, formatting ────────────────────────────────────────────────
+
+describe("numeric guards and formatting", () => {
+  it("clamp/safeDiv never emit NaN or Infinity", () => {
+    expect(clamp(NaN, 0, 10)).toBe(0);
+    expect(clamp(Infinity, 0, 10)).toBe(10);
+    expect(safeDiv(5, 0)).toBe(0);
+    expect(safeDiv(NaN, 3)).toBe(0);
+    expect(safeDiv(5, 0, 42)).toBe(42);
+  });
+
+  it("roundTotal avoids fake precision at planning scale", () => {
+    expect(roundTotal(25_143)).toBe(25_100);
+    expect(roundTotal(101_267)).toBe(101_500);
+    expect(roundTotal(4_444)).toBe(4_450);
+    expect(roundTotal(432)).toBe(430);
+    expect(roundTotal(-50)).toBe(0);
+  });
+
+  it("formats currency without throwing on bad input", () => {
+    expect(formatMoney(25_000)).toBe("$25,000");
+    expect(formatMoney(NaN)).toBe("–");
+    expect(formatMoney(Infinity)).toBe("–");
+  });
+
+  it("displayPercents always totals exactly 100", () => {
+    const variants: Shares[] = [
+      recommendedShares(budgetAnswers(), "growth"),
+      recommendedShares(goalAnswers(), "essential"),
+      rebalanceShares(recommendedShares(budgetAnswers(), "growth"), "media", 0.57, []),
+      { strategy: 1 / 6, creative: 1 / 6, digital: 1 / 6, media: 1 / 6, management: 1 / 6, testing: 1 / 6 },
+    ];
+    for (const shares of variants) {
+      const pcts = displayPercents(shares);
+      expect(CATEGORY_KEYS.reduce((s, k) => s + pcts[k], 0)).toBe(100);
+    }
+  });
+
+  it("shareStatus reports the balanced band around a recommendation", () => {
+    expect(shareStatus(0.42, 0.42)).toBe("balanced");
+    expect(shareStatus(0.50, 0.42)).toBe("above");
+    expect(shareStatus(0.30, 0.42)).toBe("below");
+  });
+});

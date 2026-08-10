@@ -29,7 +29,7 @@ export interface SignatureModel {
 export const DEFAULT_DISCLAIMER =
   "This message may contain confidential information. If you received it in error, please delete it.";
 
-/** Blank by default — this is a public tool, so it must not seed another company's details. */
+/** Blank by default: this is a public tool, so it must not seed another company's details. */
 export const EMPTY_SIGNATURE: SignatureModel = {
   fullName: "", role: "", company: "", phone: "", email: "", website: "",
   address: "", tagline: "", logoUrl: "", photoUrl: "",
@@ -84,7 +84,7 @@ export function esc(value: string): string {
 
 /**
  * The accent lands unquoted inside `style="…"` attributes, and it's a free-text
- * field — so anything that isn't a literal hex colour is discarded rather than
+ * field, so anything that isn't a literal hex colour is discarded rather than
  * escaped. Otherwise a value like `red" onmouseover="…` would break out of the
  * attribute and ride along in the HTML the user copies into their email client.
  */

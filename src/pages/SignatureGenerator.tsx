@@ -90,7 +90,7 @@ export default function SignatureGenerator() {
   /**
    * Gmail and Outlook paste formatted content far more reliably when the *rendered*
    * signature is selected and copied, rather than when HTML is written to the
-   * clipboard directly — so try a DOM selection first, then fall back.
+   * clipboard directly, so try a DOM selection first, then fall back.
    */
   const copyRich = async () => {
     const node = previewRef.current;
@@ -184,7 +184,7 @@ export default function SignatureGenerator() {
           <div className="leading-tight min-w-0">
             <h1 className="text-base font-bold text-foreground">Email Signature Generator</h1>
             <p className="text-xs text-muted-foreground">
-              Clean, client-friendly signatures — table-based HTML with inline styles.
+              Clean, client-friendly signatures: table-based HTML with inline styles.
             </p>
           </div>
         </div>
@@ -203,7 +203,7 @@ export default function SignatureGenerator() {
           {/* ── Inputs ── */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide">1 — Your details</p>
+              <p className="text-xs font-semibold uppercase tracking-wide">1. Your details</p>
               <p className="text-[11px] text-muted-foreground">Blank fields are hidden</p>
             </div>
 
@@ -276,7 +276,7 @@ export default function SignatureGenerator() {
                 </Field>
               </div>
               <p className="-mt-2 text-[11px] text-muted-foreground leading-relaxed">
-                Email clients substitute fonts that aren't installed — every option falls back to Arial
+                Email clients substitute fonts that aren't installed, so every option falls back to Arial
                 or Times.
               </p>
 
@@ -304,7 +304,7 @@ export default function SignatureGenerator() {
           {/* ── Preview + output ── */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide">2 — Preview &amp; copy</p>
+              <p className="text-xs font-semibold uppercase tracking-wide">2. Preview &amp; copy</p>
               <p className="text-[11px] text-muted-foreground">Live</p>
             </div>
 
@@ -320,7 +320,7 @@ export default function SignatureGenerator() {
                 </div>
                 <div className="bg-white p-4 overflow-x-auto">
                   {filled ? (
-                    // Built entirely from escaped, locally-entered values — no third-party input.
+                    // Built entirely from escaped, locally-entered values; no third-party input.
                     <div ref={previewRef} dangerouslySetInnerHTML={{ __html: html }} />
                   ) : (
                     <div className="py-8 text-center text-muted-foreground/70">
@@ -350,7 +350,7 @@ export default function SignatureGenerator() {
 
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 <strong className="text-foreground">Copy signature</strong> pastes formatted content
-                straight into Gmail, Outlook, or Apple Mail — use it first.{" "}
+                straight into Gmail, Outlook, or Apple Mail. Use it first.{" "}
                 <strong className="text-foreground">Copy HTML</strong> is for tools that ask for raw
                 HTML. If a client strips the formatting, download the file, open it in your browser,
                 and copy from there.
@@ -387,7 +387,7 @@ export default function SignatureGenerator() {
         <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
           <p className="text-sm font-semibold">Built for real inboxes</p>
           <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-            The output is a single table with inline styles — the format Gmail, Outlook, and Apple Mail
+            The output is a single table with inline styles, the format Gmail, Outlook, and Apple Mail
             actually keep. Everything runs in your browser; nothing is uploaded, and saved profiles stay
             on this device.
           </p>

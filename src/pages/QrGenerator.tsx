@@ -22,7 +22,7 @@ import {
   type ContactFields,
 } from "@/lib/qr";
 
-// ── Local persistence (this browser only — nothing leaves the device) ───────────
+// ── Local persistence (this browser only; nothing leaves the device) ───────────
 
 const PROJECTS_KEY = "lv-qr-generator:projects";
 const PRESETS_KEY  = "lv-qr-generator:presets";
@@ -175,7 +175,7 @@ export default function QrGenerator() {
     } catch {
       toast({
         title: "Could not save locally",
-        description: "This browser's storage is full — remove a saved item (large logos take up space) and try again.",
+        description: "This browser's storage is full. Remove a saved item (large logos take up space) and try again.",
       });
       return false;
     }
@@ -291,7 +291,7 @@ export default function QrGenerator() {
   const exportBatchZip = async () => {
     const rows = parseCsvBatch(batchInput);
     if (!rows.length) {
-      toast({ title: "Nothing to export", description: "Add at least one row — `filename,value` or one value per line." });
+      toast({ title: "Nothing to export", description: "Add at least one row: `filename,value` or one value per line." });
       return;
     }
     setBusy("batch");
@@ -317,7 +317,7 @@ export default function QrGenerator() {
   const saveProject = () => {
     const project: SavedProject = {
       id: crypto.randomUUID(),
-      name: projectName.trim() || `${tab.toUpperCase()} QR — ${new Date().toLocaleDateString()}`,
+      name: projectName.trim() || `${tab.toUpperCase()} QR · ${new Date().toLocaleDateString()}`,
       savedAt: new Date().toISOString(),
       tab, urlInput, textInput, contact, brand, logoDataUrl, logoName,
     };
@@ -581,7 +581,7 @@ export default function QrGenerator() {
         <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
           <p className="text-sm font-semibold">Static codes, generated on your device</p>
           <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-            Nothing is uploaded and nothing expires — the QR encodes your content directly, so it keeps
+            Nothing is uploaded and nothing expires. The QR encodes your content directly, so it keeps
             working forever with no tracking redirect in the middle. Saved projects and brand presets
             live in this browser only.
           </p>
@@ -635,7 +635,7 @@ export default function QrGenerator() {
             <Field label="CSV rows">
               <Textarea value={batchInput} onChange={(e) => setBatchInput(e.target.value)} rows={7} className="font-mono text-xs" />
               <p className="text-[11px] text-muted-foreground">
-                Format: <code className="text-foreground">filename,value</code> — e.g.{" "}
+                Format: <code className="text-foreground">filename,value</code>, e.g.{" "}
                 <code className="text-foreground">homepage,https://example.com</code>
               </p>
             </Field>

@@ -29,6 +29,7 @@ import {
   QrCode,
   ImageIcon,
   Signature,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -161,7 +162,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
           )
           );
         }); })()}
-        {/* Standalone tools + external apps — open in their own tab */}
+        {/* Standalone tools + external apps; open in their own tab */}
         <div className="pt-2 mt-1 border-t border-sidebar-border/40 space-y-0.5">
           {collapsed ? (
             <>
@@ -208,6 +209,21 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                     </a>
                   </TooltipTrigger>
                   <TooltipContent side="right">Email Signature</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="/campaign-investment-calculator"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <Calculator size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Campaign Calculator</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider delayDuration={0}>
@@ -301,6 +317,16 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               >
                 <Signature size={16} />
                 Email Signature
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+              <a
+                href="/campaign-investment-calculator"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <Calculator size={16} />
+                Campaign Calculator
                 <ExternalLink size={11} className="ml-auto opacity-50" />
               </a>
               <a
@@ -431,7 +457,7 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
         )}
       >
         <SidebarContent collapsed={collapsed} />
-        {/* Collapse toggle — always anchored to the sidebar's right edge */}
+        {/* Collapse toggle, always anchored to the sidebar's right edge */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-20 bg-sidebar border border-l-0 border-sidebar-border rounded-r-md p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"

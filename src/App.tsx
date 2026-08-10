@@ -45,6 +45,7 @@ const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
 const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
 const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
+const CampaignCalculator     = lazy(() => import("@/pages/CampaignCalculator"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
@@ -272,6 +273,8 @@ function AppRoutes() {
       <Route path="/qr-generator" element={<Suspense fallback={null}><QrGenerator /></Suspense>} />
       {/* Email Signature Generator — public in-browser tool (no auth) */}
       <Route path="/email-signature-generator" element={<Suspense fallback={null}><SignatureGenerator /></Suspense>} />
+      {/* Campaign Investment Calculator — public planning tool (no auth) */}
+      <Route path="/campaign-investment-calculator" element={<Suspense fallback={null}><CampaignCalculator /></Suspense>} />
       {/* Service lead wizards — public (no auth) */}
       <Route path="/av-event-production-houston" element={<Suspense fallback={null}><AvEventProduction /></Suspense>} />
       <Route path="/industry-web-solutions-web-app-development" element={<Suspense fallback={null}><WebSolutionsLead /></Suspense>} />

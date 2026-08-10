@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 
 // ── QR rendering, export encoding, and batch CSV helpers ────────────────────────
-// Everything here runs in the browser — no upload, no server round-trip.
+// Everything here runs in the browser: no upload, no server round-trip.
 
 export const QR_CHARCOAL = "#231F20";
 export const QR_WHITE    = "#FFFFFF";
@@ -74,7 +74,7 @@ function roundedRect(
 }
 
 // The logo sits on a white plate so the surrounding modules stay readable.
-// Plate = 30% of the code, logo = 22% — safe for level-H error correction.
+// Plate = 30% of the code, logo = 22%, safe for level-H error correction.
 async function drawLogoOnCanvas(canvas: HTMLCanvasElement, logoDataUrl?: string) {
   if (!logoDataUrl) return;
   const ctx = canvas.getContext("2d");
@@ -122,7 +122,7 @@ export function canvasToBlob(
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
-/** Render off-screen at any resolution — used by every export path. */
+/** Render off-screen at any resolution; used by every export path. */
 export async function renderQrBlob(
   text: string,
   options: QrOptions & { type?: string; quality?: number } = {},
@@ -169,7 +169,7 @@ export async function buildQrSvg(text: string, options: QrOptions = {}): Promise
   return options.logoDataUrl ? embedLogoInSvg(svg, options.logoDataUrl) : svg;
 }
 
-// ── PDF (single-page, JPEG-embedded — avoids pulling in a PDF library) ──────────
+// ── PDF (single-page, JPEG-embedded; avoids pulling in a PDF library) ──────────
 
 function binaryStringFromBytes(bytes: Uint8Array): string {
   let out = "";
