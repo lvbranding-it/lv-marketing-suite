@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LVLogo from "@/components/LVLogo";
+import DevServicesCta from "@/components/DevServicesCta";
 
 // ── Aspect-ratio presets (export dims — social-optimized, short edge 1080) ──────
 
@@ -387,6 +388,11 @@ export default function ImageStudio() {
             </p>
           </div>
         </aside>
+      </div>
+
+      {/* Discrete cross-sell */}
+      <div className="px-4 sm:px-8 py-4 shrink-0">
+        <DevServicesCta />
       </div>
 
       {/* Footer */}

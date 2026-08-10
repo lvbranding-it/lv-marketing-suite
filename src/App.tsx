@@ -43,6 +43,8 @@ const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration")
 const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
 const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
 const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
+const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
+const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
@@ -266,6 +268,10 @@ function AppRoutes() {
       />
       {/* Image Studio — public in-browser image framing tool (no auth) */}
       <Route path="/image-studio" element={<Suspense fallback={null}><ImageStudio /></Suspense>} />
+      {/* QR Generator — public in-browser QR code tool (no auth) */}
+      <Route path="/qr-generator" element={<Suspense fallback={null}><QrGenerator /></Suspense>} />
+      {/* Email Signature Generator — public in-browser tool (no auth) */}
+      <Route path="/email-signature-generator" element={<Suspense fallback={null}><SignatureGenerator /></Suspense>} />
       {/* Service lead wizards — public (no auth) */}
       <Route path="/av-event-production-houston" element={<Suspense fallback={null}><AvEventProduction /></Suspense>} />
       <Route path="/industry-web-solutions-web-app-development" element={<Suspense fallback={null}><WebSolutionsLead /></Suspense>} />
