@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   allocationAmounts, balanceNotes, breakEven, buildScenario, calculate, clamp,
-  displayPercents, estimateMediaSpend, readinessScore, rebalanceShares,
-  recommendationSummary, recommendedShares, roundTotal, safeDiv, scenarioRationale,
-  shareStatus,
+  componentAssessments, displayPercents, estimateMediaSpend, planLevers,
+  readinessNarrative, readinessScore, rebalanceShares, recommendationSummary,
+  recommendedShares, roundTotal, safeDiv, scenarioRationale, shareStatus,
 } from "./engine";
 import { ALLOCATION_RANGES, CATEGORY_KEYS, formatMoney } from "./config";
 import { EMPTY_READINESS, emptyAnswers } from "./persist";
-import type { CalculatorAnswers, CategoryKey, Shares } from "./types";
+import type {
+  CalculatorAnswers, CategoryKey, ReadinessState, Shares,
+} from "./types";
+
+/** Sets every component to one state, so score expectations are exact. */
+function withReadiness(a: CalculatorAnswers, state: ReadinessState | null): CalculatorAnswers {
+  const readiness = { ...a.readiness };
+  for (const k of Object.keys(readiness) as (keyof typeof readiness)[]) readiness[k] = state;
+  return { ...a, readiness };
+}
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +25,12 @@ function budgetAnswers(overrides?: Partial<CalculatorAnswers["financial"]>): Cal
   a.profile = { audienceFocus: "consumers", stage: "growing", reach: "local", industry: "Hospitality", currency: "USD" };
   a.objective = "leads";
   a.scope = { durationDays: 90, customDuration: false, channels: ["google-search", "meta-facebook"], audience: "10k-100k", timeSensitive: false };
-  a.readiness = { ...EMPTY_READINESS, positioning: true, message: true, visualIdentity: true, landingPage: true, tracking: true };
+  a.destination = "landing-page";
+  a.readiness = {
+    ...EMPTY_READINESS,
+    positioning: "ready", message: "ready", visualIdentity: "ready",
+    landingPage: "ready", tracking: "ready",
+  };
   a.financial = { ...a.financial, mode: "budget", budgetTotal: 25_000, avgValue: 400, marginPct: 0.5, ...overrides };
   return a;
 }
@@ -39,13 +53,7 @@ const shareSum = (s: Shares) => CATEGORY_KEYS.reduce((sum, k) => sum + s[k], 0);
 describe("recommendedShares", () => {
   it("always sums to 1 across many input combinations", () => {
     const variants = [budgetAnswers(), goalAnswers(), emptyAnswers()];
-    const noReadiness = budgetAnswers();
-    noReadiness.readiness = { ...EMPTY_READINESS };
-    const fullReadiness = budgetAnswers();
-    for (const k of Object.keys(fullReadiness.readiness)) {
-      fullReadiness.readiness[k as keyof typeof fullReadiness.readiness] = true;
-    }
-    variants.push(noReadiness, fullReadiness);
+    variants.push(withReadiness(budgetAnswers(), null), withReadiness(budgetAnswers(), "ready"));
     for (const a of variants) {
       for (const scenario of ["essential", "growth", "expansion"] as const) {
         expect(shareSum(recommendedShares(a, scenario))).toBeCloseTo(1, 9);
@@ -63,10 +71,8 @@ describe("recommendedShares", () => {
   });
 
   it("shifts budget toward strategy/creative when the foundation is missing", () => {
-    const unready = budgetAnswers();
-    unready.readiness = { ...EMPTY_READINESS };
-    const ready = budgetAnswers();
-    for (const k of Object.keys(ready.readiness)) ready.readiness[k as keyof typeof ready.readiness] = true;
+    const unready = withReadiness(budgetAnswers(), null);
+    const ready = withReadiness(budgetAnswers(), "ready");
 
     const su = recommendedShares(unready, "growth");
     const sr = recommendedShares(ready, "growth");
@@ -78,7 +84,7 @@ describe("recommendedShares", () => {
   it("adds digital-experience weight when the landing page is missing", () => {
     const withPage = budgetAnswers();
     const withoutPage = budgetAnswers();
-    withoutPage.readiness = { ...withoutPage.readiness, landingPage: false };
+    withoutPage.readiness = { ...withoutPage.readiness, landingPage: "create" };
     expect(recommendedShares(withoutPage, "growth").digital)
       .toBeGreaterThan(recommendedShares(withPage, "growth").digital);
   });
@@ -151,19 +157,124 @@ describe("rebalanceShares", () => {
 // ── Readiness ───────────────────────────────────────────────────────────────────
 
 describe("readinessScore", () => {
-  it("is 0 with nothing and 100 with everything", () => {
-    expect(readinessScore({ ...EMPTY_READINESS }).score).toBe(0);
-    const all = { ...EMPTY_READINESS };
-    for (const k of Object.keys(all)) all[k as keyof typeof all] = true;
-    expect(readinessScore(all).score).toBe(100);
+  it("is 0 when nothing is answered and 100 when everything applicable is ready", () => {
+    expect(readinessScore(withReadiness(budgetAnswers(), null)).score).toBe(0);
+    expect(readinessScore(withReadiness(budgetAnswers(), "ready")).score).toBe(100);
   });
 
   it("maps scores to the right bands", () => {
-    expect(readinessScore({ ...EMPTY_READINESS }).band).toBe("foundation");
-    const some = { ...EMPTY_READINESS, positioning: true, message: true, landingPage: true, tracking: true };
-    const r = readinessScore(some);
-    expect(r.score).toBe(49);
-    expect(r.band).toBe("partial");
+    expect(readinessScore(withReadiness(budgetAnswers(), null)).band).toBe("foundation");
+    expect(readinessScore(withReadiness(budgetAnswers(), "ready")).band).toBe("scale");
+    expect(readinessScore(withReadiness(budgetAnswers(), "review")).band).toBe("partial");
+  });
+
+  it("gives partial credit for 'exists but needs review' and 'not sure'", () => {
+    const review = readinessScore(withReadiness(budgetAnswers(), "review")).score;
+    const unsure = readinessScore(withReadiness(budgetAnswers(), "unsure")).score;
+    const create = readinessScore(withReadiness(budgetAnswers(), "create")).score;
+    expect(review).toBe(50);
+    expect(unsure).toBe(25);
+    expect(create).toBe(0);
+  });
+
+  it("excludes components that do not apply to this campaign", () => {
+    // Search + email, awareness, no destination action: no video, no checkout.
+    const a = budgetAnswers();
+    a.objective = "awareness";
+    a.destination = "none";
+    a.scope = { ...a.scope, channels: ["google-search", "email"] };
+    const r = readinessScore(withReadiness(a, "ready"));
+    const notRequired = r.assessments.filter((x) => x.relevance === "not-required").map((x) => x.key);
+    expect(notRequired).toContain("checkoutFlow");
+    expect(notRequired).toContain("eventPage");
+    expect(notRequired).toContain("leadForm");
+    // Excluded components cannot drag the score down.
+    expect(r.score).toBe(100);
+  });
+
+  it("does not penalise a Search campaign for having no video", () => {
+    const search = budgetAnswers();
+    search.scope = { ...search.scope, channels: ["google-search"] };
+    const withYouTube = budgetAnswers();
+    withYouTube.scope = { ...withYouTube.scope, channels: ["google-search", "youtube"] };
+
+    // Everything ready except video, so video is the only difference.
+    const readiness = { ...withReadiness(search, "ready").readiness, video: "create" as const };
+    const searchScore = readinessScore({ ...search, readiness }).score;
+    const videoScore = readinessScore({ ...withYouTube, readiness }).score;
+    // Search doesn't need video, so it stays at 100; YouTube does, so it drops.
+    expect(searchScore).toBe(100);
+    expect(videoScore).toBeLessThan(100);
+  });
+
+  it("counts essential components separately from the weighted score", () => {
+    const r = readinessScore(budgetAnswers());
+    expect(r.essentialTotal).toBeGreaterThan(0);
+    expect(r.essentialReady).toBeLessThanOrEqual(r.essentialTotal);
+    expect(r.gaps.essential.length + r.gaps.recommended.length).toBeGreaterThan(0);
+  });
+});
+
+// ── Component relevance ─────────────────────────────────────────────────────────
+
+describe("componentAssessments", () => {
+  it("makes video essential when YouTube or TikTok is selected", () => {
+    const a = budgetAnswers();
+    a.scope = { ...a.scope, channels: ["youtube"] };
+    const video = componentAssessments(a).find((x) => x.key === "video");
+    expect(video?.relevance).toBe("essential");
+    expect(video?.reason).toContain("YouTube");
+  });
+
+  it("excludes video entirely when no selected channel can run it", () => {
+    const a = budgetAnswers();
+    a.scope = { ...a.scope, channels: ["google-search", "email"] };
+    expect(componentAssessments(a).find((x) => x.key === "video")?.relevance).toBe("not-required");
+  });
+
+  it("keeps video optional on channels that can carry it but do not depend on it", () => {
+    const a = budgetAnswers();
+    a.scope = { ...a.scope, channels: ["google-display"] };
+    expect(componentAssessments(a).find((x) => x.key === "video")?.relevance).toBe("optional");
+  });
+
+  it("drives destination components from the destination answer", () => {
+    const shop = budgetAnswers();
+    shop.destination = "buy-online";
+    const shopAssessments = componentAssessments(shop);
+    expect(shopAssessments.find((x) => x.key === "checkoutFlow")?.relevance).toBe("essential");
+    expect(shopAssessments.find((x) => x.key === "eventPage")?.relevance).toBe("not-required");
+
+    const event = budgetAnswers();
+    event.destination = "event-registration";
+    const eventAssessments = componentAssessments(event);
+    expect(eventAssessments.find((x) => x.key === "eventPage")?.relevance).toBe("essential");
+    expect(eventAssessments.find((x) => x.key === "checkoutFlow")?.relevance).toBe("not-required");
+  });
+
+  it("lets a native-form lead campaign skip the landing page", () => {
+    const a = budgetAnswers();
+    a.destination = "lead-form";
+    a.scope = { ...a.scope, channels: ["meta-facebook", "instagram"] };
+    const landing = componentAssessments(a).find((x) => x.key === "landingPage");
+    expect(landing?.relevance).toBe("optional");
+    expect(landing?.reason).toContain("natively");
+  });
+
+  it("keeps the landing page recommended when a lead campaign uses Search", () => {
+    const a = budgetAnswers();
+    a.destination = "lead-form";
+    a.scope = { ...a.scope, channels: ["google-search"] };
+    expect(componentAssessments(a).find((x) => x.key === "landingPage")?.relevance).toBe("recommended");
+  });
+
+  it("softens conversion tracking for pure awareness campaigns", () => {
+    const a = budgetAnswers();
+    a.destination = "none";
+    expect(componentAssessments(a).find((x) => x.key === "tracking")?.relevance).toBe("recommended");
+    const perf = budgetAnswers();
+    perf.destination = "lead-form";
+    expect(componentAssessments(perf).find((x) => x.key === "tracking")?.relevance).toBe("essential");
   });
 });
 
@@ -308,7 +419,7 @@ describe("breakEven", () => {
 describe("balanceNotes", () => {
   it("flags media-heavy allocations when creative is missing", () => {
     const a = budgetAnswers();
-    a.readiness = { ...EMPTY_READINESS, landingPage: true, tracking: true };
+    a.readiness = { ...EMPTY_READINESS, landingPage: "ready", tracking: "ready" };
     const plan = buildScenario(a, "growth");
     const heavy: Shares = { ...plan.shares, media: 0.62 };
     const rest = 0.38 / 5;
@@ -319,7 +430,7 @@ describe("balanceNotes", () => {
 
   it("flags missing tracking and low testing reserves", () => {
     const a = budgetAnswers();
-    a.readiness = { ...a.readiness, tracking: false };
+    a.readiness = { ...a.readiness, tracking: "create" };
     const plan = buildScenario(a, "growth");
     const low: Shares = { ...plan.shares };
     const delta = low.testing - 0.03;
@@ -366,8 +477,7 @@ describe("balanceNotes", () => {
   });
 
   it("orders attention notes before info notes", () => {
-    const a = budgetAnswers();
-    a.readiness = { ...EMPTY_READINESS };
+    const a = withReadiness(budgetAnswers(), null);
     const plan = buildScenario(a, "growth");
     const notes = balanceNotes(a, plan);
     const firstInfo = notes.findIndex((n) => n.tone === "info");
@@ -448,5 +558,53 @@ describe("numeric guards and formatting", () => {
     expect(shareStatus(0.42, 0.42)).toBe("balanced");
     expect(shareStatus(0.50, 0.42)).toBe("above");
     expect(shareStatus(0.30, 0.42)).toBe("below");
+  });
+});
+
+// ── Contradictions, narrative, and levers ───────────────────────────────────────
+
+describe("contradictions and explanation copy", () => {
+  it("reports a critical contradiction when reach exceeds the audience", () => {
+    const a = goalAnswers({ goalCount: 1_000_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.destination = "none";
+    a.scope = { ...a.scope, audience: "10k-100k" };
+    const result = calculate(a);
+    expect(result.contradictions.length).toBeGreaterThan(0);
+    expect(result.contradictions[0].id).toBe("reach-vs-audience");
+    expect(result.contradictions.every((n) => n.critical)).toBe(true);
+  });
+
+  it("reports no contradictions when the answers are consistent", () => {
+    const a = goalAnswers({ goalCount: 50_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.destination = "none";
+    a.scope = { ...a.scope, audience: "100k-1m" };
+    expect(calculate(a).contradictions).toHaveLength(0);
+  });
+
+  it("separates confirmed requirements from possible needs in the narrative", () => {
+    const a = budgetAnswers();
+    a.scope = { ...a.scope, channels: ["meta-facebook", "instagram"] };
+    a.readiness = { ...withReadiness(a, "ready").readiness, positioning: "create", photography: "create" };
+    const text = readinessNarrative(readinessScore(a));
+    // Essential gap is stated as needing attention; recommended gap is hedged.
+    expect(text).toContain("need attention before launch");
+    expect(text).toContain("recommended because of the channels selected");
+    expect(text).toContain("confirmed during campaign planning");
+  });
+
+  it("names the levers that would change a large number", () => {
+    const a = goalAnswers({ goalCount: 1_000_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.destination = "none";
+    a.scope = { ...a.scope, channels: ["youtube", "instagram", "meta-facebook"] };
+    a.readiness = { ...withReadiness(a, "create").readiness };
+    const text = planLevers(a, calculate(a));
+    expect(text).toContain("Reducing the reach");
+    expect(text).toContain("narrowing the channel mix");
+    expect(text).toMatch(/would change the recommendation\.$/);
+    // Drivers are simultaneous, so they read as a conjunction, not alternatives.
+    expect(text).toContain("components still need to be created, and the number of channels");
   });
 });

@@ -14,12 +14,18 @@
 //   Break-even units      = total investment ÷ gross profit per unit
 
 import {
-  ALLOCATION_RANGES, ASSUMPTIONS, CATEGORY_KEYS, READINESS_BANDS, READINESS_ITEMS,
-  SCENARIOS, audienceBandMeta, categoryMeta, formatMoney, objectiveMeta, scenarioMeta,
+  ALLOCATION_RANGES, ASSUMPTIONS, CATEGORY_KEYS, CHANNELS,
+  CHANNELS_FAVOURING_VIDEO, CHANNELS_REQUIRING_IMAGERY, CHANNELS_REQUIRING_VIDEO,
+  CHANNELS_SUPPORTING_VIDEO, CHANNELS_WITH_NATIVE_FORMS, DESTINATIONS,
+  DESTINATION_RULES, READINESS_BANDS,
+  READINESS_ITEMS, RELEVANCE_GAP_MULTIPLIER, RELEVANCE_WEIGHTS, SCENARIOS,
+  audienceBandMeta, categoryMeta, formatMoney, objectiveMeta, readinessItemMeta,
+  readinessStateMeta, scenarioMeta,
 } from "./config";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
-  CategoryInsight, CategoryKey, ReadinessKey, ReadinessResult, ScenarioKey,
+  CategoryInsight, CategoryKey, ChannelKey, ComponentAssessment,
+  ComponentRelevance, ReadinessKey, ReadinessResult, ReadinessState, ScenarioKey,
   ScenarioPlan, Shares,
 } from "./types";
 
@@ -45,16 +51,143 @@ function num(value: number | null | undefined): number | null {
 
 // ── Readiness score ─────────────────────────────────────────────────────────────
 
-export function readinessScore(readiness: Record<ReadinessKey, boolean>): ReadinessResult {
-  let score = 0;
-  const missing: ReadinessKey[] = [];
-  for (const item of READINESS_ITEMS) {
-    if (readiness[item.key]) score += item.weight;
-    else missing.push(item.key);
+/** Fraction of its weight a component earns. Unanswered is treated as not ready. */
+export function stateScore(state: ReadinessState | null): number {
+  return state ? readinessStateMeta(state).score : 0;
+}
+
+function channelNames(keys: ChannelKey[], selected: ChannelKey[]): string {
+  const hits = keys.filter((k) => selected.includes(k))
+    .map((k) => CHANNELS.find((c) => c.key === k)?.label ?? k);
+  if (hits.length === 0) return "";
+  if (hits.length === 1) return hits[0];
+  if (hits.length === 2) return `${hits[0]} and ${hits[1]}`;
+  return `${hits.slice(0, -1).join(", ")}, and ${hits[hits.length - 1]}`;
+}
+
+/**
+ * Decides how much each component matters for THIS campaign, from the objective,
+ * the channel mix, and where the campaign sends people. Components that don't
+ * apply come back as `not-required` and are excluded from the score entirely.
+ * All the thresholds behind this live in config.ts. [ASSUMPTION]
+ */
+export function componentAssessments(answers: CalculatorAnswers): ComponentAssessment[] {
+  const channels = answers.scope.channels;
+  const destination = answers.destination;
+  const isAwareness = answers.objective === "awareness";
+
+  const has = (set: ChannelKey[]) => set.some((k) => channels.includes(k));
+  const visualChannels = has(CHANNELS_REQUIRING_IMAGERY) || has(CHANNELS_REQUIRING_VIDEO);
+
+  const out: Record<ReadinessKey, { relevance: ComponentRelevance; reason?: string }> = {
+    // ── Campaign foundation: the strategy every campaign runs on ──
+    positioning:    { relevance: "essential" },
+    objectiveOffer: { relevance: "essential" },
+    message:        { relevance: "essential" },
+    visualIdentity: visualChannels
+      ? { relevance: "essential", reason: "Your channel mix is visual, so the campaign needs a consistent look." }
+      : { relevance: "recommended", reason: "Your channels are mostly text-based, so visual direction matters less here." },
+
+    // ── Creative assets: driven by the channels selected ──
+    video: has(CHANNELS_REQUIRING_VIDEO)
+      ? { relevance: "essential", reason: `You selected ${channelNames(CHANNELS_REQUIRING_VIDEO, channels)}, which can only run video creative.` }
+      : has(CHANNELS_FAVOURING_VIDEO)
+        ? { relevance: "recommended", reason: `Video typically outperforms static creative on ${channelNames(CHANNELS_FAVOURING_VIDEO, channels)}.` }
+        : has(CHANNELS_SUPPORTING_VIDEO)
+          ? { relevance: "optional", reason: "Your channels can carry video, but none of them depend on it." }
+          : { relevance: "not-required", reason: "None of your selected channels can run video." },
+    photography: has(CHANNELS_REQUIRING_IMAGERY)
+      ? { relevance: "recommended", reason: `${channelNames(CHANNELS_REQUIRING_IMAGERY, channels)} run on imagery.` }
+      : { relevance: "optional" },
+    graphics: has(CHANNELS_REQUIRING_IMAGERY)
+      ? { relevance: "essential", reason: `${channelNames(CHANNELS_REQUIRING_IMAGERY, channels)} need sized ad creative.` }
+      : { relevance: "optional", reason: "Your selected channels are primarily text-based." },
+    adCopy: { relevance: "essential", reason: "Every channel needs written copy." },
+
+    // ── Campaign destination: driven by what people should do next ──
+    landingPage:  { relevance: "not-required" },
+    leadForm:     { relevance: "not-required" },
+    checkoutFlow: { relevance: "not-required" },
+    eventPage:    { relevance: "not-required" },
+
+    // ── Measurement: performance campaigns need it; awareness benefits from it ──
+    analytics:      { relevance: "essential" },
+    successMetrics: { relevance: "essential" },
+    tracking: destination && destination !== "none"
+      ? { relevance: "essential", reason: "Your campaign drives a specific action, so it needs conversion tracking to be evaluated." }
+      : { relevance: "recommended", reason: "There is no direct conversion to measure, though tracking still shows what the campaign influenced." },
+    pixels: destination && destination !== "none"
+      ? { relevance: "essential", reason: "Platform tracking is what lets each channel optimize toward your goal." }
+      : { relevance: "recommended" },
+  };
+
+  if (destination) {
+    for (const [key, relevance] of Object.entries(DESTINATION_RULES[destination])) {
+      out[key as ReadinessKey] = { relevance: relevance as ComponentRelevance };
+    }
+    // A lead campaign running only on channels with native forms can skip the page.
+    if (destination === "lead-form" && channels.length > 0 && channels.every((c) => CHANNELS_WITH_NATIVE_FORMS.includes(c))) {
+      out.landingPage = {
+        relevance: "optional",
+        reason: `${channelNames(CHANNELS_WITH_NATIVE_FORMS, channels)} can host the form natively, so a landing page is optional.`,
+      };
+    }
+    const destLabel = DESTINATIONS.find((d) => d.key === destination)?.label.toLowerCase();
+    for (const key of ["landingPage", "leadForm", "checkoutFlow", "eventPage"] as ReadinessKey[]) {
+      if (out[key].relevance !== "not-required" && !out[key].reason && destLabel) {
+        out[key] = { ...out[key], reason: `You chose "${destLabel}" as the campaign destination.` };
+      }
+    }
   }
-  score = clamp(Math.round(score), 0, 100);
+
+  if (isAwareness && !destination) {
+    out.landingPage = { relevance: "optional" };
+  }
+
+  return READINESS_ITEMS.map((item) => ({
+    key:       item.key,
+    relevance: out[item.key].relevance,
+    reason:    out[item.key].reason,
+    state:     answers.readiness[item.key] ?? null,
+  }));
+}
+
+/**
+ * Weighted readiness: only components that apply are counted, essentials weigh
+ * most, and "exists but needs review" earns partial credit. An all-or-nothing
+ * checklist would penalise a Search campaign for having no video.
+ */
+export function readinessScore(answers: CalculatorAnswers): ReadinessResult {
+  const assessments = componentAssessments(answers);
+
+  let weighted = 0;
+  let totalWeight = 0;
+  let essentialTotal = 0;
+  let essentialReady = 0;
+  let needsReview = 0;
+  const gaps: { essential: ReadinessKey[]; recommended: ReadinessKey[] } = { essential: [], recommended: [] };
+
+  for (const a of assessments) {
+    const weight = RELEVANCE_WEIGHTS[a.relevance];
+    if (weight === 0) continue;              // not required: excluded entirely
+    const score = stateScore(a.state);
+    totalWeight += weight;
+    weighted += weight * score;
+
+    if (a.relevance === "essential") {
+      essentialTotal += 1;
+      if (a.state === "ready") essentialReady += 1;
+    }
+    if (a.state === "review" || a.state === "unsure") needsReview += 1;
+    if (score < 1) {
+      if (a.relevance === "essential") gaps.essential.push(a.key);
+      else if (a.relevance === "recommended") gaps.recommended.push(a.key);
+    }
+  }
+
+  const score = totalWeight === 0 ? 0 : clamp(Math.round((weighted / totalWeight) * 100), 0, 100);
   const bandEntry = READINESS_BANDS.find((b) => score >= b.min) ?? READINESS_BANDS[READINESS_BANDS.length - 1];
-  return { score, band: bandEntry.band, missing };
+  return { score, band: bandEntry.band, assessments, essentialTotal, essentialReady, needsReview, gaps };
 }
 
 // ── Recommended allocation shares ───────────────────────────────────────────────
@@ -78,15 +211,21 @@ export function recommendedShares(answers: CalculatorAnswers, scenario: Scenario
     points[key] = (lo + hi) / 2;
   }
 
-  // Readiness adjustments: each missing item grows its category. [ASSUMPTION]
-  for (const item of READINESS_ITEMS) {
-    if (!answers.readiness[item.key]) points[item.affects] += item.points;
+  // Readiness adjustments. A gap grows its category in proportion to how ready
+  // the component is AND how much it matters here, so a missing video only moves
+  // the plan when the channel mix actually needs video. [ASSUMPTION]
+  const ready = readinessScore(answers);
+  for (const a of ready.assessments) {
+    const item = readinessItemMeta(a.key);
+    const gap = (1 - stateScore(a.state)) * RELEVANCE_GAP_MULTIPLIER[a.relevance];
+    points[item.affects] += item.points * gap;
   }
-  // Missing tracking also grows the testing reserve slightly: measuring is the
-  // precondition for learning. [ASSUMPTION]
-  if (!answers.readiness.tracking) points.testing += 1;
-
-  const ready = readinessScore(answers.readiness);
+  // A tracking gap also grows the testing reserve: measuring is the precondition
+  // for learning. Scaled the same way. [ASSUMPTION]
+  const trackingGap = ready.assessments.find((a) => a.key === "tracking");
+  if (trackingGap) {
+    points.testing += 1 * (1 - stateScore(trackingGap.state)) * RELEVANCE_GAP_MULTIPLIER[trackingGap.relevance];
+  }
   // A complete foundation shifts weight toward distribution. [ASSUMPTION]
   if (ready.score >= 85) points.media += 4;
   else if (ready.score >= 65) points.media += 2;
@@ -396,8 +535,12 @@ function categoryInsights(answers: CalculatorAnswers): CategoryInsight[] {
     byCategory.set(key, list);
   };
 
-  for (const item of READINESS_ITEMS) {
-    if (!answers.readiness[item.key]) add(item.affects, item.clause);
+  const ready = readinessScore(answers);
+  // Only components that actually apply here explain an allocation, and only
+  // when they are not already ready.
+  for (const a of ready.assessments) {
+    if (a.relevance === "not-required" || stateScore(a.state) >= 1) continue;
+    add(readinessItemMeta(a.key).affects, readinessItemMeta(a.key).clause);
   }
   const channels = answers.scope.channels.length;
   if (channels >= 4) {
@@ -408,7 +551,6 @@ function categoryInsights(answers: CalculatorAnswers): CategoryInsight[] {
   if (answers.scope.durationDays <= 45 && answers.scope.timeSensitive) add("management", "a short, time-sensitive window compresses production and launch work");
   if (answers.profile.stage === "new") add("strategy", "a new business benefits from firmer positioning before spending on reach");
 
-  const ready = readinessScore(answers.readiness);
   if (ready.score >= 85) add("media", "your foundation is largely in place, so more budget can go to distribution");
 
   return CATEGORY_KEYS.map((key) => ({ key, influences: byCategory.get(key) ?? [] }));
@@ -428,23 +570,27 @@ export function balanceNotes(
   const shares = currentShares ?? plan.shares;
   const amounts = currentShares ? allocationAmounts(plan.total, currentShares) : plan.amounts;
   const notes: BalanceNote[] = [];
-  const missing = readinessScore(answers.readiness).missing;
-  const missingCreative = missing.filter((k) =>
-    k === "visualIdentity" || k === "photography" || k === "video" || k === "graphics" || k === "adCopy").length;
+  const ready = readinessScore(answers);
+  // "Gap" means an applicable component that is not fully ready.
+  const gapKeys = new Set([...ready.gaps.essential, ...ready.gaps.recommended]);
+  const gapCreative = ["visualIdentity", "photography", "video", "graphics", "adCopy"]
+    .filter((k) => gapKeys.has(k as ReadinessKey)).length;
+  const relevanceOf = (key: ReadinessKey) =>
+    ready.assessments.find((a) => a.key === key)?.relevance ?? "not-required";
 
-  if (shares.media > 0.55 && (missingCreative >= 2 || missing.includes("message"))) {
+  if (shares.media > 0.55 && (gapCreative >= 2 || gapKeys.has("message"))) {
     notes.push({
       id: "media-heavy", tone: "attention",
       text: `Your current allocation places ${Math.round(shares.media * 100)}% into paid media, but your answers indicate the campaign creative still needs development. Consider strengthening the foundation before increasing media spend.`,
     });
   }
-  if (missing.includes("tracking")) {
+  if (gapKeys.has("tracking") && relevanceOf("tracking") === "essential") {
     notes.push({
       id: "tracking", tone: "attention",
-      text: "Conversion tracking isn't in place yet. Without it, media spend can't be evaluated or improved. Your digital-experience allocation reserves room to set it up first.",
+      text: "Conversion tracking isn't ready yet. Without it, media spend can't be evaluated or improved. Your digital-experience allocation reserves room to set it up first.",
     });
   }
-  if (missing.includes("landingPage")) {
+  if (gapKeys.has("landingPage") && relevanceOf("landingPage") === "essential") {
     notes.push({
       id: "landing", tone: "attention",
       text: "Your answers indicate the landing page still needs work. Traffic converts at the destination, so this is worth funding before scaling media.",
@@ -472,7 +618,7 @@ export function balanceNotes(
       });
     }
   }
-  if (answers.scope.durationDays <= 45 && answers.scope.timeSensitive && missingCreative >= 3) {
+  if (answers.scope.durationDays <= 45 && answers.scope.timeSensitive && gapCreative >= 3) {
     notes.push({
       id: "timeline", tone: "info",
       text: "Several creative assets still need production inside a short, fixed window. Building lead time into the plan, or simplifying the launch creative, will protect the schedule.",
@@ -485,13 +631,13 @@ export function balanceNotes(
   const goal = answers.financial.mode === "goal" ? (num(answers.financial.goalCount) ?? 0) : 0;
   if (isAwareness && goal > 0 && audienceMax !== null && goal > audienceMax) {
     notes.push({
-      id: "reach-vs-audience", tone: "attention",
+      id: "reach-vs-audience", tone: "attention", critical: true,
       text: `Your desired reach (${goal.toLocaleString()} people) is larger than the audience size you selected earlier (${audienceBandMeta(answers.scope.audience).label.toLowerCase()}). Review your audience estimate or expand the campaign's geographic market.`,
     });
   }
   if (answers.profile.reach === "local" && answers.scope.audience === "over-1m") {
     notes.push({
-      id: "local-vs-scale", tone: "attention",
+      id: "local-vs-scale", tone: "attention", critical: true,
       text: "You described a local market with an audience over 1 million people. That combination is unusual; either the audience estimate includes people outside your service area, or the market reach is broader than local.",
     });
   }
@@ -544,12 +690,13 @@ export function recommendationSummary(answers: CalculatorAnswers, result: Calcul
   const ready = result.readiness;
   const channels = answers.scope.channels.length;
   const days = answers.scope.durationDays;
+  const essentialGaps = ready.gaps.essential.length;
 
   const foundation =
-    ready.missing.length >= 6 ? "still needs most of its strategic and creative foundation"
-    : ready.missing.length >= 2 ? "still needs several campaign components developed"
-    : ready.missing.length === 1 ? "is close to campaign-ready, with one component left to develop"
-    : "has its foundation in place";
+    essentialGaps >= 5 ? "still needs most of the components it depends on"
+    : essentialGaps >= 2 ? "still needs several essential components developed"
+    : essentialGaps === 1 ? "is close to ready, with one essential component left"
+    : "has the components it needs in place";
 
   const scopeBits: string[] = [];
   scopeBits.push(`targets ${channels} advertising channel${channels === 1 ? "" : "s"}`);
@@ -567,10 +714,80 @@ export function recommendationSummary(answers: CalculatorAnswers, result: Calcul
   return `Your campaign ${foundation}, ${scopeBits.join(", ")}. ${consequence}`;
 }
 
+/**
+ * Names the levers behind the number, so a large total reads as a set of
+ * planning decisions rather than a fixed price.
+ */
+export function planLevers(answers: CalculatorAnswers, result: CalculationResult): string {
+  const drivers: string[] = [];
+  const isAwarenessGoal = answers.objective === "awareness" && answers.financial.mode === "goal";
+  const goal = num(answers.financial.goalCount) ?? 0;
+
+  if (isAwarenessGoal && goal > 0) drivers.push("the scale of the audience you want to reach");
+  else if (answers.scope.audience === "over-1m" || answers.scope.audience === "100k-1m") drivers.push("the size of the audience");
+  if (result.readiness.gaps.essential.length >= 2) drivers.push("the fact that essential campaign components still need to be created");
+  if (answers.scope.channels.length >= 3) drivers.push("the number of channels selected");
+
+  const levers: string[] = [];
+  if (isAwarenessGoal && goal > 0) levers.push("reducing the reach or frequency");
+  if (answers.scope.channels.length >= 2) levers.push("narrowing the channel mix");
+  if (result.readiness.gaps.essential.length >= 1 || result.readiness.needsReview >= 1) levers.push("using existing campaign assets");
+  if (levers.length === 0) levers.push("adjusting the scope");
+
+  // Drivers are all true at once ("and"); levers are alternatives ("or").
+  const driverText = drivers.length > 0
+    ? `This scenario reflects ${joinList(drivers, "and")}.`
+    : "This scenario reflects the scope you described.";
+  return `${driverText} ${capitalize(joinList(levers, "or"))} would change the recommendation.`;
+}
+
+function joinList(items: string[], conjunction: "and" | "or" = "and"): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  // A pair normally reads "A and B", but when an item already contains its own
+  // conjunction ("the reach or frequency") the comma keeps the split clear.
+  if (items.length === 2) {
+    const needsComma = items.some((i) => / (and|or) /.test(i));
+    return `${items[0]}${needsComma ? "," : ""} ${conjunction} ${items[1]}`;
+  }
+  return `${items.slice(0, -1).join(", ")}, ${conjunction} ${items[items.length - 1]}`;
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Results copy that separates confirmed requirements from possible needs, so a
+ * recommended-but-unconfirmed asset never reads as a mandatory purchase.
+ */
+export function readinessNarrative(result: ReadinessResult): string {
+  const bandMeta = READINESS_BANDS.find((b) => b.band === result.band);
+  const label = (k: ReadinessKey) => readinessItemMeta(k).label.toLowerCase();
+
+  const parts: string[] = [bandMeta?.summary ?? ""];
+
+  if (result.gaps.essential.length > 0) {
+    const names = result.gaps.essential.slice(0, 4).map(label);
+    const more = result.gaps.essential.length - names.length;
+    // Fold the overflow count into the list so it gets one conjunction, not two.
+    const items = more > 0 ? [...names, `${more} more`] : names;
+    parts.push(`Based on your answers, ${joinList(items)} need attention before launch.`);
+  }
+  if (result.gaps.recommended.length > 0) {
+    const names = result.gaps.recommended.slice(0, 3).map(label);
+    parts.push(
+      `${capitalize(joinList(names))} ${names.length === 1 ? "is" : "are"} recommended because of the channels selected, but the exact requirements should be confirmed during campaign planning.`,
+    );
+  }
+  if (result.gaps.essential.length === 0 && result.gaps.recommended.length === 0) {
+    parts.push("Nothing essential is outstanding, so the plan leans toward distribution and optimization.");
+  }
+  return parts.filter(Boolean).join(" ");
+}
+
 // ── Full calculation ────────────────────────────────────────────────────────────
 
 export function calculate(answers: CalculatorAnswers): CalculationResult {
-  const readiness = readinessScore(answers.readiness);
+  const readiness = readinessScore(answers);
   const scenarios = {
     essential: buildScenario(answers, "essential"),
     growth:    buildScenario(answers, "growth"),
@@ -585,7 +802,12 @@ export function calculate(answers: CalculatorAnswers): CalculationResult {
     if (budget > 0 && budget < ASSUMPTIONS.essentialBudgetCutoff) recommendedScenario = "essential";
   }
 
-  return { readiness, scenarios, recommendedScenario, insights: categoryInsights(answers) };
+  // Contradictions are judged against the recommendation itself. While one is
+  // open the UI withholds the "Recommended" badge: endorsing a plan built on an
+  // assumption we can already see is wrong would cost the tool its credibility.
+  const contradictions = balanceNotes(answers, scenarios[recommendedScenario]).filter((n) => n.critical);
+
+  return { readiness, scenarios, recommendedScenario, insights: categoryInsights(answers), contradictions };
 }
 
 // ── Shareable text summary ──────────────────────────────────────────────────────

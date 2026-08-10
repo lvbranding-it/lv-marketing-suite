@@ -3,19 +3,22 @@
 // comes from the engine; this file never computes an allocation itself.
 
 import { useMemo, useState } from "react";
-import { Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
+import { AlertTriangle, Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CATEGORIES, formatMoney, scenarioMeta } from "@/lib/campaign/config";
 import {
-  allocationAmounts, displayPercents, recommendationSummary, scenarioRationale,
-  shareStatus, suggestedRange,
+  allocationAmounts, displayPercents, planLevers, recommendationSummary,
+  scenarioRationale, shareStatus, suggestedRange,
 } from "@/lib/campaign/engine";
 import type {
   CalculationResult, CalculatorAnswers, CategoryKey, ScenarioKey, Shares,
 } from "@/lib/campaign/types";
 import AllocationDonut from "./AllocationDonut";
 import { StatusBadge } from "./shared";
+
+/** Splices a standalone sentence into the middle of another one. */
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 interface ResultsDashboardProps {
   answers:        CalculatorAnswers;
@@ -48,6 +51,10 @@ export default function ResultsDashboard({
   const amounts = useMemo(() => allocationAmounts(plan.total, currentShares), [plan.total, currentShares]);
   const pcts = useMemo(() => displayPercents(currentShares), [currentShares]);
   const summary = useMemo(() => recommendationSummary(answers, result), [answers, result]);
+  const levers = useMemo(() => planLevers(answers, result), [answers, result]);
+  // While a contradiction is open we show the scenarios for comparison but stop
+  // short of endorsing one.
+  const hasContradiction = result.contradictions.length > 0;
 
   const copy = async () => {
     const ok = await onCopySummary();
@@ -59,6 +66,22 @@ export default function ResultsDashboard({
 
   return (
     <div className="space-y-4">
+      {/* A contradiction we can already see makes any recommendation misleading. */}
+      {hasContradiction && (
+        <div role="status" className="rounded-xl border border-primary/40 bg-accent/50 px-4 py-3">
+          <p className="flex items-start gap-2 text-xs leading-relaxed">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              <span className="font-semibold text-foreground">Your plan contains an assumption that needs review.</span>{" "}
+              The investment scenarios are available for comparison, but{" "}
+              {result.contradictions.length === 1
+                ? lowerFirst(result.contradictions[0].text)
+                : "several answers conflict with each other."}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* ── Scenario selector (doubles as the scenario comparison) ── */}
       <div role="radiogroup" aria-label="Investment scenario" className="grid gap-2 sm:grid-cols-3">
         {(["essential", "growth", "expansion"] as ScenarioKey[]).map((key) => {
@@ -87,9 +110,15 @@ export default function ResultsDashboard({
                 <div className="flex items-center justify-between gap-2">
                   <p className={cn("text-sm font-bold", isSelected && "text-primary")}>{meta.label}</p>
                   {isRecommended && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                      <Star size={9} aria-hidden="true" /> Recommended
-                    </span>
+                    hasContradiction ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/50 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        <AlertTriangle size={9} aria-hidden="true" /> Review assumptions
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                        <Star size={9} aria-hidden="true" /> Recommended
+                      </span>
+                    )
                   )}
                 </div>
                 <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(scenario.total)}</p>
@@ -113,12 +142,14 @@ export default function ResultsDashboard({
         })}
       </div>
 
-      {/* Why this recommendation: ties the numbers back to the user's answers */}
+      {/* Why this recommendation: ties the numbers back to the user's answers,
+          then names the levers so a large total reads as a decision, not a price. */}
       <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
           <span className="font-semibold text-foreground">Why this recommendation:</span>{" "}
           {summary}
         </p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{levers}</p>
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">

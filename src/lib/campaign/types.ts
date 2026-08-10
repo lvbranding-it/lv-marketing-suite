@@ -20,18 +20,41 @@ export type AudienceBand = "unknown" | "under-10k" | "10k-100k" | "100k-1m" | "o
 
 export type FinancialMode = "budget" | "goal";
 
+/** Where the campaign sends people, which decides the destination components. */
+export type DestinationKey =
+  | "landing-page" | "lead-form" | "buy-online" | "physical-location"
+  | "event-registration" | "call-message" | "none";
+
 /** The six allocation categories, in donut ring order. */
 export type CategoryKey =
   | "strategy" | "creative" | "digital" | "media" | "management" | "testing";
 
 export type ScenarioKey = "essential" | "growth" | "expansion";
 
-export type ReadinessKey =
-  | "positioning" | "message" | "visualIdentity" | "photography" | "video"
-  | "graphics" | "adCopy" | "landingPage" | "captureFlow" | "tracking";
+// ── Campaign readiness ──────────────────────────────────────────────────────────
+// Readiness is not a checklist of things to own. Which components matter depends
+// on the objective, the channels, and where the campaign sends people, and
+// "we have it" is not the same as "it is ready to use".
 
-export type ReadinessBand =
-  | "foundation" | "partial" | "ready" | "scale";
+export type ReadinessGroupKey = "foundation" | "creative" | "destination" | "measurement";
+
+export type ReadinessKey =
+  // Campaign foundation
+  | "positioning" | "objectiveOffer" | "message" | "visualIdentity"
+  // Creative assets
+  | "photography" | "video" | "graphics" | "adCopy"
+  // Campaign destination
+  | "landingPage" | "leadForm" | "checkoutFlow" | "eventPage"
+  // Measurement and optimization
+  | "tracking" | "analytics" | "pixels" | "successMetrics";
+
+/** How ready one component is. `null` means the user hasn't answered yet. */
+export type ReadinessState = "ready" | "review" | "create" | "unsure";
+
+/** How much this component matters for THIS campaign. Computed, never asked. */
+export type ComponentRelevance = "essential" | "recommended" | "optional" | "not-required";
+
+export type ReadinessBand = "foundation" | "partial" | "ready" | "scale";
 
 export type CurrencyCode = "USD";
 
@@ -80,21 +103,38 @@ export interface FinancialAnswers {
 }
 
 export interface CalculatorAnswers {
-  profile:   ProfileAnswers;
-  objective: ObjectiveKey | null;
-  scope:     ScopeAnswers;
-  readiness: Record<ReadinessKey, boolean>;
-  financial: FinancialAnswers;
+  profile:     ProfileAnswers;
+  objective:   ObjectiveKey | null;
+  scope:       ScopeAnswers;
+  /** What people should do after seeing the campaign. Drives destination relevance. */
+  destination: DestinationKey | null;
+  readiness:   Record<ReadinessKey, ReadinessState | null>;
+  financial:   FinancialAnswers;
 }
 
 /** Category shares as decimals; a valid set always sums to 1 (±1e-9). */
 export type Shares = Record<CategoryKey, number>;
 
+/** One component, with how much it matters here and how ready it is. */
+export interface ComponentAssessment {
+  key:       ReadinessKey;
+  relevance: ComponentRelevance;
+  /** Plain-language justification, e.g. "You selected YouTube…". */
+  reason?:   string;
+  state:     ReadinessState | null;
+}
+
 export interface ReadinessResult {
-  /** 0–100 */
-  score:   number;
-  band:    ReadinessBand;
-  missing: ReadinessKey[];
+  /** 0–100, weighted by relevance; components that don't apply are excluded. */
+  score:          number;
+  band:           ReadinessBand;
+  assessments:    ComponentAssessment[];
+  essentialTotal: number;
+  essentialReady: number;
+  /** Applicable components sitting at "needs review" or "not sure". */
+  needsReview:    number;
+  /** Applicable components that are not ready, split by how much they matter. */
+  gaps:           { essential: ReadinessKey[]; recommended: ReadinessKey[] };
 }
 
 export interface BreakEvenResult {
@@ -129,6 +169,11 @@ export interface BalanceNote {
   id:   string;
   tone: "info" | "attention";
   text: string;
+  /**
+   * A contradiction serious enough that recommending a plan would be misleading.
+   * Suppresses the "Recommended" badge until the user resolves it.
+   */
+  critical?: boolean;
 }
 
 export interface CategoryInsight {
@@ -142,4 +187,6 @@ export interface CalculationResult {
   scenarios:           Record<ScenarioKey, ScenarioPlan>;
   recommendedScenario: ScenarioKey;
   insights:            CategoryInsight[];
+  /** Critical contradictions in the answers; non-empty suppresses the recommendation. */
+  contradictions:      BalanceNote[];
 }

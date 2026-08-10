@@ -24,8 +24,10 @@ src/lib/campaign/
   types.ts                              All shared types (percentages are decimals)
   config.ts                             EVERY business assumption lives here
   engine.ts                             Pure calculation functions (no React/DOM)
-  persist.ts                            localStorage save/load (key lv-campaign-calculator:v1)
-  engine.test.ts                        36 vitest tests over the engine
+  validate.ts                           Step validation (pure; shared with persist)
+  persist.ts                            localStorage + schema migration (key :v2)
+  engine.test.ts                        Engine tests
+  persist.test.ts                       Migration and restore-validation tests
 ```
 
 The route is registered in `src/App.tsx` beside the other public tools
@@ -64,10 +66,14 @@ Base formula: `Total = Strategy + Creative + Digital + Media + Management + Test
    larger than the stated audience size, a local market paired with an audience
    over 1 million, and very large scale compressed into 30 days, alongside the
    structural checks (media-heavy allocations, missing tracking or landing page,
-   more channels than the media budget supports, thin testing reserves).
+   more channels than the media budget supports, thin testing reserves). The first
+   two are marked `critical` and suppress the recommendation (see below).
 8. **Explanations**: `scenarioRationale` explains each scenario's total in one
-   sentence ("Why this amount?"), and `recommendationSummary` ties the overall
-   recommendation back to the user's own answers on the results screen.
+   sentence ("Why this amount?"), `recommendationSummary` ties the recommendation
+   back to the user's answers, `planLevers` names what would change the number
+   (reach, frequency, channel mix, existing assets) so a large total reads as a
+   planning decision rather than a price, and `readinessNarrative` separates
+   confirmed requirements from possible needs.
 
 The business profile asks who the campaign speaks to (businesses, consumers, both,
 or donors/members/communities) rather than mixing business models with industries;
@@ -92,12 +98,59 @@ planning assumption, notably:
 
 ## How readiness affects recommendations
 
-Ten yes/no items produce a 0–100 score (bands: <40 Foundation required,
-40–64 Partially prepared, 65–84 Campaign ready, ≥85 Scale ready). Each missing item
-adds points to its category **before** normalisation, so missing photography grows
-creative, a missing landing page grows digital experience, and a complete
-foundation shifts weight to media. The results page explains exactly which items
-moved which allocation ("Shaped by your answers"), so there is no unexplained penalty.
+Readiness is **not** a checklist of assets to own. Sixteen components are grouped by
+function (campaign foundation, creative assets, campaign destination, measurement),
+and for each one the engine computes a *relevance* for this specific campaign from
+the objective, the selected channels, and the campaign destination:
+
+| Relevance | Score weight | Gap multiplier |
+|---|---|---|
+| Essential | 3 | 1.0 |
+| Recommended | 2 | 0.6 |
+| Optional | 1 | 0.25 |
+| Not required | excluded | 0 |
+
+Each component then carries a four-state answer: **Ready to use** (100% of its
+weight), **Exists but needs review** (50%), **Not sure** (25%), **Needs to be
+created** (0%). Unanswered counts as 0 and the UI says so.
+
+`score = Σ(weight × state) / Σ(weight) × 100`, so a Google Search campaign is never
+marked down for having no video (video is excluded when no selected channel can run
+it), and a Meta lead campaign can skip the landing page when every selected channel
+hosts forms natively. Relevance rules live in `engine.ts → componentAssessments`;
+the channel capability sets and destination rules they consult are in `config.ts`.
+
+Allocation impact scales with both the gap and the relevance:
+`points = item.points × (1 − stateScore) × relevanceGapMultiplier`. A missing video
+therefore moves the plan only in proportion to how much this campaign needs video.
+
+The campaign **destination** ("Where should people go…") is asked at the top of the
+readiness step because it decides which destination components apply at all.
+
+## Contradictions and the recommendation
+
+`balanceNotes` marks some notes `critical` (a reach goal larger than the stated
+audience; a local market with an audience over 1 million). `calculate` collects
+these into `result.contradictions`. While that array is non-empty the results screen
+replaces the **Recommended** badge with **Review assumptions** and shows a notice
+above the scenarios. Scenarios stay visible for comparison; only the endorsement is
+withheld. Resolving the contradiction restores the badge automatically.
+
+## Schema migration
+
+The stored shape is versioned (`lv-campaign-calculator:v2`). On load, a v1 record is
+migrated where meaning carries over (`businessType: "b2b"` → `audienceFocus:
+"businesses"`, old industries → the shorter list, `true` → `"ready"`, v1's single
+capture-flow answer → both lead form and checkout) and dropped where it doesn't
+(v1's "Event or experience" described a campaign type, not an audience, so it
+becomes null rather than a guess). The v1 record is then deleted so migration runs
+once.
+
+`loadState` also takes the step validator and re-checks every step the restored
+position claims to have passed, pulling the user back to the first one that fails.
+This is why a session saved before a question existed can never resume on a results
+screen built from answers that were never given. It is generic, so it protects
+against future schema changes too.
 
 ## How scenarios are generated
 
@@ -148,7 +201,9 @@ There is no repo-wide linter configured, so no lint step exists.
 - UI flow is verified manually/by browser automation; there is no DOM test
   infrastructure in the repo, so interface tests are not automated.
 - Single currency (USD). `config.ts → CURRENCIES` is structured for more.
-- Default unit economics are deliberately generic, not per-industry.
+- Default unit economics are deliberately generic, not per-industry. **The awareness
+  defaults ($15 CPM, frequency 3) and the essential/recommended relevance tiering are
+  the assumptions most worth LV Branding's review before launch.**
 - The donut's hover and keyboard focus both drive the centre label; when a mouse
   rests on the chart while focus moves, hover wins (info is always available in
   the controls and table regardless).

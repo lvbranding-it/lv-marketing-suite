@@ -3,134 +3,39 @@
 // so typing is never interrupted. All business math lives in src/lib/campaign.
 
 import { useState } from "react";
-import { z } from "zod";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import {
   ASSUMPTIONS, AUDIENCE_BANDS, AUDIENCE_FOCUS_OPTIONS, BUSINESS_STAGES, CHANNELS,
-  CURRENCIES, DURATION_PRESETS, INDUSTRIES, MARKET_REACHES, OBJECTIVES,
-  READINESS_BANDS, READINESS_ITEMS, formatMoney, objectiveMeta,
+  CURRENCIES, DESTINATIONS, DURATION_PRESETS, INDUSTRIES, MARKET_REACHES,
+  OBJECTIVES, READINESS_BANDS, READINESS_GROUPS, READINESS_STATES,
+  RELEVANCE_LABELS, formatMoney, objectiveMeta, readinessItemMeta,
 } from "@/lib/campaign/config";
-import { readinessScore } from "@/lib/campaign/engine";
+import { componentAssessments, readinessScore } from "@/lib/campaign/engine";
+import { validateStep, type StepErrors } from "@/lib/campaign/validate";
 import type {
-  CalculatorAnswers, ChannelKey, CurrencyCode, FinancialMode, ObjectiveKey,
+  CalculatorAnswers, ChannelKey, ComponentAssessment, ComponentRelevance,
+  CurrencyCode, FinancialMode, ObjectiveKey, ReadinessKey, ReadinessState,
 } from "@/lib/campaign/types";
 import {
-  Field, NumberField, OptionCards, StatementToggle, ToggleChips,
+  Field, NumberField, OptionCards, ToggleChips,
   formatNumericInput, parseMoney, parsePercent,
 } from "./shared";
 
-export const STEP_LABELS = ["Profile", "Objective", "Scope", "Readiness", "Investment", "Review"];
+export { validateStep };
+export type { StepErrors };
 
-export type StepErrors = Record<string, string>;
+export const STEP_LABELS = ["Profile", "Objective", "Scope", "Readiness", "Investment", "Review"];
 
 interface StepProps {
   answers:  CalculatorAnswers;
   onChange: React.Dispatch<React.SetStateAction<CalculatorAnswers>>;
   errors:   StepErrors;
-}
-
-// ── Validation ──────────────────────────────────────────────────────────────────
-
-const moneyBounds = z.number()
-  .min(ASSUMPTIONS.minBudget, `Enter at least ${formatMoney(ASSUMPTIONS.minBudget)} to build a meaningful plan.`)
-  .max(ASSUMPTIONS.maxBudget, "That budget is above what this planner supports. Contact us directly for engagements at that scale.");
-
-const goalBounds = z.number()
-  .min(ASSUMPTIONS.minGoal, "Enter a goal of at least 1.")
-  .max(ASSUMPTIONS.maxGoal, "That goal is above what this planner supports.");
-
-const costBounds = z.number()
-  .min(ASSUMPTIONS.minCostPerResult, "Cost must be above zero.")
-  .max(ASSUMPTIONS.maxCostPerResult, "That cost looks too high. Double-check the number.");
-
-const conversionBounds = z.number()
-  .min(ASSUMPTIONS.minConversion, "Conversion rate must be above 0%.")
-  .max(ASSUMPTIONS.maxConversion, "Conversion rate can't exceed 100%.");
-
-const marginBounds = z.number()
-  .min(ASSUMPTIONS.minMargin, "Margin must be above 0%.")
-  .max(ASSUMPTIONS.maxMargin, "Margins above 95% are outside typical planning ranges.");
-
-const frequencyBounds = z.number()
-  .min(ASSUMPTIONS.minFrequency, "Frequency must be at least 1.")
-  .max(ASSUMPTIONS.maxFrequency, "A frequency above 20 is outside typical planning ranges.");
-
-function boundsError(schema: z.ZodType<number>, value: number): string | null {
-  const parsed = schema.safeParse(value);
-  if (parsed.success) return null;
-  return parsed.error.issues[0]?.message ?? "Check this value.";
-}
-
-export function validateStep(step: number, answers: CalculatorAnswers): StepErrors {
-  const errors: StepErrors = {};
-
-  if (step === 0) {
-    if (!answers.profile.audienceFocus) errors.audienceFocus = "Choose who this campaign primarily speaks to.";
-    if (!answers.profile.stage) errors.stage = "Choose your business stage.";
-    if (!answers.profile.reach) errors.reach = "Choose your market reach.";
-    if (!answers.profile.industry) errors.industry = "Choose an industry. “Other” works fine.";
-  }
-
-  if (step === 1 && !answers.objective) {
-    errors.objective = "Choose the single outcome that matters most for this campaign.";
-  }
-
-  if (step === 2) {
-    if (!answers.scope.durationDays || answers.scope.durationDays < 7) errors.duration = "Campaigns shorter than a week rarely produce readable results. Enter at least 7 days.";
-    if (answers.scope.durationDays > 730) errors.duration = "Enter a duration of two years or less.";
-    if (answers.scope.channels.length === 0) errors.channels = "Select at least one advertising channel.";
-  }
-
-  if (step === 4) {
-    const fin = answers.financial;
-    if (fin.mode === "budget") {
-      if (fin.budgetTotal === null) errors.budgetTotal = "Enter your total available campaign budget.";
-      else {
-        const e = boundsError(moneyBounds, fin.budgetTotal);
-        if (e) errors.budgetTotal = e;
-      }
-      if (fin.expectedRevenue !== null && fin.expectedRevenue < 0) errors.expectedRevenue = "Revenue can't be negative.";
-    } else {
-      if (fin.goalCount === null) errors.goalCount = "Enter the result you're aiming for.";
-      else {
-        const e = boundsError(goalBounds, fin.goalCount);
-        if (e) errors.goalCount = e;
-      }
-      if (fin.costPerResult === null) errors.costPerResult = "Enter a cost estimate, or use the planning assumption.";
-      else {
-        const e = boundsError(costBounds, fin.costPerResult);
-        if (e) errors.costPerResult = e;
-      }
-      const needsConversion = answers.objective ? objectiveMeta(answers.objective).usesLeadStep : false;
-      if (needsConversion) {
-        if (fin.conversionRate === null) errors.conversionRate = "Enter a conversion rate, or use the planning assumption.";
-        else {
-          const e = boundsError(conversionBounds, fin.conversionRate);
-          if (e) errors.conversionRate = e;
-        }
-      }
-      const needsFrequency = answers.objective ? objectiveMeta(answers.objective).perThousand : false;
-      if (needsFrequency) {
-        if (fin.targetFrequency === null) errors.targetFrequency = "Enter a target frequency, or use the planning assumption.";
-        else {
-          const e = boundsError(frequencyBounds, fin.targetFrequency);
-          if (e) errors.targetFrequency = e;
-        }
-      }
-    }
-    if (answers.financial.avgValue !== null && answers.financial.avgValue <= 0) errors.avgValue = "Average value must be above zero.";
-    if (answers.financial.marginPct !== null) {
-      const e = boundsError(marginBounds, answers.financial.marginPct);
-      if (e) errors.marginPct = e;
-    }
-  }
-
-  return errors;
 }
 
 // ── Step 1: Business profile ────────────────────────────────────────────────────
@@ -319,27 +224,143 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
 
 // ── Step 4: Campaign readiness ──────────────────────────────────────────────────
 
-export function ReadinessStep({ answers, onChange }: StepProps) {
-  const set = (key: keyof typeof answers.readiness, value: boolean) =>
-    onChange((prev) => ({ ...prev, readiness: { ...prev.readiness, [key]: value } }));
+const RELEVANCE_CHIP: Record<ComponentRelevance, string> = {
+  essential:      "bg-accent text-accent-foreground",
+  recommended:    "bg-muted text-muted-foreground",
+  optional:       "bg-muted/60 text-muted-foreground",
+  "not-required": "bg-muted/60 text-muted-foreground",
+};
+
+/** One component: relevance, why it applies, and a four-state readiness choice. */
+function ReadinessRow({
+  assessment, onSelect,
+}: {
+  assessment: ComponentAssessment;
+  onSelect: (state: ReadinessState) => void;
+}) {
+  const item = readinessItemMeta(assessment.key);
+  const groupId = `readiness-${assessment.key}`;
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Check everything you <strong className="text-foreground">already have and could use in this campaign
-        today</strong>. Anything unchecked isn't a problem; it becomes a planning consideration
-        in your investment plan.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {READINESS_ITEMS.map((item) => (
-          <StatementToggle
-            key={item.key}
-            label={item.label}
-            checked={answers.readiness[item.key]}
-            onChange={(v) => set(item.key, v)}
-          />
-        ))}
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span id={groupId} className="text-xs font-semibold">{item.label}</span>
+        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", RELEVANCE_CHIP[assessment.relevance])}>
+          {RELEVANCE_LABELS[assessment.relevance]}
+        </span>
       </div>
+      {assessment.reason && (
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{assessment.reason}</p>
+      )}
+      <div role="radiogroup" aria-labelledby={groupId} className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {READINESS_STATES.map((state) => {
+          const active = assessment.state === state.key;
+          return (
+            <button
+              key={state.key}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`${item.label}: ${state.label}`}
+              onClick={() => onSelect(state.key)}
+              className={cn(
+                "min-h-9 rounded-md border px-2 py-1.5 text-[11px] font-medium leading-tight transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                active
+                  ? "border-primary bg-accent text-accent-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40",
+              )}
+            >
+              {state.short}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function ReadinessStep({ answers, onChange, errors }: StepProps) {
+  const setState = (key: ReadinessKey, value: ReadinessState) =>
+    onChange((prev) => ({ ...prev, readiness: { ...prev.readiness, [key]: value } }));
+
+  const assessments = componentAssessments(answers);
+  const byKey = new Map(assessments.map((a) => [a.key, a]));
+  const applicable = assessments.filter((a) => a.relevance !== "not-required");
+  const notRequired = assessments.filter((a) => a.relevance === "not-required");
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Campaigns do not all require the same materials. Based on your objective and selected
+        channels, we've identified what is essential, recommended, or optional for this plan.
+        Tell us what can be used confidently today; if something exists but may need improvement,
+        select "Needs review."{" "}
+        <strong className="text-foreground">You do not need every item listed below.</strong>
+      </p>
+
+      {/* The destination decides which destination components matter, so it is
+          asked before the checklist rather than assumed. */}
+      <div>
+        <OptionCards
+          legend="Where should people go, or what should they do, after seeing the campaign?"
+          columns={2}
+          options={DESTINATIONS.map((d) => ({ value: d.key, label: d.label }))}
+          value={answers.destination}
+          onChange={(destination) => onChange((prev) => ({ ...prev, destination }))}
+          error={errors.destination}
+        />
+      </div>
+
+      {answers.destination && (
+        <>
+
+          {READINESS_GROUPS.map((group) => {
+            const rows = applicable.filter((a) => readinessItemMeta(a.key).group === group.key);
+            if (rows.length === 0) return null;
+            return (
+              <section key={group.key} className="space-y-2">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide">{group.label}</h3>
+                  <p className="text-[11px] text-muted-foreground">{group.blurb}</p>
+                </div>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {rows.map((a) => (
+                    <ReadinessRow
+                      key={a.key}
+                      assessment={byKey.get(a.key) as ComponentAssessment}
+                      onSelect={(state) => setState(a.key, state)}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          {notRequired.length > 0 && (
+            <details className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+              <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+                Not required for this plan ({notRequired.length})
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {notRequired.map((a) => (
+                  <li key={a.key} className="text-[11px] text-muted-foreground">
+                    {readinessItemMeta(a.key).label}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                These don't apply to the objective, channels, and destination you selected, so they
+                are excluded from your readiness score entirely.
+              </p>
+            </details>
+          )}
+
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Anything left unanswered is planned as though it still needs to be created.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -540,20 +561,49 @@ interface ReviewStepProps extends StepProps {
 export function ReviewStep({ answers, onJump }: ReviewStepProps) {
   const fin = answers.financial;
   const obj = answers.objective ? objectiveMeta(answers.objective) : null;
-  const readyCount = READINESS_ITEMS.filter((i) => answers.readiness[i.key]).length;
   const duration = DURATION_PRESETS.find((d) => d.days === answers.scope.durationDays && !answers.scope.customDuration)?.label
     ?? `${answers.scope.durationDays} days`;
 
-  const readinessBand = READINESS_BANDS.find((b) => b.band === readinessScore(answers.readiness).band);
-  const readinessPhrase = readyCount === 0
-    ? "Campaign foundation needs to be developed"
+  const ready = readinessScore(answers);
+  const readinessBand = READINESS_BANDS.find((b) => b.band === ready.band);
+  const readinessPhrase = ready.essentialReady === 0
+    ? "Campaign foundation requires development"
     : readinessBand?.label ?? "Partially prepared";
+
+  /**
+   * Awareness spend hinges on frequency, so the review spells the whole chain
+   * out: reach, frequency, CPM, and the resulting impressions.
+   */
+  const financialValue = (() => {
+    if (fin.mode === "budget") {
+      return `Budget-first · ${fin.budgetTotal !== null ? formatMoney(fin.budgetTotal) : "–"}`;
+    }
+    const goal = fin.goalCount;
+    const parts = ["Goal-first"];
+    if (obj?.perThousand) {
+      parts.push(`${goal !== null ? goal.toLocaleString() : "–"} audience reach`);
+      if (fin.targetFrequency !== null) parts.push(`Frequency ${fin.targetFrequency}`);
+      if (fin.costPerResult !== null) parts.push(`${formatMoney(fin.costPerResult)} CPM${fin.assumedCostPerResult ? " (assumption)" : ""}`);
+      if (goal !== null && fin.targetFrequency !== null) {
+        parts.push(`${Math.round(goal * fin.targetFrequency).toLocaleString()} estimated impressions`);
+      }
+      return parts.join(" · ");
+    }
+    parts.push(`${goal !== null ? goal.toLocaleString() : "–"} ${obj?.unitNoun ?? "results"}`);
+    if (fin.costPerResult !== null) {
+      parts.push(`${formatMoney(fin.costPerResult)} per ${obj?.usesLeadStep ? "lead" : obj?.unitSingular ?? "result"}${fin.assumedCostPerResult ? " (assumption)" : ""}`);
+    }
+    if (obj?.usesLeadStep && fin.conversionRate !== null) {
+      parts.push(`${Math.round(fin.conversionRate * 1000) / 10}% conversion`);
+    }
+    return parts.join(" · ");
+  })();
 
   const rows: { step: number; label: string; value: string }[] = [
     {
       step: 0, label: "Business",
       value: [
-        AUDIENCE_FOCUS_OPTIONS.find((o) => o.key === answers.profile.audienceFocus)?.label,
+        AUDIENCE_FOCUS_OPTIONS.find((o) => o.key === answers.profile.audienceFocus)?.label ?? "Audience not selected",
         BUSINESS_STAGES.find((s) => s.key === answers.profile.stage)?.label,
         MARKET_REACHES.find((r) => r.key === answers.profile.reach)?.label,
         answers.profile.industry,
@@ -564,13 +614,11 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
       step: 2, label: "Scope",
       value: `${duration} · ${answers.scope.channels.length} channel${answers.scope.channels.length === 1 ? "" : "s"} · ${answers.scope.timeSensitive ? "time-sensitive" : "always-on"}`,
     },
-    { step: 3, label: "Readiness", value: `${readinessPhrase} · ${readyCount} of ${READINESS_ITEMS.length} selected` },
     {
-      step: 4, label: "Financials",
-      value: fin.mode === "budget"
-        ? `Budget-first · ${fin.budgetTotal !== null ? formatMoney(fin.budgetTotal) : "–"}`
-        : `Goal-first · ${fin.goalCount !== null ? fin.goalCount.toLocaleString() : "–"} ${obj?.unitNoun ?? "results"} · ${fin.costPerResult !== null ? `${formatMoney(fin.costPerResult)} per ${obj?.perThousand ? "1,000 impressions (CPM)" : obj?.usesLeadStep ? "lead" : obj?.unitSingular ?? "result"}` : "–"}${obj?.perThousand && fin.targetFrequency !== null ? ` · frequency ${fin.targetFrequency}` : ""}${fin.assumedCostPerResult ? " (assumption)" : ""}`,
+      step: 3, label: "Readiness",
+      value: `${DESTINATIONS.find((d) => d.key === answers.destination)?.label ?? "Destination not selected"} · ${readinessPhrase} · ${ready.essentialReady} of ${ready.essentialTotal} essential component${ready.essentialTotal === 1 ? "" : "s"} ready`,
     },
+    { step: 4, label: "Financials", value: financialValue },
   ];
 
   return (

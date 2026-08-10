@@ -5,8 +5,8 @@
 
 import type {
   AudienceBand, AudienceFocus, BusinessStage, CategoryKey, ChannelKey,
-  CurrencyCode, MarketReach, ObjectiveKey, ReadinessBand, ReadinessKey,
-  ScenarioKey,
+  ComponentRelevance, CurrencyCode, DestinationKey, MarketReach, ObjectiveKey,
+  ReadinessBand, ReadinessGroupKey, ReadinessKey, ReadinessState, ScenarioKey,
 } from "./types";
 
 // ── Currency ────────────────────────────────────────────────────────────────────
@@ -106,38 +106,135 @@ export const ALLOCATION_RANGES: Record<CategoryKey, { base: [number, number]; ha
 };
 
 // ── Readiness ───────────────────────────────────────────────────────────────────
-// Weights sum to 100. `affects` is the category whose recommendation grows when
-// the item is missing; `points` is how many percentage points it adds (before
-// normalisation). `clause` feeds the explanation copy: planning language, not
-// judgment of the business.
+// Components are grouped by function, and how much each one matters is COMPUTED
+// per campaign (see engine.ts `componentAssessments`) rather than assumed. A
+// component that doesn't apply is excluded from the score entirely, so a Google
+// Search campaign is never marked down for lacking video.
+//
+// `affects` is the allocation category that grows when a component is not ready;
+// `points` is the percentage points it contributes at a full gap and full
+// relevance (scaled down for recommended/optional). `clause` feeds explanation copy.
 
 export interface ReadinessItemMeta {
   key:     ReadinessKey;
+  group:   ReadinessGroupKey;
   label:   string;
-  weight:  number;
   affects: CategoryKey;
   points:  number;
   clause:  string;
 }
 
-export const READINESS_ITEMS: ReadinessItemMeta[] = [
-  { key: "positioning",    label: "Clear brand positioning",            weight: 14, affects: "strategy", points: 3.0, clause: "brand positioning still needs to be defined" },
-  { key: "message",        label: "Defined campaign message",           weight: 12, affects: "strategy", points: 2.0, clause: "the campaign message still needs development" },
-  { key: "visualIdentity", label: "Professional visual identity",       weight: 10, affects: "creative", points: 1.8, clause: "visual identity work is still needed" },
-  { key: "photography",    label: "Photography ready to use",           weight: 8,  affects: "creative", points: 1.6, clause: "photography still needs to be produced" },
-  { key: "video",          label: "Video ready to use",                 weight: 8,  affects: "creative", points: 1.6, clause: "video still needs to be produced" },
-  { key: "graphics",       label: "Campaign graphics",                  weight: 8,  affects: "creative", points: 1.6, clause: "campaign graphics still need to be designed" },
-  { key: "adCopy",         label: "Advertising copy",                   weight: 8,  affects: "creative", points: 1.4, clause: "advertising copy still needs to be written" },
-  { key: "landingPage",    label: "Optimized landing page",             weight: 12, affects: "digital",  points: 4.0, clause: "the landing page still needs work" },
-  { key: "captureFlow",    label: "Lead-capture form or checkout flow", weight: 9,  affects: "digital",  points: 2.0, clause: "the lead-capture or purchase flow still needs work" },
-  { key: "tracking",       label: "Conversion tracking & analytics",    weight: 11, affects: "digital",  points: 2.0, clause: "conversion tracking is not in place yet" },
+export const READINESS_GROUPS: { key: ReadinessGroupKey; label: string; blurb: string }[] = [
+  { key: "foundation",  label: "Campaign foundation",         blurb: "The strategy everything else is built on." },
+  { key: "creative",    label: "Creative assets",             blurb: "What your selected channels need to show." },
+  { key: "destination", label: "Campaign destination",        blurb: "Where the campaign sends people." },
+  { key: "measurement", label: "Measurement and optimization", blurb: "How you will know whether it worked." },
 ];
+
+export const READINESS_ITEMS: ReadinessItemMeta[] = [
+  // Campaign foundation
+  { key: "positioning",    group: "foundation",  label: "Clear audience and positioning",    affects: "strategy", points: 3.0, clause: "audience and positioning still need to be defined" },
+  { key: "objectiveOffer", group: "foundation",  label: "Defined campaign objective and offer", affects: "strategy", points: 2.0, clause: "the campaign objective and offer still need to be defined" },
+  { key: "message",        group: "foundation",  label: "Campaign message",                  affects: "strategy", points: 2.0, clause: "the campaign message still needs development" },
+  { key: "visualIdentity", group: "foundation",  label: "Brand identity and visual direction", affects: "creative", points: 2.0, clause: "visual direction still needs work" },
+  // Creative assets
+  { key: "photography",    group: "creative",    label: "Photography",                       affects: "creative", points: 1.6, clause: "photography still needs to be produced" },
+  { key: "video",          group: "creative",    label: "Video",                             affects: "creative", points: 2.0, clause: "video still needs to be produced" },
+  { key: "graphics",       group: "creative",    label: "Campaign graphics",                 affects: "creative", points: 1.6, clause: "campaign graphics still need to be designed" },
+  { key: "adCopy",         group: "creative",    label: "Advertising copy",                  affects: "creative", points: 1.4, clause: "advertising copy still needs to be written" },
+  // Campaign destination
+  { key: "landingPage",    group: "destination", label: "Landing page",                      affects: "digital",  points: 3.0, clause: "the landing page still needs work" },
+  { key: "leadForm",       group: "destination", label: "Lead form",                         affects: "digital",  points: 1.6, clause: "the lead form still needs work" },
+  { key: "checkoutFlow",   group: "destination", label: "Ecommerce or checkout flow",        affects: "digital",  points: 2.0, clause: "the checkout flow still needs work" },
+  { key: "eventPage",      group: "destination", label: "Event registration page",           affects: "digital",  points: 1.6, clause: "the registration page still needs work" },
+  // Measurement and optimization
+  { key: "tracking",       group: "measurement", label: "Conversion tracking",               affects: "digital",  points: 1.8, clause: "conversion tracking is not in place yet" },
+  { key: "analytics",      group: "measurement", label: "Analytics",                         affects: "digital",  points: 1.2, clause: "analytics still need to be set up" },
+  { key: "pixels",         group: "measurement", label: "Advertising platform tracking or pixels", affects: "digital", points: 1.0, clause: "platform tracking still needs to be installed" },
+  { key: "successMetrics", group: "measurement", label: "Defined success metrics",           affects: "strategy", points: 1.0, clause: "success metrics still need to be agreed" },
+];
+
+export const readinessItemMeta = (key: ReadinessKey): ReadinessItemMeta =>
+  READINESS_ITEMS.find((i) => i.key === key) as ReadinessItemMeta;
+
+/** How ready one component is. `score` is the fraction of its weight it earns. */
+export const READINESS_STATES: { key: ReadinessState; label: string; short: string; score: number }[] = [
+  { key: "ready",  label: "Ready to use",            short: "Ready",       score: 1 },
+  { key: "review", label: "Exists, but needs review", short: "Needs review", score: 0.5 },
+  { key: "create", label: "Needs to be created",     short: "To create",   score: 0 },
+  { key: "unsure", label: "Not sure",                short: "Not sure",    score: 0.25 },
+];
+
+export const readinessStateMeta = (key: ReadinessState) =>
+  READINESS_STATES.find((s) => s.key === key) as (typeof READINESS_STATES)[number];
+
+/** Score weight per relevance tier. `not-required` is excluded from the score. */
+export const RELEVANCE_WEIGHTS: Record<ComponentRelevance, number> = {
+  essential: 3, recommended: 2, optional: 1, "not-required": 0,
+};
+
+/** How strongly a gap in this component pushes budget toward its category. */
+export const RELEVANCE_GAP_MULTIPLIER: Record<ComponentRelevance, number> = {
+  essential: 1, recommended: 0.6, optional: 0.25, "not-required": 0,
+};
+
+export const RELEVANCE_LABELS: Record<ComponentRelevance, string> = {
+  essential:      "Essential for this plan",
+  recommended:    "Recommended",
+  optional:       "Optional",
+  "not-required": "Not required",
+};
+
+// Channel capability sets. These drive which creative assets a campaign actually
+// needs, so the checklist responds to the channel mix instead of asking for
+// everything. [ASSUMPTION]
+export const CHANNELS_REQUIRING_VIDEO: ChannelKey[] = ["youtube", "tiktok"];
+export const CHANNELS_FAVOURING_VIDEO: ChannelKey[] = ["meta-facebook", "instagram", "programmatic"];
+/**
+ * Anywhere video can run at all. If none of the selected channels appear here,
+ * video is excluded from the plan rather than merely deprioritised: a text-only
+ * Search campaign should not be marked down for having no video.
+ */
+export const CHANNELS_SUPPORTING_VIDEO: ChannelKey[] =
+  ["youtube", "tiktok", "meta-facebook", "instagram", "programmatic", "google-display", "linkedin"];
+export const CHANNELS_REQUIRING_IMAGERY: ChannelKey[] =
+  ["google-display", "meta-facebook", "instagram", "programmatic", "tiktok"];
+/** Channels that can host a lead form natively, without a landing page. */
+export const CHANNELS_WITH_NATIVE_FORMS: ChannelKey[] =
+  ["meta-facebook", "instagram", "linkedin", "tiktok"];
+
+// ── Campaign destination ────────────────────────────────────────────────────────
+
+export const DESTINATIONS: { key: DestinationKey; label: string }[] = [
+  { key: "landing-page",       label: "Visit a landing page" },
+  { key: "lead-form",          label: "Complete a lead form" },
+  { key: "buy-online",         label: "Buy online" },
+  { key: "physical-location",  label: "Visit a physical location" },
+  { key: "event-registration", label: "Register for an event" },
+  { key: "call-message",       label: "Call or message the business" },
+  { key: "none",               label: "No direct action; this is an awareness campaign" },
+];
+
+/**
+ * Which destination components matter, per destination answer. Anything absent
+ * from a row is treated as `not-required` and excluded from the score. [ASSUMPTION]
+ */
+export const DESTINATION_RULES:
+  Record<DestinationKey, Partial<Record<ReadinessKey, ComponentRelevance>>> = {
+  "landing-page":       { landingPage: "essential",   leadForm: "optional" },
+  "lead-form":          { leadForm: "essential",      landingPage: "recommended" },
+  "buy-online":         { checkoutFlow: "essential",  landingPage: "recommended", leadForm: "optional" },
+  "physical-location":  { landingPage: "recommended", leadForm: "optional" },
+  "event-registration": { eventPage: "essential",     landingPage: "recommended", leadForm: "optional" },
+  "call-message":       { landingPage: "recommended", leadForm: "optional" },
+  "none":               { landingPage: "optional" },
+};
 
 export const READINESS_BANDS: { min: number; band: ReadinessBand; label: string; summary: string }[] = [
   { min: 85, band: "scale",      label: "Scale ready",        summary: "Your campaign foundation is in place. Most of your investment can go toward distribution and optimization." },
   { min: 65, band: "ready",      label: "Campaign ready",     summary: "The essentials exist. A modest foundation allocation keeps things sharp while media carries the plan." },
-  { min: 40, band: "partial",    label: "Partially prepared", summary: "Some foundation pieces exist and some don't. Your plan reserves investment for the missing components before scaling media." },
-  { min: 0,  band: "foundation", label: "Foundation required", summary: "Most campaign components still need development. Funding the message first will make every media dollar work harder." },
+  { min: 40, band: "partial",    label: "Partially prepared", summary: "Some pieces are ready and some are not. Your plan reserves investment for the components that still need attention before scaling media." },
+  { min: 0,  band: "foundation", label: "Foundation required", summary: "The components this campaign depends on still need development. Funding the message first will make every media dollar work harder." },
 ];
 
 // ── Objectives ──────────────────────────────────────────────────────────────────

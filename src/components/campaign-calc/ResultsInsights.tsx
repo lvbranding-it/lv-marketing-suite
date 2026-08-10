@@ -5,10 +5,12 @@
 import { AlertCircle, ArrowRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  CATEGORIES, READINESS_BANDS, READINESS_ITEMS, formatMoney, objectiveMeta,
+  CATEGORIES, DESTINATIONS, READINESS_BANDS, formatMoney, objectiveMeta,
   scenarioMeta,
 } from "@/lib/campaign/config";
-import { allocationAmounts, balanceNotes, displayPercents } from "@/lib/campaign/engine";
+import {
+  allocationAmounts, balanceNotes, displayPercents, readinessNarrative,
+} from "@/lib/campaign/engine";
 import type {
   BalanceNote, CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
 } from "@/lib/campaign/types";
@@ -16,9 +18,9 @@ import type {
 // ── Campaign readiness ──────────────────────────────────────────────────────────
 
 export function ReadinessCard({ result }: { result: CalculationResult }) {
-  const { score, band, missing } = result.readiness;
+  const { score, band, essentialReady, essentialTotal, needsReview } = result.readiness;
   const bandMeta = READINESS_BANDS.find((b) => b.band === band) ?? READINESS_BANDS[READINESS_BANDS.length - 1];
-  const missingLabels = missing.slice(0, 4).map((k) => READINESS_ITEMS.find((i) => i.key === k)?.label ?? k);
+  const narrative = readinessNarrative(result.readiness);
 
   return (
     <section aria-labelledby="readiness-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -48,15 +50,17 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
         <span>Foundation</span><span>Partial</span><span>Ready</span><span>Scale</span>
       </div>
 
-      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{bandMeta.summary}</p>
-      {missing.length > 0 && (
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          Your plan reserves investment for:{" "}
-          <span className="text-foreground">{missingLabels.join(", ").toLowerCase()}</span>
-          {missing.length > 4 && ` and ${missing.length - 4} more`}.
-          This isn't a judgment of the business; it's what keeps media spend from outrunning the message.
-        </p>
-      )}
+      <p className="mt-3 text-xs font-medium">
+        {essentialReady} of {essentialTotal} essential component{essentialTotal === 1 ? "" : "s"} {essentialTotal === 1 ? "is" : "are"} ready
+        {needsReview > 0 && (
+          <span className="font-normal text-muted-foreground"> · {needsReview} additional component{needsReview === 1 ? "" : "s"} require{needsReview === 1 ? "s" : ""} review</span>
+        )}
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{narrative}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        Only the components this campaign actually needs are scored. This isn't a judgment of the
+        business; it's what keeps media spend from outrunning the message.
+      </p>
     </section>
   );
 }
@@ -310,9 +314,14 @@ export function PrintReport({
         <p>
           <strong>Total investment: {formatMoney(plan.total)}</strong>
           {obj ? ` · Objective: ${obj.label}` : ""} · Duration: {answers.scope.durationDays} days ·
-          Channels selected: {answers.scope.channels.length} · Readiness: {result.readiness.score}/100
-          {bandMeta ? ` (${bandMeta.label})` : ""}
+          Channels selected: {answers.scope.channels.length}
+          {answers.destination ? ` · Destination: ${DESTINATIONS.find((d) => d.key === answers.destination)?.label}` : ""}
+          {" "}· Readiness: {result.readiness.score}/100{bandMeta ? ` (${bandMeta.label})` : ""},
+          {" "}{result.readiness.essentialReady} of {result.readiness.essentialTotal} essential components ready
         </p>
+        {result.contradictions.length > 0 && (
+          <p><strong>Assumption to review:</strong> {result.contradictions[0].text}</p>
+        )}
         <table style={{ width: "100%", borderCollapse: "collapse", margin: "14px 0" }}>
           <thead>
             <tr>

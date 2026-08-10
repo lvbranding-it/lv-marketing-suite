@@ -65,7 +65,9 @@ export default function CampaignCalculator() {
   const { toast } = useToast();
 
   // ── Persistent core state ─────────────────────────────────────────────────────
-  const restored = useRef(loadState());
+  // The validator is passed in so a restored session can never resume past a
+  // question whose answer no longer exists (e.g. after a taxonomy change).
+  const restored = useRef(loadState(validateStep));
   const [phase, setPhase]     = useState<Phase>(restored.current?.phase ?? "intro");
   const [step, setStep]       = useState(restored.current?.step ?? 0);
   const [answers, setAnswers] = useState<CalculatorAnswers>(restored.current?.answers ?? emptyAnswers());
@@ -74,6 +76,19 @@ export default function CampaignCalculator() {
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => { saveState({ answers, step, phase }); }, [answers, step, phase]);
+
+  // Clear errors the user has just resolved. Only ever removes messages, so
+  // validation still never interrupts someone mid-answer.
+  useEffect(() => {
+    setErrors((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      const current = validateStep(step, answers);
+      const remaining: StepErrors = {};
+      for (const key of keys) if (current[key]) remaining[key] = current[key];
+      return Object.keys(remaining).length === keys.length ? prev : remaining;
+    });
+  }, [answers, step]);
 
   // ── Results state ─────────────────────────────────────────────────────────────
   const result = useMemo(() => (phase === "results" ? calculate(answers) : null), [phase, answers]);
@@ -239,7 +254,7 @@ export default function CampaignCalculator() {
                   "Tell us about the business",
                   "What should this campaign achieve?",
                   "Shape the campaign",
-                  "What do you already have?",
+                  "What is ready for this campaign?",
                   "How would you like to plan your investment?",
                   "Review your answers",
                 ][step]}
