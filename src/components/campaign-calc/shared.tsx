@@ -183,6 +183,21 @@ export function parseMoney(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Live thousands formatting for numeric inputs: "1000000" renders as "1,000,000"
+ * while the user types. Decimals pass through untouched after the point.
+ */
+export function formatNumericInput(raw: string): string {
+  const cleaned = raw.replace(/[^\d.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimals] = cleaned.split(".");
+  if (!intPart) return cleaned; // the user just typed "."
+  const grouped = Number(intPart) > Number.MAX_SAFE_INTEGER
+    ? intPart
+    : Number(intPart).toLocaleString("en-US");
+  return decimals.length ? `${grouped}.${decimals.join("")}` : grouped;
+}
+
 /** "15", "15%", "15.5" → 0.155 as a decimal; unparsable → null. */
 export function parsePercent(raw: string): number | null {
   const cleaned = raw.replace(/[%\s]/g, "");

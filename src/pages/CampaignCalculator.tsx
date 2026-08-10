@@ -240,7 +240,7 @@ export default function CampaignCalculator() {
                   "What should this campaign achieve?",
                   "Shape the campaign",
                   "What do you already have?",
-                  "How do you want to plan the money?",
+                  "How would you like to plan your investment?",
                   "Review your answers",
                 ][step]}
               </h2>
@@ -271,6 +271,7 @@ export default function CampaignCalculator() {
             </div>
 
             <ResultsDashboard
+              answers={answers}
               result={result}
               selected={selected}
               onSelect={setSelected}

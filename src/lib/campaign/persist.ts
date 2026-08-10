@@ -15,15 +15,16 @@ export const EMPTY_READINESS: Record<ReadinessKey, boolean> = {
 
 export function emptyAnswers(): CalculatorAnswers {
   return {
-    profile: { businessType: null, stage: null, reach: null, industry: "", currency: "USD" },
+    profile: { audienceFocus: null, stage: null, reach: null, industry: "", currency: "USD" },
     objective: null,
     scope: { durationDays: 90, customDuration: false, channels: [], audience: "unknown", timeSensitive: false },
     readiness: { ...EMPTY_READINESS },
     financial: {
       mode: "budget",
       budgetTotal: null, expectedRevenue: null, goalCount: null,
-      avgValue: null, conversionRate: null, costPerResult: null, marginPct: null,
-      assumedConversion: false, assumedCostPerResult: false,
+      avgValue: null, conversionRate: null, costPerResult: null,
+      targetFrequency: null, marginPct: null,
+      assumedConversion: false, assumedCostPerResult: false, assumedFrequency: false,
     },
   };
 }

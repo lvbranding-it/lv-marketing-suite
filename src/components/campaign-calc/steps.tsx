@@ -11,16 +11,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  ASSUMPTIONS, AUDIENCE_BANDS, BUSINESS_STAGES, BUSINESS_TYPES, CHANNELS,
+  ASSUMPTIONS, AUDIENCE_BANDS, AUDIENCE_FOCUS_OPTIONS, BUSINESS_STAGES, CHANNELS,
   CURRENCIES, DURATION_PRESETS, INDUSTRIES, MARKET_REACHES, OBJECTIVES,
-  READINESS_ITEMS, formatMoney, objectiveMeta,
+  READINESS_BANDS, READINESS_ITEMS, formatMoney, objectiveMeta,
 } from "@/lib/campaign/config";
+import { readinessScore } from "@/lib/campaign/engine";
 import type {
   CalculatorAnswers, ChannelKey, CurrencyCode, FinancialMode, ObjectiveKey,
 } from "@/lib/campaign/types";
 import {
   Field, NumberField, OptionCards, StatementToggle, ToggleChips,
-  parseMoney, parsePercent,
+  formatNumericInput, parseMoney, parsePercent,
 } from "./shared";
 
 export const STEP_LABELS = ["Profile", "Objective", "Scope", "Readiness", "Investment", "Review"];
@@ -29,7 +30,7 @@ export type StepErrors = Record<string, string>;
 
 interface StepProps {
   answers:  CalculatorAnswers;
-  onChange: (next: CalculatorAnswers) => void;
+  onChange: React.Dispatch<React.SetStateAction<CalculatorAnswers>>;
   errors:   StepErrors;
 }
 
@@ -55,6 +56,10 @@ const marginBounds = z.number()
   .min(ASSUMPTIONS.minMargin, "Margin must be above 0%.")
   .max(ASSUMPTIONS.maxMargin, "Margins above 95% are outside typical planning ranges.");
 
+const frequencyBounds = z.number()
+  .min(ASSUMPTIONS.minFrequency, "Frequency must be at least 1.")
+  .max(ASSUMPTIONS.maxFrequency, "A frequency above 20 is outside typical planning ranges.");
+
 function boundsError(schema: z.ZodType<number>, value: number): string | null {
   const parsed = schema.safeParse(value);
   if (parsed.success) return null;
@@ -65,7 +70,7 @@ export function validateStep(step: number, answers: CalculatorAnswers): StepErro
   const errors: StepErrors = {};
 
   if (step === 0) {
-    if (!answers.profile.businessType) errors.businessType = "Choose the option closest to your organization.";
+    if (!answers.profile.audienceFocus) errors.audienceFocus = "Choose who this campaign primarily speaks to.";
     if (!answers.profile.stage) errors.stage = "Choose your business stage.";
     if (!answers.profile.reach) errors.reach = "Choose your market reach.";
     if (!answers.profile.industry) errors.industry = "Choose an industry. “Other” works fine.";
@@ -109,6 +114,14 @@ export function validateStep(step: number, answers: CalculatorAnswers): StepErro
           if (e) errors.conversionRate = e;
         }
       }
+      const needsFrequency = answers.objective ? objectiveMeta(answers.objective).perThousand : false;
+      if (needsFrequency) {
+        if (fin.targetFrequency === null) errors.targetFrequency = "Enter a target frequency, or use the planning assumption.";
+        else {
+          const e = boundsError(frequencyBounds, fin.targetFrequency);
+          if (e) errors.targetFrequency = e;
+        }
+      }
     }
     if (answers.financial.avgValue !== null && answers.financial.avgValue <= 0) errors.avgValue = "Average value must be above zero.";
     if (answers.financial.marginPct !== null) {
@@ -124,16 +137,18 @@ export function validateStep(step: number, answers: CalculatorAnswers): StepErro
 
 export function ProfileStep({ answers, onChange, errors }: StepProps) {
   const p = answers.profile;
-  const set = (patch: Partial<typeof p>) => onChange({ ...answers, profile: { ...p, ...patch } });
+  const set = (patch: Partial<typeof p>) =>
+    onChange((prev) => ({ ...prev, profile: { ...prev.profile, ...patch } }));
 
   return (
     <div className="space-y-6">
       <OptionCards
-        legend="What kind of organization is this for?"
-        options={BUSINESS_TYPES.map((b) => ({ value: b.key, label: b.label }))}
-        value={p.businessType}
-        onChange={(businessType) => set({ businessType })}
-        error={errors.businessType}
+        legend="Who do you primarily sell or communicate to?"
+        columns={2}
+        options={AUDIENCE_FOCUS_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+        value={p.audienceFocus}
+        onChange={(audienceFocus) => set({ audienceFocus })}
+        error={errors.audienceFocus}
       />
       <OptionCards
         legend="What stage is the business in?"
@@ -182,7 +197,7 @@ export function ObjectiveStep({ answers, onChange, errors }: StepProps) {
         legend="What is the one outcome this campaign exists to produce?"
         options={OBJECTIVES.map((o) => ({ value: o.key, label: o.label }))}
         value={answers.objective}
-        onChange={(objective: ObjectiveKey) => onChange({ ...answers, objective })}
+        onChange={(objective: ObjectiveKey) => onChange((prev) => ({ ...prev, objective }))}
         error={errors.objective}
       />
       <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -197,7 +212,8 @@ export function ObjectiveStep({ answers, onChange, errors }: StepProps) {
 
 export function ScopeStep({ answers, onChange, errors }: StepProps) {
   const s = answers.scope;
-  const set = (patch: Partial<typeof s>) => onChange({ ...answers, scope: { ...s, ...patch } });
+  const set = (patch: Partial<typeof s>) =>
+    onChange((prev) => ({ ...prev, scope: { ...prev.scope, ...patch } }));
   const isPreset = DURATION_PRESETS.some((d) => d.days === s.durationDays) && !s.customDuration;
 
   return (
@@ -261,7 +277,17 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
         options={CHANNELS.map((c) => ({ value: c.key, label: c.label }))}
         selected={s.channels}
         onToggle={(key: ChannelKey) =>
-          set({ channels: s.channels.includes(key) ? s.channels.filter((c) => c !== key) : [...s.channels, key] })
+          // Functional update all the way down: the toggle must read the channel
+          // list from prev state, not the render closure, or rapid taps drop picks.
+          onChange((prev) => ({
+            ...prev,
+            scope: {
+              ...prev.scope,
+              channels: prev.scope.channels.includes(key)
+                ? prev.scope.channels.filter((c) => c !== key)
+                : [...prev.scope.channels, key],
+            },
+          }))
         }
         hint={s.channels.length > 0 ? `${s.channels.length} selected. The plan will tell you how many your budget realistically supports.` : undefined}
         error={errors.channels}
@@ -295,7 +321,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
 
 export function ReadinessStep({ answers, onChange }: StepProps) {
   const set = (key: keyof typeof answers.readiness, value: boolean) =>
-    onChange({ ...answers, readiness: { ...answers.readiness, [key]: value } });
+    onChange((prev) => ({ ...prev, readiness: { ...prev.readiness, [key]: value } }));
 
   return (
     <div className="space-y-4">
@@ -354,20 +380,24 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
   const usesLeadStep = obj?.usesLeadStep ?? false;
 
   const [raw, setRaw] = useState<Record<string, string>>(() => ({
-    budgetTotal:     fin.budgetTotal !== null ? String(fin.budgetTotal) : "",
-    expectedRevenue: fin.expectedRevenue !== null ? String(fin.expectedRevenue) : "",
-    goalCount:       fin.goalCount !== null ? String(fin.goalCount) : "",
-    avgValue:        fin.avgValue !== null ? String(fin.avgValue) : "",
+    budgetTotal:     fin.budgetTotal !== null ? formatNumericInput(String(fin.budgetTotal)) : "",
+    expectedRevenue: fin.expectedRevenue !== null ? formatNumericInput(String(fin.expectedRevenue)) : "",
+    goalCount:       fin.goalCount !== null ? formatNumericInput(String(fin.goalCount)) : "",
+    avgValue:        fin.avgValue !== null ? formatNumericInput(String(fin.avgValue)) : "",
     conversionRate:  fin.conversionRate !== null ? String(Math.round(fin.conversionRate * 1000) / 10) : "",
     costPerResult:   fin.costPerResult !== null ? String(fin.costPerResult) : "",
+    targetFrequency: fin.targetFrequency !== null ? String(fin.targetFrequency) : "",
     marginPct:       fin.marginPct !== null ? String(Math.round(fin.marginPct * 1000) / 10) : "",
   }));
 
-  const setFin = (patch: Partial<typeof fin>) => onChange({ ...answers, financial: { ...fin, ...patch } });
+  const setFin = (patch: Partial<typeof fin>) =>
+    onChange((prev) => ({ ...prev, financial: { ...prev.financial, ...patch } }));
 
+  // Money and count fields get live thousands grouping ("1000000" shows as "1,000,000").
   const bindMoney = (key: keyof typeof fin & string) => (value: string) => {
-    setRaw((r) => ({ ...r, [key]: value }));
-    setFin({ [key]: parseMoney(value) } as Partial<typeof fin>);
+    const formatted = formatNumericInput(value);
+    setRaw((r) => ({ ...r, [key]: formatted }));
+    setFin({ [key]: parseMoney(formatted) } as Partial<typeof fin>);
   };
   const bindPercent = (key: "conversionRate" | "marginPct") => (value: string) => {
     setRaw((r) => ({ ...r, [key]: value }));
@@ -386,15 +416,20 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
     setRaw((r) => ({ ...r, conversionRate: String(obj.defaultConversion * 100) }));
     setFin({ conversionRate: obj.defaultConversion, assumedConversion: true });
   };
+  const useFrequencyAssumption = () => {
+    if (!obj?.defaultFrequency) return;
+    setRaw((r) => ({ ...r, targetFrequency: String(obj.defaultFrequency) }));
+    setFin({ targetFrequency: obj.defaultFrequency, assumedFrequency: true });
+  };
 
   return (
     <div className="space-y-6">
       <OptionCards
-        legend="How do you want to plan?"
+        legend="How would you like to plan?"
         columns={2}
         options={[
-          { value: "budget", label: "I have a budget and want to allocate it", hint: "Start from the money and split it well" },
-          { value: "goal", label: "I have a goal and want to estimate the investment", hint: "Start from the outcome and work backwards" },
+          { value: "budget", label: "I have a budget and want to allocate it", hint: "Start with your available investment and build a balanced allocation." },
+          { value: "goal", label: "I have a goal and want to estimate the investment", hint: "Start with your campaign objective and estimate what it may require." },
         ]}
         value={fin.mode}
         onChange={(mode) => setFin({ mode: mode as FinancialMode })}
@@ -419,11 +454,28 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
-            label={obj ? `Desired ${obj.unitNoun}` : "Desired results"}
-            placeholder="100"
+            label={obj?.goalLabel ?? (obj ? `Desired ${obj.unitNoun}` : "Desired results")}
+            placeholder={obj?.perThousand ? "1,000,000" : "100"}
             value={raw.goalCount} onChange={bindMoney("goalCount")}
             error={errors.goalCount}
           />
+          {obj?.perThousand && (
+            <NumberField
+              label="Target frequency"
+              placeholder={String(obj.defaultFrequency ?? 3)}
+              value={raw.targetFrequency}
+              onChange={(v) => { setRaw((r) => ({ ...r, targetFrequency: v })); setFin({ targetFrequency: parseMoney(v), assumedFrequency: false }); }}
+              error={errors.targetFrequency}
+              hint="Frequency is the average number of times each person may see the campaign. Brand-awareness campaigns commonly require repeated exposure to build recognition."
+              extra={
+                <AssumptionRow
+                  active={fin.assumedFrequency}
+                  explanation="A CPM buys impressions, not people, so reach times frequency is what actually sizes the media budget."
+                  onUse={useFrequencyAssumption}
+                />
+              }
+            />
+          )}
           <NumberField
             label={obj?.costLabel ?? "Estimated cost per result"}
             prefix="$" placeholder={obj ? String(obj.defaultCostPerResult) : "45"}
@@ -492,11 +544,16 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
   const duration = DURATION_PRESETS.find((d) => d.days === answers.scope.durationDays && !answers.scope.customDuration)?.label
     ?? `${answers.scope.durationDays} days`;
 
+  const readinessBand = READINESS_BANDS.find((b) => b.band === readinessScore(answers.readiness).band);
+  const readinessPhrase = readyCount === 0
+    ? "Campaign foundation needs to be developed"
+    : readinessBand?.label ?? "Partially prepared";
+
   const rows: { step: number; label: string; value: string }[] = [
     {
       step: 0, label: "Business",
       value: [
-        BUSINESS_TYPES.find((b) => b.key === answers.profile.businessType)?.label,
+        AUDIENCE_FOCUS_OPTIONS.find((o) => o.key === answers.profile.audienceFocus)?.label,
         BUSINESS_STAGES.find((s) => s.key === answers.profile.stage)?.label,
         MARKET_REACHES.find((r) => r.key === answers.profile.reach)?.label,
         answers.profile.industry,
@@ -507,12 +564,12 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
       step: 2, label: "Scope",
       value: `${duration} · ${answers.scope.channels.length} channel${answers.scope.channels.length === 1 ? "" : "s"} · ${answers.scope.timeSensitive ? "time-sensitive" : "always-on"}`,
     },
-    { step: 3, label: "Readiness", value: `${readyCount} of ${READINESS_ITEMS.length} campaign components in place` },
+    { step: 3, label: "Readiness", value: `${readinessPhrase} · ${readyCount} of ${READINESS_ITEMS.length} selected` },
     {
       step: 4, label: "Financials",
       value: fin.mode === "budget"
         ? `Budget-first · ${fin.budgetTotal !== null ? formatMoney(fin.budgetTotal) : "–"}`
-        : `Goal-first · ${fin.goalCount !== null ? fin.goalCount.toLocaleString() : "–"} ${obj?.unitNoun ?? "results"} · ${fin.costPerResult !== null ? `${formatMoney(fin.costPerResult)} per ${obj?.perThousand ? "1,000 reached" : obj?.usesLeadStep ? "lead" : obj?.unitSingular ?? "result"}` : "–"}${fin.assumedCostPerResult ? " (assumption)" : ""}`,
+        : `Goal-first · ${fin.goalCount !== null ? fin.goalCount.toLocaleString() : "–"} ${obj?.unitNoun ?? "results"} · ${fin.costPerResult !== null ? `${formatMoney(fin.costPerResult)} per ${obj?.perThousand ? "1,000 impressions (CPM)" : obj?.usesLeadStep ? "lead" : obj?.unitSingular ?? "result"}` : "–"}${obj?.perThousand && fin.targetFrequency !== null ? ` · frequency ${fin.targetFrequency}` : ""}${fin.assumedCostPerResult ? " (assumption)" : ""}`,
     },
   ];
 

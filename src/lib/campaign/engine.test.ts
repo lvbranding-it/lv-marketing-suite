@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   allocationAmounts, balanceNotes, breakEven, buildScenario, calculate, clamp,
   displayPercents, estimateMediaSpend, readinessScore, rebalanceShares,
-  recommendedShares, roundTotal, safeDiv, shareStatus,
+  recommendationSummary, recommendedShares, roundTotal, safeDiv, scenarioRationale,
+  shareStatus,
 } from "./engine";
 import { ALLOCATION_RANGES, CATEGORY_KEYS, formatMoney } from "./config";
 import { EMPTY_READINESS, emptyAnswers } from "./persist";
@@ -12,7 +13,7 @@ import type { CalculatorAnswers, CategoryKey, Shares } from "./types";
 
 function budgetAnswers(overrides?: Partial<CalculatorAnswers["financial"]>): CalculatorAnswers {
   const a = emptyAnswers();
-  a.profile = { businessType: "b2c", stage: "growing", reach: "local", industry: "Restaurants & food", currency: "USD" };
+  a.profile = { audienceFocus: "consumers", stage: "growing", reach: "local", industry: "Hospitality", currency: "USD" };
   a.objective = "leads";
   a.scope = { durationDays: 90, customDuration: false, channels: ["google-search", "meta-facebook"], audience: "10k-100k", timeSensitive: false };
   a.readiness = { ...EMPTY_READINESS, positioning: true, message: true, visualIdentity: true, landingPage: true, tracking: true };
@@ -183,10 +184,26 @@ describe("estimateMediaSpend", () => {
     expect(estimateMediaSpend(a, 100)).toBeCloseTo(20_000);
   });
 
-  it("prices awareness per 1,000 reached", () => {
-    const a = goalAnswers({ costPerResult: 12 });
+  it("prices awareness as reach x frequency x CPM per 1,000 impressions", () => {
+    // The worked example: 1,000,000 reach x frequency 3 = 3,000,000 impressions
+    // at a $15 CPM = $45,000 in media.
+    const a = goalAnswers({ costPerResult: 15, targetFrequency: 3 });
     a.objective = "awareness";
-    expect(estimateMediaSpend(a, 50_000)).toBeCloseTo(600);
+    expect(estimateMediaSpend(a, 1_000_000)).toBeCloseTo(45_000);
+  });
+
+  it("falls back to the default frequency when none is entered", () => {
+    const a = goalAnswers({ costPerResult: 15, targetFrequency: null });
+    a.objective = "awareness";
+    // Default frequency is 3: 50,000 x 3 / 1,000 x 15 = $2,250
+    expect(estimateMediaSpend(a, 50_000)).toBeCloseTo(2_250);
+  });
+
+  it("clamps unrealistic frequency inputs", () => {
+    const a = goalAnswers({ costPerResult: 15, targetFrequency: 500 });
+    a.objective = "awareness";
+    // Clamped to the max of 20: 1,000 x 20 / 1,000 x 15 = $300
+    expect(estimateMediaSpend(a, 1_000)).toBeCloseTo(300);
   });
 
   it("returns null when required inputs are missing", () => {
@@ -313,6 +330,41 @@ describe("balanceNotes", () => {
     expect(notes.some((n) => n.id === "testing")).toBe(true);
   });
 
+  it("flags a reach goal larger than the stated audience size", () => {
+    const a = goalAnswers({ goalCount: 1_000_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.scope = { ...a.scope, audience: "10k-100k" };
+    const plan = buildScenario(a, "growth");
+    const notes = balanceNotes(a, plan);
+    expect(notes.some((n) => n.id === "reach-vs-audience")).toBe(true);
+  });
+
+  it("flags a local market paired with a national-scale audience", () => {
+    const a = budgetAnswers();
+    a.profile = { ...a.profile, reach: "local" };
+    a.scope = { ...a.scope, audience: "over-1m" };
+    const plan = buildScenario(a, "growth");
+    expect(balanceNotes(a, plan).some((n) => n.id === "local-vs-scale")).toBe(true);
+  });
+
+  it("flags very large scale compressed into 30 days", () => {
+    const a = goalAnswers({ goalCount: 800_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.scope = { ...a.scope, durationDays: 30, audience: "over-1m" };
+    const plan = buildScenario(a, "growth");
+    expect(balanceNotes(a, plan).some((n) => n.id === "duration-vs-scale")).toBe(true);
+  });
+
+  it("stays quiet when reach and audience are consistent", () => {
+    const a = goalAnswers({ goalCount: 50_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    a.scope = { ...a.scope, audience: "100k-1m" };
+    const plan = buildScenario(a, "growth");
+    const ids = balanceNotes(a, plan).map((n) => n.id);
+    expect(ids).not.toContain("reach-vs-audience");
+    expect(ids).not.toContain("local-vs-scale");
+  });
+
   it("orders attention notes before info notes", () => {
     const a = budgetAnswers();
     a.readiness = { ...EMPTY_READINESS };
@@ -321,6 +373,36 @@ describe("balanceNotes", () => {
     const firstInfo = notes.findIndex((n) => n.tone === "info");
     const lastAttention = notes.map((n) => n.tone).lastIndexOf("attention");
     if (firstInfo !== -1 && lastAttention !== -1) expect(lastAttention).toBeLessThan(firstInfo);
+  });
+});
+
+// ── Plain-language explanations ─────────────────────────────────────────────────
+
+describe("scenarioRationale / recommendationSummary", () => {
+  it("explains budget-first totals in terms of the stated budget", () => {
+    const a = budgetAnswers({ budgetTotal: 25_000 });
+    const result = calculate(a);
+    expect(scenarioRationale(a, result.scenarios.growth)).toContain("$25,000");
+    expect(scenarioRationale(a, result.scenarios.essential)).toContain("80%");
+    expect(scenarioRationale(a, result.scenarios.expansion)).toContain("25%");
+  });
+
+  it("explains awareness totals with reach, frequency, and CPM", () => {
+    const a = goalAnswers({ goalCount: 1_000_000, costPerResult: 15, targetFrequency: 3 });
+    a.objective = "awareness";
+    const result = calculate(a);
+    const text = scenarioRationale(a, result.scenarios.growth);
+    expect(text).toContain("frequency of 3");
+    expect(text).toContain("CPM");
+  });
+
+  it("ties the recommendation summary to the user's answers", () => {
+    const a = budgetAnswers();
+    const result = calculate(a);
+    const text = recommendationSummary(a, result);
+    expect(text).toContain("2 advertising channels");
+    expect(text).toContain("3 months");
+    expect(text.length).toBeGreaterThan(80);
   });
 });
 

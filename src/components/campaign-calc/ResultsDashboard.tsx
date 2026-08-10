@@ -3,20 +3,22 @@
 // comes from the engine; this file never computes an allocation itself.
 
 import { useMemo, useState } from "react";
-import { Copy, Check, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
+import { Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CATEGORIES, formatMoney, scenarioMeta } from "@/lib/campaign/config";
 import {
-  allocationAmounts, displayPercents, shareStatus, suggestedRange,
+  allocationAmounts, displayPercents, recommendationSummary, scenarioRationale,
+  shareStatus, suggestedRange,
 } from "@/lib/campaign/engine";
 import type {
-  CalculationResult, CategoryKey, ScenarioKey, Shares,
+  CalculationResult, CalculatorAnswers, CategoryKey, ScenarioKey, Shares,
 } from "@/lib/campaign/types";
 import AllocationDonut from "./AllocationDonut";
 import { StatusBadge } from "./shared";
 
 interface ResultsDashboardProps {
+  answers:        CalculatorAnswers;
   result:         CalculationResult;
   selected:       ScenarioKey;
   onSelect:       (key: ScenarioKey) => void;
@@ -32,15 +34,20 @@ interface ResultsDashboardProps {
 }
 
 export default function ResultsDashboard({
-  result, selected, onSelect, currentShares, onSharesChange,
+  answers, result, selected, onSelect, currentShares, onSharesChange,
   locked, onToggleLock, onReset, isCustomised, onPrint, onCopySummary, onAdjust,
 }: ResultsDashboardProps) {
-  const [active, setActive] = useState<CategoryKey | null>(null);
+  const [hovered, setHovered] = useState<CategoryKey | null>(null);
+  // A clicked donut segment stays highlighted until clicked again; hover wins while it lasts.
+  const [pinned, setPinned] = useState<CategoryKey | null>(null);
+  const [whyOpen, setWhyOpen] = useState<ScenarioKey | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const active = hovered ?? pinned;
   const plan = result.scenarios[selected];
   const amounts = useMemo(() => allocationAmounts(plan.total, currentShares), [plan.total, currentShares]);
   const pcts = useMemo(() => displayPercents(currentShares), [currentShares]);
+  const summary = useMemo(() => recommendationSummary(answers, result), [answers, result]);
 
   const copy = async () => {
     const ok = await onCopySummary();
@@ -59,32 +66,59 @@ export default function ResultsDashboard({
           const scenario = result.scenarios[key];
           const isSelected = key === selected;
           const isRecommended = key === result.recommendedScenario;
+          const isWhyOpen = whyOpen === key;
           return (
-            <button
+            /* The card is a div so the "Why this amount?" toggle isn't nested
+               inside the radio button (interactive-in-interactive is invalid). */
+            <div
               key={key}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              onClick={() => onSelect(key)}
               className={cn(
-                "rounded-xl border p-4 text-left transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "flex flex-col rounded-xl border transition-colors",
                 isSelected ? "border-primary bg-accent/60 shadow-sm" : "border-border bg-card hover:border-muted-foreground/40",
               )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className={cn("text-sm font-bold", isSelected && "text-primary")}>{meta.label}</p>
-                {isRecommended && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                    <Star size={9} aria-hidden="true" /> Recommended
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(scenario.total)}</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{meta.tagline} · plans around {scenario.recommendedChannels} channel{scenario.recommendedChannels === 1 ? "" : "s"}</p>
-            </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => onSelect(key)}
+                className="flex-1 rounded-t-xl p-4 pb-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className={cn("text-sm font-bold", isSelected && "text-primary")}>{meta.label}</p>
+                  {isRecommended && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                      <Star size={9} aria-hidden="true" /> Recommended
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(scenario.total)}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{meta.tagline} · plans around {scenario.recommendedChannels} channel{scenario.recommendedChannels === 1 ? "" : "s"}</p>
+              </button>
+              <button
+                type="button"
+                aria-expanded={isWhyOpen}
+                onClick={() => setWhyOpen(isWhyOpen ? null : key)}
+                className="flex items-center gap-1 px-4 pb-3 pt-1 text-[11px] font-medium text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-b-xl w-fit"
+              >
+                <HelpCircle size={11} aria-hidden="true" /> Why this amount?
+              </button>
+              {isWhyOpen && (
+                <p className="border-t border-border/60 px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {scenarioRationale(answers, scenario)}
+                </p>
+              )}
+            </div>
           );
         })}
+      </div>
+
+      {/* Why this recommendation: ties the numbers back to the user's answers */}
+      <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Why this recommendation:</span>{" "}
+          {summary}
+        </p>
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -101,7 +135,9 @@ export default function ResultsDashboard({
             pcts={pcts}
             total={plan.total}
             active={active}
-            onActiveChange={setActive}
+            pinned={pinned}
+            onHover={setHovered}
+            onTogglePin={(key) => setPinned((p) => (p === key ? null : key))}
           />
 
           {/* Accessible text/table alternative: always available, not hover-dependent */}
@@ -165,14 +201,19 @@ export default function ResultsDashboard({
             return (
               <div
                 key={cat.key}
-                className={cn("rounded-lg px-2 py-2 transition-colors", isActive && "bg-muted/60")}
-                onMouseEnter={() => setActive(cat.key)}
-                onMouseLeave={() => setActive(null)}
+                className={cn(
+                  "rounded-lg px-2 py-2 transition-colors",
+                  isActive && "bg-muted/60",
+                  pinned === cat.key && "ring-1 ring-inset ring-border",
+                )}
+                onMouseEnter={() => setHovered(cat.key)}
+                onMouseLeave={() => setHovered(null)}
               >
                 <div className="flex items-center gap-2">
                   <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm" style={{ background: `var(--cc-${cat.key})` }} />
                   <span className="min-w-0 flex-1 truncate text-xs font-medium">{cat.label}</span>
-                  <StatusBadge status={status} />
+                  {/* Only deviations earn a badge; six identical "Balanced" chips said nothing. */}
+                  {status !== "balanced" && <StatusBadge status={status} />}
                   <button
                     type="button"
                     aria-pressed={isLocked}
@@ -197,9 +238,10 @@ export default function ResultsDashboard({
                     aria-label={`${cat.label} share of the budget`}
                     aria-valuetext={`${pct} percent, ${formatMoney(amounts[cat.key])}`}
                     onChange={(e) => onSharesChange(cat.key, Number(e.target.value) / 100)}
-                    onFocus={() => setActive(cat.key)}
-                    onBlur={() => setActive(null)}
-                    className="h-6 min-w-0 flex-1 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    onFocus={() => setHovered(cat.key)}
+                    onBlur={() => setHovered(null)}
+                    style={{ accentColor: `var(--cc-${cat.key})` }}
+                    className="h-6 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                   />
                   <span className="w-24 shrink-0 text-right text-xs font-semibold tabular-nums">
                     {formatMoney(amounts[cat.key])}

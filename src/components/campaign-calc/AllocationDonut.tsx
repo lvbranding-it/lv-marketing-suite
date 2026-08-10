@@ -2,8 +2,9 @@
 // Hand-rolled SVG: six ring segments over an HTML centre label. The palette was
 // validated for adjacent-segment colour-vision separation (including the ring
 // wrap pair) on both light and dark card surfaces; see config.ts CATEGORIES.
-// Identity never relies on colour alone: the allocation controls double as a
-// connected legend and a table alternative is rendered alongside the chart.
+// Identity never relies on colour alone: segments carry outer labels on larger
+// screens, the allocation controls double as a connected legend, and a table
+// alternative is rendered alongside the chart.
 
 import { useEffect, useMemo, useState } from "react";
 import { CATEGORIES, formatMoney } from "@/lib/campaign/config";
@@ -39,21 +40,28 @@ interface AllocationDonutProps {
   /** Display percentages (largest-remainder rounded so they total 100). */
   pcts:    Record<CategoryKey, number>;
   total:   number;
-  /** Category highlighted from outside (e.g. a focused allocation control). */
+  /** Category currently highlighted (hover, focus, or pinned selection). */
   active:  CategoryKey | null;
-  onActiveChange: (key: CategoryKey | null) => void;
+  /** Category pinned by click/tap; stays highlighted until toggled off. */
+  pinned:  CategoryKey | null;
+  onHover:     (key: CategoryKey | null) => void;
+  onTogglePin: (key: CategoryKey) => void;
 }
 
+// Geometry. The viewBox leaves a margin around the ring for the outer labels.
+const SIZE = 280;
+const C = SIZE / 2;           // centre
+const R = 82;                 // ring radius
+const STROKE = 34;
+const GAP = 1.2;              // ≈2px surface gap between segments at this radius
+const LABEL_R = R + STROKE / 2 + 8;   // leader line end
+const LABEL_TEXT_R = LABEL_R + 12;    // label anchor
+
 export default function AllocationDonut({
-  shares, amounts, pcts, total, active, onActiveChange,
+  shares, amounts, pcts, total, active, pinned, onHover, onTogglePin,
 }: AllocationDonutProps) {
   const reducedMotion = useReducedMotion();
   const dark = useDarkMode();
-
-  // Geometry: pathLength=100 lets dasharray work directly in percent units.
-  const R = 82;
-  const STROKE = 34;
-  const GAP = 1.2; // ≈2px surface gap between segments at this radius
 
   const segments = useMemo(() => {
     let cursor = 0;
@@ -61,7 +69,10 @@ export default function AllocationDonut({
       const pct = Math.max(0, shares[cat.key] * 100);
       const start = cursor;
       cursor += pct;
-      return { cat, pct, start };
+      // Mid-angle of the segment, with the ring starting at 12 o'clock.
+      const midDeg = ((start + pct / 2) / 100) * 360 - 90;
+      const rad = (midDeg * Math.PI) / 180;
+      return { cat, pct, start, cos: Math.cos(rad), sin: Math.sin(rad) };
     });
   }, [shares]);
 
@@ -71,8 +82,9 @@ export default function AllocationDonut({
     : "stroke-dasharray 0.45s ease, stroke-dashoffset 0.45s ease, opacity 0.2s ease";
 
   return (
-    <div className="relative mx-auto w-full max-w-[320px]" role="group" aria-label="Allocation chart">
-      <svg viewBox="0 0 220 220" className="h-auto w-full" aria-hidden="false">
+    <div className="relative mx-auto w-full max-w-[340px]" role="group" aria-label="Allocation chart">
+      {/* overflow visible lets edge labels render into the card padding instead of clipping */}
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-auto w-full" style={{ overflow: "visible" }} aria-hidden="false">
         <title>Donut chart of the campaign allocation. The same numbers appear in the controls and table beside it.</title>
         {segments.map(({ cat, pct, start }) => {
           const visible = Math.max(0, pct - GAP);
@@ -81,7 +93,7 @@ export default function AllocationDonut({
           return (
             <circle
               key={cat.key}
-              cx="110" cy="110" r={R}
+              cx={C} cy={C} r={R}
               fill="none"
               stroke={dark ? cat.colorDark : cat.colorLight}
               strokeWidth={isActive ? STROKE + 6 : STROKE}
@@ -93,25 +105,56 @@ export default function AllocationDonut({
               tabIndex={0}
               role="button"
               aria-label={`${cat.label}: ${formatMoney(amounts[cat.key])}, ${pcts[cat.key]} percent`}
-              aria-pressed={isActive}
-              onMouseEnter={() => onActiveChange(cat.key)}
-              onMouseLeave={() => onActiveChange(null)}
-              onFocus={() => onActiveChange(cat.key)}
-              onBlur={() => onActiveChange(null)}
-              onClick={() => onActiveChange(isActive ? null : cat.key)}
+              aria-pressed={pinned === cat.key}
+              onMouseEnter={() => onHover(cat.key)}
+              onMouseLeave={() => onHover(null)}
+              onFocus={() => onHover(cat.key)}
+              onBlur={() => onHover(null)}
+              onClick={() => onTogglePin(cat.key)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onActiveChange(isActive ? null : cat.key);
+                  onTogglePin(cat.key);
                 }
               }}
             />
           );
         })}
+
+        {/* Outer labels with short leader lines. Hidden on small screens where
+            they would collide; there the controls and table carry identity. */}
+        <g className="hidden sm:block" aria-hidden="true">
+          {segments.filter((s) => s.pct >= 5).map(({ cat, cos, sin }) => {
+            const x1 = C + (R + STROKE / 2) * cos;
+            const y1 = C + (R + STROKE / 2) * sin;
+            const x2 = C + LABEL_R * cos;
+            const y2 = C + LABEL_R * sin;
+            const tx = C + LABEL_TEXT_R * cos;
+            const ty = C + LABEL_TEXT_R * sin;
+            const anchor = cos > 0.25 ? "start" : cos < -0.25 ? "end" : "middle";
+            return (
+              <g
+                key={cat.key}
+                opacity={active !== null && active !== cat.key ? 0.35 : 1}
+                style={{ transition: reducedMotion ? undefined : "opacity 0.2s ease" }}
+              >
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="1" className="text-border" />
+                <text
+                  x={tx} y={ty + 3}
+                  textAnchor={anchor}
+                  className="fill-current text-muted-foreground"
+                  style={{ fontSize: 9.5, fontWeight: 600 }}
+                >
+                  {cat.short} {pcts[cat.key]}%
+                </text>
+              </g>
+            );
+          })}
+        </g>
       </svg>
 
       {/* Centre label: swaps between the total and the active segment. */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center" aria-live="polite">
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-14 text-center" aria-live="polite">
         {activeMeta ? (
           <>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">

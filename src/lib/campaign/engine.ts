@@ -15,7 +15,7 @@
 
 import {
   ALLOCATION_RANGES, ASSUMPTIONS, CATEGORY_KEYS, READINESS_BANDS, READINESS_ITEMS,
-  SCENARIOS, categoryMeta, formatMoney, objectiveMeta, scenarioMeta,
+  SCENARIOS, audienceBandMeta, categoryMeta, formatMoney, objectiveMeta, scenarioMeta,
 } from "./config";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
@@ -272,8 +272,17 @@ export function estimateMediaSpend(answers: CalculatorAnswers, goalUnits: number
   const goal = clamp(goalUnits, ASSUMPTIONS.minGoal, ASSUMPTIONS.maxGoal);
 
   if (obj.perThousand) {
-    // Awareness: cost is per 1,000 people reached.
-    return safeDiv(goal, 1000) * cost;
+    // Awareness. A CPM prices IMPRESSIONS, not unique people, and a person
+    // usually needs several exposures before a brand registers:
+    //   required impressions = desired reach x target frequency
+    //   media spend          = impressions / 1,000 x CPM
+    const frequency = clamp(
+      num(answers.financial.targetFrequency) ?? obj.defaultFrequency ?? 3,
+      ASSUMPTIONS.minFrequency,
+      ASSUMPTIONS.maxFrequency,
+    );
+    const impressions = goal * frequency;
+    return safeDiv(impressions, 1000) * cost;
   }
   if (obj.usesLeadStep) {
     // goal counts customers/sales; leads sit between media and the goal.
@@ -470,9 +479,92 @@ export function balanceNotes(
     });
   }
 
+  // Realism checks: catch answers that contradict each other before money moves.
+  const audienceMax = audienceBandMeta(answers.scope.audience).max;
+  const isAwareness = answers.objective === "awareness";
+  const goal = answers.financial.mode === "goal" ? (num(answers.financial.goalCount) ?? 0) : 0;
+  if (isAwareness && goal > 0 && audienceMax !== null && goal > audienceMax) {
+    notes.push({
+      id: "reach-vs-audience", tone: "attention",
+      text: `Your desired reach (${goal.toLocaleString()} people) is larger than the audience size you selected earlier (${audienceBandMeta(answers.scope.audience).label.toLowerCase()}). Review your audience estimate or expand the campaign's geographic market.`,
+    });
+  }
+  if (answers.profile.reach === "local" && answers.scope.audience === "over-1m") {
+    notes.push({
+      id: "local-vs-scale", tone: "attention",
+      text: "You described a local market with an audience over 1 million people. That combination is unusual; either the audience estimate includes people outside your service area, or the market reach is broader than local.",
+    });
+  }
+  if (answers.scope.durationDays <= 30 && (answers.scope.audience === "over-1m" || (isAwareness && goal >= 500_000))) {
+    notes.push({
+      id: "duration-vs-scale", tone: "info",
+      text: "Reaching an audience this large inside 30 days concentrates the entire media budget into a very short window. A longer flight usually buys the same reach at a healthier pace, with room to learn.",
+    });
+  }
+
   // Attention first, then info; keep the list scannable.
   notes.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "attention" ? -1 : 1));
-  return notes.slice(0, 5);
+  return notes.slice(0, 6);
+}
+
+// ── Plain-language explanations ─────────────────────────────────────────────────
+
+/** One sentence on how a scenario's total was derived. Shown as "Why this amount?". */
+export function scenarioRationale(answers: CalculatorAnswers, plan: ScenarioPlan): string {
+  const sMeta = scenarioMeta(plan.key);
+  const fin = answers.financial;
+
+  if (fin.mode === "budget") {
+    const budget = num(fin.budgetTotal) ?? 0;
+    const pct = Math.round(sMeta.budgetFactor * 100);
+    if (pct === 100) return `${sMeta.label} allocates your full stated budget of ${formatMoney(budget)}, rounded for planning.`;
+    if (pct < 100) return `${sMeta.label} plans around ${pct}% of your stated ${formatMoney(budget)} budget, holding the rest in reserve while the campaign proves itself.`;
+    return `${sMeta.label} models stretching about ${pct - 100}% beyond your stated budget, for when the campaign earns a bigger footprint.`;
+  }
+
+  const obj = answers.objective ? objectiveMeta(answers.objective) : null;
+  if (!obj || plan.estimatedResults === null) {
+    return `${sMeta.label} is sized from your goal and cost assumptions.`;
+  }
+  const cost = num(fin.costPerResult) ?? obj.defaultCostPerResult;
+  if (obj.perThousand) {
+    const frequency = clamp(num(fin.targetFrequency) ?? obj.defaultFrequency ?? 3, ASSUMPTIONS.minFrequency, ASSUMPTIONS.maxFrequency);
+    const impressions = plan.estimatedResults * frequency;
+    return `${sMeta.label} pursues about ${plan.estimatedResults.toLocaleString()} people at a frequency of ${frequency}, or roughly ${impressions.toLocaleString()} impressions at a ${formatMoney(cost)} CPM. That prices media at about ${formatMoney(plan.amounts.media)}, and the full total funds the strategy, creative, and management around it.`;
+  }
+  const unit = obj.usesLeadStep ? "lead" : obj.unitSingular;
+  return `${sMeta.label} pursues about ${plan.estimatedResults.toLocaleString()} ${obj.unitNoun} at an assumed ${formatMoney(cost)} per ${unit}. That prices media at about ${formatMoney(plan.amounts.media)}, and the full total funds the strategy, creative, and management around it.`;
+}
+
+/**
+ * Short paragraph tying the recommendation to the user's own answers, so the
+ * plan reads as a response to them rather than arbitrary percentages.
+ */
+export function recommendationSummary(answers: CalculatorAnswers, result: CalculationResult): string {
+  const ready = result.readiness;
+  const channels = answers.scope.channels.length;
+  const days = answers.scope.durationDays;
+
+  const foundation =
+    ready.missing.length >= 6 ? "still needs most of its strategic and creative foundation"
+    : ready.missing.length >= 2 ? "still needs several campaign components developed"
+    : ready.missing.length === 1 ? "is close to campaign-ready, with one component left to develop"
+    : "has its foundation in place";
+
+  const scopeBits: string[] = [];
+  scopeBits.push(`targets ${channels} advertising channel${channels === 1 ? "" : "s"}`);
+  if (answers.objective === "awareness" && answers.financial.mode === "goal" && num(answers.financial.goalCount)) {
+    scopeBits.push(`aims to reach about ${(num(answers.financial.goalCount) ?? 0).toLocaleString()} people`);
+  } else if (answers.scope.audience !== "unknown") {
+    scopeBits.push(`speaks to an audience of ${audienceBandMeta(answers.scope.audience).label.toLowerCase()}`);
+  }
+  scopeBits.push(`runs over ${days >= 60 ? `${Math.round(days / 30)} months` : `${days} days`}`);
+
+  const consequence = ready.score < 65
+    ? "For that reason, a meaningful portion of the investment is reserved for assets, digital infrastructure, testing, and campaign management before media is activated."
+    : "With the foundation largely in place, more of the investment can flow to paid media while keeping testing and active management funded.";
+
+  return `Your campaign ${foundation}, ${scopeBits.join(", ")}. ${consequence}`;
 }
 
 // ── Full calculation ────────────────────────────────────────────────────────────

@@ -2,8 +2,8 @@
 // All percentages are handled as decimals (0.4 = 40%) everywhere in the engine.
 // UI components convert to/from display percentages at the edge only.
 
-export type BusinessType =
-  | "b2b" | "b2c" | "nonprofit" | "event" | "ecommerce" | "services" | "other";
+/** Who the campaign primarily speaks to. Business model, not industry. */
+export type AudienceFocus = "businesses" | "consumers" | "both" | "community";
 
 export type BusinessStage = "new" | "growing" | "established";
 
@@ -36,11 +36,11 @@ export type ReadinessBand =
 export type CurrencyCode = "USD";
 
 export interface ProfileAnswers {
-  businessType: BusinessType | null;
-  stage:        BusinessStage | null;
-  reach:        MarketReach | null;
-  industry:     string;
-  currency:     CurrencyCode;
+  audienceFocus: AudienceFocus | null;
+  stage:         BusinessStage | null;
+  reach:         MarketReach | null;
+  industry:      string;
+  currency:      CurrencyCode;
 }
 
 export interface ScopeAnswers {
@@ -64,13 +64,19 @@ export interface FinancialAnswers {
   avgValue:        number | null;
   /** Lead→customer conversion rate as a decimal (0.15 = 15%). */
   conversionRate:  number | null;
-  /** Cost per lead / result / acquisition (per 1,000 reached for awareness). */
+  /** Cost per lead / result / acquisition (CPM per 1,000 impressions for awareness). */
   costPerResult:   number | null;
+  /**
+   * Awareness only: average number of times each person should see the campaign.
+   * Required impressions = desired reach x frequency.
+   */
+  targetFrequency: number | null;
   /** Gross profit margin as a decimal (0.5 = 50%). */
   marginPct:       number | null;
   /** True when the user accepted a planning assumption instead of their own number. */
   assumedConversion:    boolean;
   assumedCostPerResult: boolean;
+  assumedFrequency:     boolean;
 }
 
 export interface CalculatorAnswers {

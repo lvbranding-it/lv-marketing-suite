@@ -4,7 +4,7 @@
 // engine.ts only consumes them, so tuning happens here without touching math.
 
 import type {
-  AudienceBand, BusinessStage, BusinessType, CategoryKey, ChannelKey,
+  AudienceBand, AudienceFocus, BusinessStage, CategoryKey, ChannelKey,
   CurrencyCode, MarketReach, ObjectiveKey, ReadinessBand, ReadinessKey,
   ScenarioKey,
 } from "./types";
@@ -152,15 +152,22 @@ export interface ObjectiveMeta {
   unitSingular: string;
   /** Goal is customers reached through a lead step (goal ÷ conversion = leads). */
   usesLeadStep: boolean;
-  /** Cost input is per 1,000 people reached instead of per unit (awareness). */
+  /**
+   * Awareness: the cost input is a CPM (per 1,000 impressions) and media spend
+   * includes frequency: impressions = reach x frequency, media = impressions / 1,000 x CPM.
+   */
   perThousand:  boolean;
+  /** Overrides the auto-built "Desired {unitNoun}" goal label when set. */
+  goalLabel?:   string;
   costLabel:    string;
   defaultCostPerResult: number;
   defaultConversion:    number; // decimal
+  /** Awareness only: default average exposures per person. A planning assumption. */
+  defaultFrequency?:    number;
 }
 
 export const OBJECTIVES: ObjectiveMeta[] = [
-  { key: "awareness", label: "Brand awareness",            unitNoun: "people reached", unitSingular: "person reached", usesLeadStep: false, perThousand: true,  costLabel: "Estimated cost per 1,000 people reached", defaultCostPerResult: 12, defaultConversion: 0.02 },
+  { key: "awareness", label: "Brand awareness",            unitNoun: "people reached", unitSingular: "person reached", usesLeadStep: false, perThousand: true,  goalLabel: "Desired audience reach", costLabel: "Estimated cost per 1,000 impressions (CPM)", defaultCostPerResult: 15, defaultConversion: 0.02, defaultFrequency: 3 },
   { key: "leads",     label: "Lead generation",            unitNoun: "leads",          unitSingular: "lead",           usesLeadStep: false, perThousand: false, costLabel: "Estimated cost per lead",                 defaultCostPerResult: 45, defaultConversion: 0.15 },
   { key: "sales",     label: "Online sales",               unitNoun: "sales",          unitSingular: "sale",           usesLeadStep: true,  perThousand: false, costLabel: "Estimated cost per lead",                 defaultCostPerResult: 35, defaultConversion: 0.12 },
   { key: "visits",    label: "Store visits",               unitNoun: "visits",         unitSingular: "visit",          usesLeadStep: false, perThousand: false, costLabel: "Estimated cost per visit",                defaultCostPerResult: 9,  defaultConversion: 0.2 },
@@ -248,6 +255,8 @@ export const ASSUMPTIONS = {
   maxCostPerResult: 100_000,
   minConversion: 0.001,  // 0.1%
   maxConversion: 1,      // 100%
+  minFrequency: 1,
+  maxFrequency: 20,
   minMargin: 0.01,
   maxMargin: 0.95,
   /** Essential is recommended instead of Growth below this budget-first total. */
@@ -268,14 +277,11 @@ export const DURATION_PRESETS: { days: number; label: string }[] = [
 
 // ── Option lists for the profile step ───────────────────────────────────────────
 
-export const BUSINESS_TYPES: { key: BusinessType; label: string }[] = [
-  { key: "b2b",       label: "B2B" },
-  { key: "b2c",       label: "B2C" },
-  { key: "nonprofit", label: "Nonprofit" },
-  { key: "event",     label: "Event or experience" },
-  { key: "ecommerce", label: "Ecommerce" },
-  { key: "services",  label: "Professional services" },
-  { key: "other",     label: "Other" },
+export const AUDIENCE_FOCUS_OPTIONS: { key: AudienceFocus; label: string; hint?: string }[] = [
+  { key: "businesses", label: "Businesses" },
+  { key: "consumers",  label: "Consumers" },
+  { key: "both",       label: "Both businesses and consumers" },
+  { key: "community",  label: "Donors, members, or communities" },
 ];
 
 export const BUSINESS_STAGES: { key: BusinessStage; label: string; hint: string }[] = [
@@ -292,24 +298,24 @@ export const MARKET_REACHES: { key: MarketReach; label: string }[] = [
 ];
 
 export const INDUSTRIES: string[] = [
-  "Restaurants & food",
-  "Retail & ecommerce",
-  "Health & wellness",
   "Professional services",
-  "Real estate & construction",
-  "Events & entertainment",
-  "Education & nonprofit",
-  "Technology & software",
+  "Ecommerce and retail",
+  "Events and entertainment",
   "Home services",
-  "Automotive",
-  "Beauty & personal care",
+  "Hospitality",
+  "Healthcare",
+  "Nonprofit",
   "Other",
 ];
 
-export const AUDIENCE_BANDS: { key: AudienceBand; label: string }[] = [
-  { key: "unknown",   label: "Not sure" },
-  { key: "under-10k", label: "Under 10,000" },
-  { key: "10k-100k",  label: "10,000 – 100,000" },
-  { key: "100k-1m",   label: "100,000 – 1 million" },
-  { key: "over-1m",   label: "Over 1 million" },
+/** `max` bounds the realism checks; null means the size is unknown/unbounded. */
+export const AUDIENCE_BANDS: { key: AudienceBand; label: string; max: number | null }[] = [
+  { key: "unknown",   label: "Not sure",             max: null },
+  { key: "under-10k", label: "Under 10,000",         max: 10_000 },
+  { key: "10k-100k",  label: "10,000 – 100,000",     max: 100_000 },
+  { key: "100k-1m",   label: "100,000 – 1 million",  max: 1_000_000 },
+  { key: "over-1m",   label: "Over 1 million",       max: null },
 ];
+
+export const audienceBandMeta = (key: AudienceBand) =>
+  AUDIENCE_BANDS.find((b) => b.key === key) ?? AUDIENCE_BANDS[0];

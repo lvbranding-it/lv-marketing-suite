@@ -45,7 +45,9 @@ Base formula: `Total = Strategy + Creative + Digital + Media + Management + Test
    (0.8 / 1.0 / 1.25), rounded for planning.
 3. **Goal-first**: media spend is derived from the goal (`estimateMediaSpend`):
    - lead-step objectives: `leads = goal ÷ conversion`, `media = leads × CPL`
-   - awareness: `media = goal ÷ 1000 × cost-per-1,000`
+   - awareness: `impressions = reach × frequency`, `media = impressions ÷ 1,000 × CPM`
+     (a CPM prices impressions, not unique people; frequency defaults to 3 and is
+     an editable planning assumption)
    - otherwise: `media = goal × cost-per-result`
    Then `total = media ÷ media share` for that scenario, so distribution never
    silently eats the foundation.
@@ -58,6 +60,19 @@ Base formula: `Total = Strategy + Creative + Digital + Media + Management + Test
    revenue as profit. Shown only when the needed inputs exist.
 6. **Manual rebalancing** (`rebalanceShares`) redistributes changes proportionally
    across unlocked categories; locked categories never move; every result sums to 1.
+7. **Realism checks** (`balanceNotes`) flag contradictory answers: a reach goal
+   larger than the stated audience size, a local market paired with an audience
+   over 1 million, and very large scale compressed into 30 days, alongside the
+   structural checks (media-heavy allocations, missing tracking or landing page,
+   more channels than the media budget supports, thin testing reserves).
+8. **Explanations**: `scenarioRationale` explains each scenario's total in one
+   sentence ("Why this amount?"), and `recommendationSummary` ties the overall
+   recommendation back to the user's own answers on the results screen.
+
+The business profile asks who the campaign speaks to (businesses, consumers, both,
+or donors/members/communities) rather than mixing business models with industries;
+the industry list carries the categories (professional services, ecommerce and
+retail, events, home services, hospitality, healthcare, nonprofit, other).
 
 ## Where assumptions are configured
 
