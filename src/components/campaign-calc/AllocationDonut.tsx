@@ -7,7 +7,9 @@
 // alternative is rendered alongside the chart.
 
 import { useEffect, useMemo, useState } from "react";
-import { CATEGORIES, formatMoney } from "@/lib/campaign/config";
+import { formatMoney } from "@/lib/campaign/config";
+import { categories as localCategories } from "@/lib/campaign/localized";
+import { useCalcLang } from "./lang";
 import type { CategoryKey, Shares } from "@/lib/campaign/types";
 
 function useReducedMotion(): boolean {
@@ -64,6 +66,8 @@ export default function AllocationDonut({
 }: AllocationDonutProps) {
   const reducedMotion = useReducedMotion();
   const dark = useDarkMode();
+  const lang = useCalcLang();
+  const CATEGORIES = localCategories(lang);
 
   const segments = useMemo(() => {
     let cursor = 0;

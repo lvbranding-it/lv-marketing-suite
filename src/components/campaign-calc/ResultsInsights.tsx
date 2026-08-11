@@ -17,18 +17,26 @@ import {
 import type {
   BalanceNote, CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
 } from "@/lib/campaign/types";
+import { useCalcCopy, useCalcLang } from "./lang";
+import {
+  categories as localCategories, destinationLabelOf, feasibilityBandOf,
+  leanScopeAssumptions, preparationPhase, readinessBand as localReadinessBand,
+  readinessItem, separateScopeAdditions,
+} from "@/lib/campaign/localized";
 
 // ── Your starting point (readiness) ─────────────────────────────────────────────
 
 export function ReadinessCard({ result }: { result: CalculationResult }) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const { score, band, essentialReady, essentialTotal, needsReview } = result.readiness;
-  const bandMeta = READINESS_BANDS.find((b) => b.band === band) ?? READINESS_BANDS[READINESS_BANDS.length - 1];
-  const narrative = readinessNarrative(result.readiness);
+  const bandMeta = localReadinessBand(band, lang) ?? READINESS_BANDS[READINESS_BANDS.length - 1];
+  const narrative = readinessNarrative(result.readiness, lang);
 
   return (
     <section aria-labelledby="readiness-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="readiness-h" className="text-sm font-semibold">Your starting point</h3>
+        <h3 id="readiness-h" className="text-sm font-semibold">{t.cards.startingPoint}</h3>
         <p className="text-sm font-bold tabular-nums">
           {score}<span className="text-muted-foreground">/100</span>
           <span className="ml-2 text-xs font-semibold text-primary">{bandMeta.label}</span>
@@ -38,7 +46,7 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
       {/* Meter with band markers; the value is also stated in text above. */}
       <div
         role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}
-        aria-label={`Your starting point: ${score} out of 100, ${bandMeta.label}`}
+        aria-label={`${t.cards.startingPoint}: ${score}/100, ${bandMeta.label}`}
         className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-muted"
       >
         <div
@@ -50,20 +58,18 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
         ))}
       </div>
       <div aria-hidden="true" className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-muted-foreground/70">
-        <span>Starting</span><span>Partly</span><span>Ready</span><span>Scale</span>
+        {t.meters.readiness.map((m) => <span key={m}>{m}</span>)}
       </div>
 
       <p className="mt-3 text-xs font-medium">
-        {essentialReady} of {essentialTotal} essential component{essentialTotal === 1 ? "" : "s"} {essentialTotal === 1 ? "is" : "are"} ready
+        {t.phrases.essentialsReady(essentialReady, essentialTotal)}
         {needsReview > 0 && (
-          <span className="font-normal text-muted-foreground"> · {needsReview} additional component{needsReview === 1 ? "" : "s"} require{needsReview === 1 ? "s" : ""} review</span>
+          <span className="font-normal text-muted-foreground"> · {t.phrases.componentsToReview(needsReview)}</span>
         )}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{narrative}</p>
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        We only count the pieces this particular campaign actually needs. This is not a score on
-        your business, it is simply where you are starting from, and it keeps ad spend from
-        outrunning the message.
+        {t.prose.readinessMeterNote}
       </p>
     </section>
   );
@@ -81,19 +87,21 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
 export function FeasibilityCard({
   answers, result,
 }: { answers: CalculatorAnswers; result: CalculationResult }) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const fit = result.feasibility;
   if (!fit.applies) return null;
 
-  const band = feasibilityBand(fit.status);
+  const band = feasibilityBandOf(fit.status, lang);
   const order: FeasibilityStatus[] =
     ["preparation-only", "campaign-preparation", "focused-pilot", "scope-supported"];
   const activeIndex = order.indexOf(fit.status);
-  const detail = feasibilityNarrative(answers, fit).detail;
+  const detail = feasibilityNarrative(answers, fit, lang).detail;
 
   return (
     <section aria-labelledby="fit-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="fit-h" className="text-sm font-semibold">What your budget can do</h3>
+        <h3 id="fit-h" className="text-sm font-semibold">{t.cards.budgetCanDo}</h3>
         <p className="text-sm font-bold tabular-nums">
           {fit.score}<span className="text-muted-foreground">/100</span>
           <span className="ml-2 text-xs font-semibold text-primary">{band.label}</span>
@@ -101,7 +109,7 @@ export function FeasibilityCard({
       </div>
 
       {/* Four discrete states, labelled in text as well as position. */}
-      <div className="mt-3 flex gap-1" role="img" aria-label={`What your budget can do: ${band.label}`}>
+      <div className="mt-3 flex gap-1" role="img" aria-label={`${t.cards.budgetCanDo}: ${band.label}`}>
         {order.map((status, i) => (
           <span
             key={status}
@@ -110,7 +118,7 @@ export function FeasibilityCard({
         ))}
       </div>
       <div aria-hidden="true" className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-muted-foreground/70">
-        <span>Preparation</span><span>Foundation</span><span>Pilot</span><span>Full scope</span>
+        {t.meters.feasibility.map((m) => <span key={m}>{m}</span>)}
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{detail}</p>
@@ -118,39 +126,37 @@ export function FeasibilityCard({
       {/* The figures the spec requires to be shown separately, never merged. */}
       <dl className="mt-3 space-y-2 border-t border-border pt-3">
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[11px] text-muted-foreground">Available investment</dt>
+          <dt className="text-[11px] text-muted-foreground">{t.report.figures.available}</dt>
           <dd className="text-xs font-bold tabular-nums">{formatMoney(fit.available)}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[11px] text-muted-foreground">Lean professional minimum</dt>
-          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.minimumViable.total)}</dd>
+          <dt className="text-[11px] text-muted-foreground">{t.report.figures.leanMinimum}</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.minimumViable.total, "USD", lang)}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[11px] text-muted-foreground">Complete selected scope</dt>
-          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScope.total)}</dd>
+          <dt className="text-[11px] text-muted-foreground">{t.report.figures.completeScope}</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScope.total, "USD", lang)}</dd>
         </div>
         {fit.minimumFundingGap.max > 0 && (
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-muted-foreground">Minimum funding gap</dt>
-            <dd className="text-xs font-bold tabular-nums text-primary">{formatRange(fit.minimumFundingGap)}</dd>
+            <dt className="text-[11px] text-muted-foreground">{t.report.figures.gapMinimum}</dt>
+            <dd className="text-xs font-bold tabular-nums text-primary">{formatRange(fit.minimumFundingGap, "USD", lang)}</dd>
           </div>
         )}
         {fit.completeScopeFundingGap.max > 0 && (
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-[11px] text-muted-foreground">Complete-scope funding gap</dt>
-            <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScopeFundingGap)}</dd>
+            <dt className="text-[11px] text-muted-foreground">{t.report.figures.gapComplete}</dt>
+            <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScopeFundingGap, "USD", lang)}</dd>
           </div>
         )}
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[11px] text-muted-foreground">Media available after protected requirements</dt>
+          <dt className="text-[11px] text-muted-foreground">{t.report.figures.mediaAvailable}</dt>
           <dd className="text-xs font-bold tabular-nums">{formatMoney(fit.mediaAvailable)}</dd>
         </div>
       </dl>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Your starting point is about what you already have. This is about what your money can
-        realistically reach. All figures are planning estimates based on market references, not LV
-        Branding quotes, and we are happy to work through them with you.
+        {t.prose.startingPointFooter}
       </p>
     </section>
   );
@@ -158,6 +164,8 @@ export function FeasibilityCard({
 
 /** What this phase includes and, just as importantly, what it does not. */
 export function PhaseScopeCard({ result }: { result: CalculationResult }) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const fit = result.feasibility;
   const plan = result.scenarios[result.recommendedScenario];
   if (!fit.applies || fit.status === "scope-supported") return null;
@@ -166,29 +174,27 @@ export function PhaseScopeCard({ result }: { result: CalculationResult }) {
 
   return (
     <section aria-labelledby="phase-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 id="phase-h" className="text-sm font-semibold">What we would do in this phase</h3>
+      <h3 id="phase-h" className="text-sm font-semibold">{t.cards.phaseScope}</h3>
 
       {plan.isPreparationPhase ? (
         <>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            {PREPARATION_PHASE.title}. This phase gives you a plan you can act on, not a running
-            campaign.
+            {preparationPhase(lang).title}.
           </p>
           <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-            {PREPARATION_PHASE.inclusions.map((i) => <li key={i}>{i}</li>)}
+            {preparationPhase(lang).inclusions.map((i) => <li key={i}>{i}</li>)}
           </ul>
           <p className="mt-2 text-[11px] font-medium text-primary">
-            To be clear: running ads and delivering a complete campaign are not part of this phase.
+            {t.prose.preparationCaveat}
           </p>
         </>
       ) : (
         <>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            A lean, properly run campaign on {plan.recommendedChannels || 1} channel, reusing what
-            already works for you.
+            {t.phrases.channelCount(plan.recommendedChannels || 1)}
           </p>
           <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-            {LEAN_SCOPE_ASSUMPTIONS.slice(0, 6).map((a) => <li key={a}>{a}</li>)}
+            {leanScopeAssumptions(lang).slice(0, 6).map((a) => <li key={a}>{a}</li>)}
           </ul>
         </>
       )}
@@ -196,20 +202,20 @@ export function PhaseScopeCard({ result }: { result: CalculationResult }) {
       {deferred.length > 0 && (
         <div className="mt-3 border-t border-border pt-3">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Deferred from this phase
+            {t.prose.deferredFromPhase}
           </p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-            {deferred.map((d) => <li key={d.key}>{readinessItemMeta(d.key).label}</li>)}
+            {deferred.map((d) => <li key={d.key}>{readinessItem(d.key, lang).label}</li>)}
           </ul>
         </div>
       )}
 
       <div className="mt-3 border-t border-border pt-3">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Quoted separately
+          {t.prose.quotedSeparately}
         </p>
         <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-          {SEPARATE_SCOPE_ADDITIONS.slice(0, 5).map((a) => <li key={a}>{a}</li>)}
+          {separateScopeAdditions(lang).slice(0, 5).map((a) => <li key={a}>{a}</li>)}
         </ul>
       </div>
     </section>
@@ -221,15 +227,16 @@ export function PhaseScopeCard({ result }: { result: CalculationResult }) {
 export function BalanceCard({
   answers, plan, currentShares,
 }: { answers: CalculatorAnswers; plan: ScenarioPlan; currentShares: Shares }) {
-  const notes: BalanceNote[] = balanceNotes(answers, plan, currentShares);
+  const t = useCalcCopy();
+  const lang = useCalcLang();
+  const notes: BalanceNote[] = balanceNotes(answers, plan, currentShares, lang);
 
   return (
     <section aria-labelledby="balance-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 id="balance-h" className="text-sm font-semibold">A few things worth checking</h3>
+      <h3 id="balance-h" className="text-sm font-semibold">{t.cards.worthChecking}</h3>
       {notes.length === 0 ? (
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          Nothing stands out as a problem here. The balance of groundwork, reach, and testing looks
-          proportionate to what you told us.
+          {t.prose.nothingWorthChecking}
         </p>
       ) : (
         <ul className="mt-3 space-y-2.5">
@@ -253,6 +260,7 @@ export function BalanceCard({
 // ── Break-even ──────────────────────────────────────────────────────────────────
 
 export function BreakEvenCard({ plan }: { plan: ScenarioPlan }) {
+  const t = useCalcCopy();
   const be = plan.breakEven;
   if (!be) return null;
 
@@ -263,7 +271,7 @@ export function BreakEvenCard({ plan }: { plan: ScenarioPlan }) {
 
   return (
     <section aria-labelledby="breakeven-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 id="breakeven-h" className="text-sm font-semibold">Break-even view</h3>
+      <h3 id="breakeven-h" className="text-sm font-semibold">{t.cards.breakEven}</h3>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
         At roughly {formatMoney(be.grossProfitPerUnit)} gross profit per {be.unitNoun.replace(/s$/, "")},
         this scenario breaks even at about{" "}
@@ -326,6 +334,8 @@ export function BreakEvenCard({ plan }: { plan: ScenarioPlan }) {
 export function DetailCards({
   result, plan, currentShares,
 }: { result: CalculationResult; plan: ScenarioPlan; currentShares: Shares }) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   // Shares divide the allocatable amount, not the total: the reserve is held
   // outside the categories. Using plan.total here inflated every card, so the
   // same figure disagreed with the allocation table on the same screen.
@@ -334,9 +344,9 @@ export function DetailCards({
 
   return (
     <section aria-labelledby="details-h" className="space-y-3">
-      <h3 id="details-h" className="text-sm font-semibold">What each allocation is for</h3>
+      <h3 id="details-h" className="text-sm font-semibold">{t.cards.allocationDetail}</h3>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {CATEGORIES.map((cat) => {
+        {localCategories(lang).map((cat) => {
           const influences = result.insights.find((i) => i.key === cat.key)?.influences ?? [];
           return (
             <article key={cat.key} className="flex flex-col rounded-xl border border-border bg-card p-4">
@@ -352,11 +362,11 @@ export function DetailCards({
               </p>
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{cat.why}</p>
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground/80">Could cover:</span> {cat.covers}
+                <span className="font-semibold text-foreground/80">{t.report.figures.couldCover}</span> {cat.covers}
               </p>
               {influences.length > 0 && (
                 <p className="mt-2 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
-                  <span className="font-semibold text-foreground/80">Shaped by your answers:</span>{" "}
+                  <span className="font-semibold text-foreground/80">{t.report.figures.shapedBy}</span>{" "}
                   {influences.join("; ")}.
                 </p>
               )}
@@ -365,8 +375,7 @@ export function DetailCards({
         })}
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Amounts describe planning capacity, not a quote; what specific deliverables cost depends on
-        scope and market. Nothing here commits you (or LV Branding) to a price.
+        {t.prose.allocationFooter}
       </p>
     </section>
   );
@@ -375,37 +384,17 @@ export function DetailCards({
 // ── Disclaimer ──────────────────────────────────────────────────────────────────
 
 export function Disclaimer() {
+  const t = useCalcCopy();
   return (
-    <section aria-label="Disclaimer" className="rounded-xl border border-border bg-muted/40 p-4 text-[11px] leading-relaxed text-muted-foreground">
-      <p>
-        This calculator provides planning estimates based on the information and assumptions
-        entered. Actual advertising costs and campaign performance vary by industry, market,
-        audience, platform, competition, creative quality, and execution. Results are not guaranteed.
-      </p>
-      <p className="mt-2">
-        Your answers are saved in this browser so you can come back to them, and they stay there.
-        Nothing reaches us unless you choose to send your plan using the form above.
-      </p>
+    <section aria-label={t.cards.disclaimerHeading} className="rounded-xl border border-border bg-muted/40 p-4 text-[11px] leading-relaxed text-muted-foreground">
+      <p>{t.prose.disclaimer}</p>
+      <p className="mt-2">{t.prose.privacy}</p>
       <details className="mt-2">
         <summary className="cursor-pointer select-none font-semibold text-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-          How these estimates work
+          {t.prose.howEstimatesWork}
         </summary>
         <div className="mt-2 space-y-2">
-          <p>
-            Allocations start from configurable planning ranges (for example, paid media typically
-            lands between 30% and 55% of a campaign budget) and adapt to your answers: missing
-            foundations shift budget toward strategy, creative, and digital experience; a complete
-            foundation releases more toward media. The three scenarios change scope (reach, channel
-            count, creative coverage, and testing depth) rather than multiplying one number.
-          </p>
-          <p>
-            Goal-first estimates convert your goal into a media budget using the cost and conversion
-            values you entered (or accepted as planning assumptions), then size the surrounding
-            investment so distribution isn't funded at the expense of the message. Where a default
-            appears, it is a starting point to edit, not a benchmark, and not a promise of what your
-            market will actually charge.
-          </p>
-          <p>This tool is for planning purposes only and is not financial advice.</p>
+          {t.prose.howEstimatesBody.map((para, i) => <p key={i}>{para}</p>)}
         </div>
       </details>
     </section>

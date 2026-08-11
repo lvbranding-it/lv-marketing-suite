@@ -34,17 +34,19 @@ import {
 } from "@/components/campaign-calc/ResultsInsights";
 import ReviewCta from "@/components/campaign-calc/ReviewCta";
 import PrintReport, { reportFilename } from "@/components/campaign-calc/PrintReport";
+import { CalcLangProvider, useCalcCopy } from "@/components/campaign-calc/lang";
+import { supabase } from "@/integrations/supabase/client";
+import { LEAD_SOURCE } from "@/lib/campaign/lead";
+import { copyFor } from "@/lib/campaign/copy/resolve";
+import type { Lang } from "@/lib/campaign/copy";
 
 type Phase = "intro" | "steps" | "results";
 
-const PAGE_TITLE = "Campaign Investment Calculator | LV Branding";
-const PAGE_DESCRIPTION =
-  "Estimate how to distribute your campaign investment across strategy, branding, creative production, digital experience, paid media, management, and testing.";
-
-function usePageMetadata() {
+function usePageMetadata(lang: Lang) {
   useEffect(() => {
+    const { pageTitle, pageDescription } = copyFor(lang).meta;
     const previousTitle = document.title;
-    document.title = PAGE_TITLE;
+    document.title = pageTitle;
     let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const created = !meta;
     if (!meta) {
@@ -53,17 +55,54 @@ function usePageMetadata() {
       document.head.appendChild(meta);
     }
     const previousDescription = meta.content;
-    meta.content = PAGE_DESCRIPTION;
+    meta.content = pageDescription;
     return () => {
       document.title = previousTitle;
       if (created) meta?.remove();
       else if (meta) meta.content = previousDescription;
     };
+  }, [lang]);
+
+  // The document language matters for screen readers and for how browsers
+  // hyphenate and offer translation.
+  useEffect(() => {
+    const previous = document.documentElement.lang;
+    document.documentElement.lang = lang;
+    return () => { document.documentElement.lang = previous; };
+  }, [lang]);
+}
+
+export default function CampaignCalculator({ lang = "en" }: { lang?: Lang }) {
+  return (
+    <CalcLangProvider lang={lang}>
+      <CalculatorBody lang={lang} />
+    </CalcLangProvider>
+  );
+}
+
+/**
+ * Records one view per browser session, matching ServiceLeadWizard so the
+ * conversion rate on /lead-forms compares like with like. Best-effort and
+ * non-blocking: a failure here must never affect the tool. Both languages count
+ * under one source, because they are the same funnel; `av_leads.lang` carries
+ * the split.
+ */
+function useRecordView() {
+  useEffect(() => {
+    const key = `lead-form-viewed:${LEAD_SOURCE}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch { /* private mode: count anyway */ }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from("lead_form_views").insert({ source: LEAD_SOURCE }).then(() => {});
   }, []);
 }
 
-export default function CampaignCalculator() {
-  usePageMetadata();
+function CalculatorBody({ lang }: { lang: Lang }) {
+  usePageMetadata(lang);
+  useRecordView();
+  const t = useCalcCopy();
   const { toast } = useToast();
 
   // ── Persistent core state ─────────────────────────────────────────────────────
@@ -93,7 +132,7 @@ export default function CampaignCalculator() {
   }, [answers, step]);
 
   // ── Results state ─────────────────────────────────────────────────────────────
-  const result = useMemo(() => (phase === "results" ? calculate(answers) : null), [phase, answers]);
+  const result = useMemo(() => (phase === "results" ? calculate(answers, lang) : null), [phase, answers, lang]);
   const [selected, setSelected] = useState<ScenarioKey>("growth");
   const [customShares, setCustomShares] = useState<Partial<Record<ScenarioKey, Shares>>>({});
   const [locked, setLocked] = useState<CategoryKey[]>([]);
@@ -158,10 +197,10 @@ export default function CampaignCalculator() {
   const copySummary = async (): Promise<boolean> => {
     if (!result || !plan || !currentShares) return false;
     try {
-      await navigator.clipboard.writeText(buildTextSummary(answers, plan, currentShares, result.readiness));
+      await navigator.clipboard.writeText(buildTextSummary(answers, plan, currentShares, result.readiness, lang));
       return true;
     } catch {
-      toast({ title: "Copy failed", description: "Your browser blocked clipboard access." });
+      toast({ title: t.results.copySummary, description: t.cta.submitFailed });
       return false;
     }
   };
@@ -212,7 +251,7 @@ export default function CampaignCalculator() {
       window.removeEventListener("afterprint", restore);
     };
 
-    document.title = reportFilename();
+    document.title = reportFilename(lang);
     window.addEventListener("afterprint", restore);
     window.setTimeout(restore, 60_000);
 
@@ -255,13 +294,13 @@ export default function CampaignCalculator() {
         <div className="flex items-center gap-3 mr-auto min-w-0">
           <LVLogo size={34} className="shrink-0" />
           <div className="leading-tight min-w-0">
-            <h1 className="text-base font-bold text-foreground">Campaign Investment Calculator</h1>
-            <p className="text-xs text-muted-foreground">A free planning tool by LV Branding</p>
+            <h1 className="text-base font-bold text-foreground">{t.meta.productName}</h1>
+            <p className="text-xs text-muted-foreground">{t.meta.tagline}</p>
           </div>
         </div>
         {phase !== "intro" && (
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setConfirmReset(true)}>
-            <RefreshCw size={13} /> Start over
+            <RefreshCw size={13} /> {t.nav.startOver}
           </Button>
         )}
       </header>
@@ -274,31 +313,29 @@ export default function CampaignCalculator() {
               <Calculator size={26} aria-hidden="true" />
             </div>
             <h2 className="text-2xl font-bold leading-tight sm:text-3xl">
-              Know what your campaign really requires.
+              {t.intro.heading}
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Build a practical investment plan across strategy, branding, creative production,
-              paid media, and campaign management based on your goals, market, and business readiness.
+              {t.intro.body}
             </p>
             <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed">
-              Media amplifies what already exists. A strong campaign must fund both the message
-              and its distribution.
+              {t.intro.emphasis}
             </p>
             <Button size="lg" className="mt-7 gap-2" onClick={() => { setPhase("steps"); setStep(0); }}>
-              Calculate My Investment <ArrowRight size={16} aria-hidden="true" />
+              {t.intro.cta} <ArrowRight size={16} aria-hidden="true" />
             </Button>
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Six short steps · about 3 minutes · no account, and the full result is yours to keep
+              {t.intro.reassurance}
             </p>
             {restored.current && restored.current.phase !== "intro" && (
               <p className="mt-6 text-xs text-muted-foreground">
-                You have a plan in progress.{" "}
+                {t.intro.resumeLead}{" "}
                 <button
                   type="button"
                   className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                   onClick={() => { setPhase(restored.current?.phase === "results" ? "results" : "steps"); setStep(restored.current?.step ?? 0); setMaxVisited(restored.current?.step ?? 0); }}
                 >
-                  pick up where you left off
+                  {t.intro.resumeLink}
                 </button>.
               </p>
             )}
@@ -308,7 +345,7 @@ export default function CampaignCalculator() {
         {/* ── Guided steps ── */}
         {phase === "steps" && (
           <div className="mx-auto max-w-3xl space-y-5">
-            <StepProgress steps={STEP_LABELS} current={step} maxVisited={maxVisited} onJump={jumpTo} />
+            <StepProgress steps={t.steps.labels.slice(0, STEP_LABELS.length)} current={step} maxVisited={maxVisited} onJump={jumpTo} />
             <section aria-label={`Step ${step + 1}: ${STEP_LABELS[step]}`} className="rounded-xl border border-border bg-card p-4 sm:p-6">
               <h2 className="mb-5 text-base font-bold">
                 {[
@@ -338,11 +375,9 @@ export default function CampaignCalculator() {
         {phase === "results" && result && plan && currentShares && (
           <div className="space-y-5 pb-10">
             <div>
-              <h2 className="text-xl font-bold sm:text-2xl">Your Campaign Investment Plan</h2>
+              <h2 className="text-xl font-bold sm:text-2xl">{t.results.heading}</h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                Based on your goals and where you are starting from, here are three ways this could
-                go. They are planning estimates to help you decide, not a guarantee of what a
-                campaign will do.
+                {t.results.blurb}
               </p>
             </div>
 
@@ -398,7 +433,7 @@ export default function CampaignCalculator() {
       <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Start over?</AlertDialogTitle>
+            <AlertDialogTitle>{t.nav.startOverConfirmTitle}</AlertDialogTitle>
             <AlertDialogDescription>
               This clears your answers and any adjusted allocations from this browser. If you want
               to keep the current plan, copy the summary or print it first; nothing is stored
@@ -406,8 +441,8 @@ export default function CampaignCalculator() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep my plan</AlertDialogCancel>
-            <AlertDialogAction onClick={startOver}>Start over</AlertDialogAction>
+            <AlertDialogCancel>{t.nav.cancel}</AlertDialogCancel>
+            <AlertDialogAction onClick={startOver}>{t.nav.startOverConfirm}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

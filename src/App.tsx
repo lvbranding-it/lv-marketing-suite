@@ -46,6 +46,7 @@ const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
 const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
 const CampaignCalculator     = lazy(() => import("@/pages/CampaignCalculator"));
+const CampaignCalculatorEs = lazy(() => import("@/pages/es/CampaignCalculatorEs"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
@@ -291,6 +292,7 @@ function AppRoutes() {
       <Route path="/es/commercial-photography-video-production-houston" element={<Suspense fallback={null}><PhotoVideoLeadEs /></Suspense>} />
       <Route path="/es/brand-strategy-identity-houston" element={<Suspense fallback={null}><BrandStrategyLeadEs /></Suspense>} />
       <Route path="/es/digital-marketing-paid-media-houston" element={<Suspense fallback={null}><DigitalMarketingLeadEs /></Suspense>} />
+      <Route path="/es/calculadora-de-inversion-en-campanas" element={<Suspense fallback={null}><CampaignCalculatorEs /></Suspense>} />
       {/* Event Experiences — public pages (no auth) */}
       <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />

@@ -1,16 +1,31 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Check, ExternalLink, Inbox, TrendingUp, Clock, Eye, Percent } from "lucide-react";
+import { Copy, Check, ExternalLink, Inbox, TrendingUp, Clock, Eye, Percent, Languages } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 
-// ── The seven public lead wizards ───────────────────────────────────────────────
+// ── Public lead sources ─────────────────────────────────────────────────────────
+// Seven service intake wizards plus the campaign calculator. They all post to the
+// same `submit-av-lead` endpoint and land in Contacts, so one stats shape covers
+// all of them.
 
-const FORMS = [
+interface FormMeta {
+  source: string;
+  emoji:  string;
+  title:  string;
+  desc:   string;
+  path:   string;
+  /** Spanish route, when it is not simply /es + the English path. */
+  esPath?: string;
+  /** Marks the entry as something other than a service intake wizard. */
+  badge?: string;
+}
+
+const FORMS: FormMeta[] = [
   {
     source: "av-landing",
     emoji:  "🎥",
@@ -60,11 +75,22 @@ const FORMS = [
     desc:   "Paid search, paid social, SEO, email marketing, and full-funnel campaign strategy.",
     path:   "/digital-marketing-paid-media-houston",
   },
+  {
+    source: "campaign-calculator",
+    emoji:  "🧮",
+    title:  "Campaign Investment Calculator",
+    desc:   "A free planning tool: it builds a campaign investment plan, then invites the visitor to send it over. Leads arrive with the full plan attached.",
+    path:   "/campaign-investment-calculator",
+    // Spanish keyword slug rather than the English one, so it earns Spanish search.
+    esPath: "/es/calculadora-de-inversion-en-campanas",
+    badge:  "Free tool",
+  },
 ];
 
 interface LeadRow {
   source:     string;
   created_at: string;
+  lang:       string | null;
 }
 
 function useLeadStats() {
@@ -74,7 +100,7 @@ function useLeadStats() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("av_leads")
-        .select("source, created_at");
+        .select("source, created_at, lang");
       if (error) throw error;
       return (data ?? []) as LeadRow[];
     },
@@ -127,11 +153,12 @@ export default function LeadForms() {
   const statsBySource = useMemo(() => {
     const now = Date.now();
     const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-    const m = new Map<string, { total: number; last30: number; lastAt: string | null }>();
+    const m = new Map<string, { total: number; last30: number; spanish: number; lastAt: string | null }>();
     for (const l of leads) {
-      const s = m.get(l.source) ?? { total: 0, last30: 0, lastAt: null };
+      const s = m.get(l.source) ?? { total: 0, last30: 0, spanish: 0, lastAt: null };
       s.total += 1;
       if (now - new Date(l.created_at).getTime() <= THIRTY_DAYS) s.last30 += 1;
+      if (l.lang === "es") s.spanish += 1;
       if (!s.lastAt || l.created_at > s.lastAt) s.lastAt = l.created_at;
       m.set(l.source, s);
     }
@@ -148,7 +175,7 @@ export default function LeadForms() {
 
   return (
     <AppShell>
-      <Header title="Lead Forms" subtitle="Shareable service intake links — copy and send, leads flow into Contacts." />
+      <Header title="Lead Forms" subtitle="Shareable public links, in English and Spanish. Copy and send; leads flow into Contacts." />
 
       <div className="p-3 sm:p-6 pb-16 max-w-4xl mx-auto space-y-6">
 
@@ -170,7 +197,7 @@ export default function LeadForms() {
         <div className="space-y-3">
           {FORMS.map((f) => {
             const url = `${origin}${f.path}`;
-            const esUrl = `${origin}/es${f.path}`;
+            const esUrl = `${origin}${f.esPath ?? `/es${f.path}`}`;
             const stats = statsBySource.get(f.source);
             return (
               <div key={f.source} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-3">
@@ -181,7 +208,14 @@ export default function LeadForms() {
                       {f.emoji}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold">{f.title}</h3>
+                      <h3 className="text-sm font-semibold">
+                        {f.title}
+                        {f.badge && (
+                          <span className="ml-2 align-middle rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                            {f.badge}
+                          </span>
+                        )}
+                      </h3>
                       <p className="text-xs text-muted-foreground mt-0.5">{f.desc}</p>
                     </div>
                   </div>
@@ -231,6 +265,12 @@ export default function LeadForms() {
                         <span className="flex items-center gap-1.5">
                           <Percent size={12} />
                           <strong className="text-foreground">{conversion}%</strong> conversion
+                        </span>
+                      )}
+                      {(stats?.spanish ?? 0) > 0 && (
+                        <span className="flex items-center gap-1.5">
+                          <Languages size={12} />
+                          <strong className="text-foreground">{stats?.spanish}</strong> in Spanish
                         </span>
                       )}
                       <span className="flex items-center gap-1.5">

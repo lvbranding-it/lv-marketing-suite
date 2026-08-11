@@ -26,6 +26,17 @@ import {
 import type {
   CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
 } from "./types";
+import { copyFor } from "./copy/resolve";
+import { formatLongDate, narrativesFor, type Lang } from "./copy";
+import {
+  categories as localCategories, destinationLabelOf, feasibilityBandOf,
+  leanScopeAssumptions, objective as localObjective, preparationPhase,
+  readinessBand as localReadinessBand, readinessGroups as localGroups,
+  readinessItem, readinessStates as localStates, relevanceLabel,
+  scenario as localScenario, scenarios as localScenarios, separateScopeAdditions,
+  audienceBand as localAudienceBand, channelLabelOf, stages as localStages,
+  reaches as localReaches,
+} from "./localized";
 
 export const PDF_TITLE = "Campaign Investment Calculator";
 export const PDF_SUBTITLE = "A free planning tool by LV Branding";
@@ -62,9 +73,10 @@ function clean(value: unknown): string {
     .replace(/ /g, " ");
 }
 
-export function pdfFilename(d = new Date()): string {
+export function pdfFilename(lang: Lang = "en", d = new Date()): string {
   const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return `${PDF_TITLE} - ${PDF_SUBTITLE} - ${stamp}.pdf`;
+  const { productName, tagline } = copyFor(lang).meta;
+  return `${productName} - ${tagline} - ${stamp}.pdf`;
 }
 
 /** Loads the brand mark as a data URL. Returns null so a failure never blocks the PDF. */
@@ -107,7 +119,10 @@ export async function buildPlanPdf(
   result: CalculationResult,
   plan: ScenarioPlan,
   currentShares: Shares,
+  lang: Lang = "en",
 ): Promise<PlanPdf> {
+  const t = copyFor(lang);
+  const n = narrativesFor(lang);
   const { jsPDF } = await import("jspdf");
   const logo = await loadLogo();
   const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
@@ -338,15 +353,15 @@ export async function buildPlanPdf(
 
   const { profile, scope, financial } = answers;
   const fit = result.feasibility;
-  const band = feasibilityBand(fit.status);
-  const narrative = feasibilityNarrative(answers, fit);
-  const paths = feasibilityPaths(answers, fit);
-  const notes = balanceNotes(answers, plan, currentShares);
+  const band = feasibilityBandOf(fit.status, lang);
+  const narrative = n.feasibility(answers, fit);
+  const paths = n.paths(answers, fit);
+  const notes = balanceNotes(answers, plan, currentShares, lang);
   // Matches ResultsDashboard: the reserve sits outside the six categories.
   const amounts = allocationAmounts(plan.total - plan.reserveAmount, currentShares);
   const pcts = displayPercents(currentShares);
-  const readinessBand = READINESS_BANDS.find((b) => b.band === result.readiness.band);
-  const objective = answers.objective ? objectiveMeta(answers.objective) : null;
+  const readinessBand = localReadinessBand(result.readiness.band, lang);
+  const objective = answers.objective ? localObjective(answers.objective, lang) : null;
   const be = plan.breakEven;
 
   const labelOf = <T extends string>(key: T | null, list: { key: T; label: string }[]) =>
@@ -361,18 +376,15 @@ export async function buildPlanPdf(
   }
   const textX = MARGIN + (logo ? logoSize + 12 : 0);
   setFont(18, true, INK);
-  doc.text(PDF_TITLE, textX, y + 15);
+  doc.text(clean(t.meta.productName), textX, y + 15);
   setFont(9, false, MUTED);
-  doc.text(PDF_SUBTITLE, textX, y + 28);
+  doc.text(clean(t.meta.tagline), textX, y + 28);
 
   setFont(8.5, true, INK);
-  doc.text(
-    new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-    MARGIN + CONTENT_W, y + 10, { align: "right" },
-  );
+  doc.text(clean(formatLongDate(new Date(), lang)), MARGIN + CONTENT_W, y + 10, { align: "right" });
   setFont(7.5, false, MUTED);
-  doc.text("Planning estimate", MARGIN + CONTENT_W, y + 21, { align: "right" });
-  doc.text("Not a quote", MARGIN + CONTENT_W, y + 30, { align: "right" });
+  doc.text(clean(t.report.planningEstimate), MARGIN + CONTENT_W, y + 21, { align: "right" });
+  doc.text(clean(t.report.notAQuote), MARGIN + CONTENT_W, y + 30, { align: "right" });
 
   y += logoSize + 8;
   doc.setDrawColor(...BRAND);
@@ -380,58 +392,58 @@ export async function buildPlanPdf(
   doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
   y += 12;
   setFont(7.5, true, BRAND);
-  doc.text(PDF_SLOGAN, MARGIN, y);
+  doc.text(clean(t.meta.slogan), MARGIN, y);
   y += 8;
 
   // ── 1. Your plan at a glance ─────────────────────────────────────────────────
 
-  sectionHeading("Your plan at a glance");
+  sectionHeading(t.report.figures.planAtAGlance);
   para(`${narrative.headline}  [${band.label}]`, { size: 10, bold: true, color: INK, gap: 4 });
   para(narrative.detail);
 
   figures([
-    { label: "Plan shown", value: `${scenarioMeta(plan.key).label} - ${formatMoney(plan.total)}` },
-    { label: "Objective", value: objective?.label ?? null },
-    { label: "Campaign length", value: `${scope.durationDays} days` },
-    { label: "Channels selected", value: String(scope.channels.length) },
-    { label: "Campaign destination", value: labelOf(answers.destination, DESTINATIONS) },
-    { label: "Audience size", value: labelOf(scope.audience, AUDIENCE_BANDS) },
-    { label: "Industry", value: profile.industry || null },
-    { label: "Market reach", value: labelOf(profile.reach, MARKET_REACHES) },
-    { label: "Business stage", value: labelOf(profile.stage, BUSINESS_STAGES) },
-    { label: "Timing", value: scope.timeSensitive ? "Fixed date or launch window" : "Always-on" },
+    { label: t.report.figures.planShown, value: `${localScenario(plan.key, lang).label} - ${formatMoney(plan.total)}` },
+    { label: t.report.figures.objective, value: objective?.label ?? null },
+    { label: t.report.figures.campaignLength, value: t.phrases.dayCount(scope.durationDays) },
+    { label: t.report.figures.channelsSelected, value: String(scope.channels.length) },
+    { label: t.report.figures.destination, value: destinationLabelOf(answers.destination, lang) },
+    { label: t.report.figures.audienceSize, value: localAudienceBand(scope.audience, lang).label },
+    { label: t.report.figures.industry, value: profile.industry || null },
+    { label: t.report.figures.marketReach, value: localReaches(lang).find((r) => r.key === profile.reach)?.label ?? null },
+    { label: t.report.figures.businessStage, value: localStages(lang).find((b) => b.key === profile.stage)?.label ?? null },
+    { label: t.report.figures.timing, value: scope.timeSensitive ? t.phrases.fixedDate : t.phrases.alwaysOn },
   ]);
 
   if (scope.channels.length > 0) {
-    para(`Channels: ${scope.channels.map((c) => CHANNELS.find((x) => x.key === c)?.label ?? c).join(", ")}`);
+    para(t.report.channelsLine(scope.channels.map((c) => channelLabelOf(c, lang)).join(", ")));
   }
   if (result.contradictions.length > 0) {
-    callout("Worth resolving before this plan is relied on.",
+    callout(t.report.contradictionsTitle,
       result.contradictions.map((c) => c.text).join(" "));
   }
-  para(recommendationSummary(answers, result));
+  para(n.recommendationSummary(answers, result));
 
   // ── 2. What your budget can do ───────────────────────────────────────────────
 
-  sectionHeading("What your budget can do");
+  sectionHeading(t.cards.budgetCanDo);
   figures([
-    { label: "Feasibility score", value: `${fit.score}/100 - ${fit.scoreLabel}`, wide: true },
-    ...(fit.applies ? [{ label: "Available investment", value: formatMoney(fit.available) }] : []),
-    { label: "Lean professional minimum", value: formatRange(fit.minimumViable.total) },
-    { label: "Complete selected scope", value: formatRange(fit.completeScope.total) },
+    { label: t.report.figures.feasibilityScore, value: t.phrases.feasibilityScore(fit.score, fit.scoreLabel), wide: true },
+    ...(fit.applies ? [{ label: t.report.figures.available, value: formatMoney(fit.available) }] : []),
+    { label: t.report.figures.leanMinimum, value: formatRange(fit.minimumViable.total, "USD", lang) },
+    { label: t.report.figures.completeScope, value: formatRange(fit.completeScope.total, "USD", lang) },
     ...(fit.applies && fit.minimumFundingGap.max > 0
-      ? [{ label: "Minimum funding gap", value: formatRange(fit.minimumFundingGap), flag: true }] : []),
+      ? [{ label: t.report.figures.gapMinimum, value: formatRange(fit.minimumFundingGap, "USD", lang), flag: true }] : []),
     ...(fit.applies && fit.completeScopeFundingGap.max > 0
-      ? [{ label: "Complete-scope funding gap", value: formatRange(fit.completeScopeFundingGap) }] : []),
+      ? [{ label: t.report.figures.gapComplete, value: formatRange(fit.completeScopeFundingGap, "USD", lang) }] : []),
     ...(fit.applies
-      ? [{ label: "Media available after protected requirements", value: formatMoney(fit.mediaAvailable), wide: true }] : []),
+      ? [{ label: t.report.figures.mediaAvailable, value: formatMoney(fit.mediaAvailable), wide: true }] : []),
     ...(fit.applies
-      ? [{ label: "Channels supported at that media level", value: `${fit.supportedChannels} of ${fit.selectedChannels} selected`, wide: true }] : []),
+      ? [{ label: t.report.figures.channelsSupported, value: t.phrases.channelsSupported(fit.supportedChannels, fit.selectedChannels), wide: true }] : []),
   ]);
-  para("Your starting point is about what you already have. This is about what your money can realistically reach. All figures are planning estimates based on market references, not LV Branding quotes.");
+  para(t.prose.startingPointFooter);
 
   if (paths.length > 0) {
-    eyebrow("Ways forward");
+    eyebrow(t.prose.waysForward);
     for (const p of paths) {
       subHeading(p.title);
       para(p.text);
@@ -441,69 +453,69 @@ export async function buildPlanPdf(
   // ── 3. What we would do in this phase ────────────────────────────────────────
 
   if (fit.applies && fit.status !== "scope-supported") {
-    sectionHeading("What we would do in this phase");
+    sectionHeading(t.cards.phaseScope);
     if (plan.isPreparationPhase) {
-      para(`${PREPARATION_PHASE.title}. This phase gives you a plan you can act on, not a running campaign.`,
+      para(`${preparationPhase(lang).title}.`,
         { color: INK });
-      bullets([...PREPARATION_PHASE.inclusions]);
-      callout(null, "To be clear: running ads and delivering a complete campaign are not part of this phase.");
+      bullets([...preparationPhase(lang).inclusions]);
+      callout(null, t.prose.preparationCaveat);
     } else {
       para(`A lean, properly run campaign on ${plan.recommendedChannels || 1} channel, reusing what already works for you. This scope assumes:`,
         { color: INK });
-      bullets([...LEAN_SCOPE_ASSUMPTIONS]);
+      bullets([...leanScopeAssumptions(lang)]);
     }
     if (plan.requirements.deferred.length > 0) {
-      eyebrow("Deferred from this phase");
-      bullets(plan.requirements.deferred.map((d) => readinessItemMeta(d.key).label));
+      eyebrow(t.prose.deferredFromPhase);
+      bullets(plan.requirements.deferred.map((d) => readinessItem(d.key, lang).label));
     }
-    eyebrow("Quoted separately");
-    bullets([...SEPARATE_SCOPE_ADDITIONS]);
+    eyebrow(t.prose.quotedSeparately);
+    bullets([...separateScopeAdditions(lang)]);
   }
 
   // ── 4. Allocation ────────────────────────────────────────────────────────────
 
-  sectionHeading("How the investment is allocated");
+  sectionHeading(t.report.figures.allocationHeading);
   table(
     [
-      { header: "Category", width: 286 },
-      { header: "Amount", width: 120, align: "r" },
-      { header: "Share", width: 120, align: "r" },
+      { header: t.results.category, width: 286 },
+      { header: t.results.amount, width: 120, align: "r" },
+      { header: t.results.share, width: 120, align: "r" },
     ],
     [
-      ...CATEGORIES.map((cat) => [cat.label, formatMoney(amounts[cat.key]), `${pcts[cat.key]}%`]),
+      ...localCategories(lang).map((cat) => [cat.label, formatMoney(amounts[cat.key]), `${pcts[cat.key]}%`]),
       ...(plan.reserveAmount > 0
-        ? [["Campaign reserve", formatMoney(plan.reserveAmount), "held separately"]] : []),
+        ? [[t.results.campaignReserve, formatMoney(plan.reserveAmount), t.phrases.heldSeparately]] : []),
     ],
-    { totalRow: ["Total investment", formatMoney(plan.total), "100%"] },
+    { totalRow: [t.results.totalInvestment, formatMoney(plan.total), "100%"] },
   );
-  para(scenarioRationale(answers, plan));
-  para(planLevers(answers, result));
+  para(n.scenarioRationale(answers, plan));
+  para(n.planLevers(answers, result));
 
   // ── 5. Category detail ───────────────────────────────────────────────────────
 
-  sectionHeading("What each allocation is for");
-  for (const cat of CATEGORIES) {
+  sectionHeading(t.cards.allocationDetail);
+  for (const cat of localCategories(lang)) {
     const influences = result.insights.find((i) => i.key === cat.key)?.influences ?? [];
     ensure(40);
     subHeading(`${cat.label}  -  ${formatMoney(amounts[cat.key])} (${pcts[cat.key]}%)`);
     para(cat.why, { gap: 3 });
-    para(`Could cover: ${cat.covers}`, { gap: 3 });
-    if (influences.length > 0) para(`Shaped by your answers: ${influences.join("; ")}.`);
+    para(`${t.report.figures.couldCover} ${cat.covers}`, { gap: 3 });
+    if (influences.length > 0) para(`${t.report.figures.shapedBy} ${influences.join("; ")}.`);
   }
-  para("Amounts describe planning capacity, not a quote; what specific deliverables cost depends on scope and market. Nothing here commits you (or LV Branding) to a price.");
+  para(t.prose.allocationFooter);
 
   // ── 6. Starting point ────────────────────────────────────────────────────────
 
-  sectionHeading("Your starting point");
-  para(`${result.readiness.score}/100${readinessBand ? ` - ${readinessBand.label}` : ""}`,
+  sectionHeading(t.cards.startingPoint);
+  para(t.phrases.readinessScore(result.readiness.score, readinessBand?.label ?? ""),
     { size: 10, bold: true, color: INK, gap: 4 });
-  para(readinessNarrative(result.readiness));
+  para(n.readiness(result.readiness));
   figures([
-    { label: "Essential components ready", value: `${result.readiness.essentialReady} of ${result.readiness.essentialTotal}` },
-    { label: "Applicable components to review", value: String(result.readiness.needsReview) },
+    { label: t.report.figures.essentialsReady, value: t.phrases.essentialsReady(result.readiness.essentialReady, result.readiness.essentialTotal) },
+    { label: t.report.figures.componentsToReview, value: String(result.readiness.needsReview) },
   ]);
 
-  for (const group of READINESS_GROUPS) {
+  for (const group of localGroups(lang)) {
     const items = READINESS_ITEMS
       .filter((item) => item.group === group.key)
       .map((item) => result.readiness.assessments.find((a) => a.key === item.key))
@@ -512,16 +524,16 @@ export async function buildPlanPdf(
     eyebrow(group.label);
     table(
       [
-        { header: "Component", width: 246 },
-        { header: "Matters here", width: 140 },
-        { header: "Where you are", width: 140 },
+        { header: t.report.tableHeaders.component, width: 246 },
+        { header: t.report.tableHeaders.mattersHere, width: 140 },
+        { header: t.report.tableHeaders.whereYouAre, width: 140 },
       ],
       items.map((a) => [
-        readinessItemMeta(a.key).label,
-        RELEVANCE_LABELS[a.relevance],
+        readinessItem(a.key, lang).label,
+        relevanceLabel(a.relevance, lang),
         a.relevance === "not-required"
-          ? "Not needed for this campaign"
-          : a.state ? readinessStateMeta(a.state).label : "Not answered",
+          ? t.phrases.notNeeded
+          : a.state ? localStates(lang).find((x) => x.key === a.state)!.label : t.phrases.notAnswered,
       ]),
     );
   }
@@ -529,81 +541,81 @@ export async function buildPlanPdf(
   // ── 7. Break-even ────────────────────────────────────────────────────────────
 
   if (be) {
-    sectionHeading("Break-even view");
+    sectionHeading(t.cards.breakEven);
     para(`At roughly ${formatMoney(be.grossProfitPerUnit)} gross profit per ${be.unitNoun.replace(/s$/, "")}, this plan breaks even at about ${be.breakEvenUnits.toLocaleString()} ${be.unitNoun}.`,
       { color: INK });
     figures([
-      { label: `This plan's estimated ${be.unitNoun}`, value: be.goalUnits !== null ? be.goalUnits.toLocaleString() : null },
-      { label: "Projected revenue", value: be.projectedRevenue !== null ? formatMoney(Math.round(be.projectedRevenue)) : null },
-      { label: "Projected gross profit", value: be.projectedGrossProfit !== null ? formatMoney(Math.round(be.projectedGrossProfit)) : null },
-      { label: "Plan investment", value: formatMoney(plan.total) },
+      { label: t.report.figures.estimatedUnits, value: be.goalUnits !== null ? be.goalUnits.toLocaleString() : null },
+      { label: t.report.figures.projectedRevenue, value: be.projectedRevenue !== null ? formatMoney(Math.round(be.projectedRevenue)) : null },
+      { label: t.report.figures.projectedGrossProfit, value: be.projectedGrossProfit !== null ? formatMoney(Math.round(be.projectedGrossProfit)) : null },
+      { label: t.report.figures.planInvestment, value: formatMoney(plan.total) },
     ]);
-    para("Revenue is not profit: projected gross profit already subtracts direct costs at your stated margin, but not the campaign investment itself. These figures follow from your own assumptions; they are planning arithmetic, not a forecast.");
+    para(t.prose.breakEvenFooter);
   }
 
   // ── 8. Things worth checking ─────────────────────────────────────────────────
 
-  sectionHeading("A few things worth checking");
+  sectionHeading(t.cards.worthChecking);
   if (notes.length === 0) {
-    para("Nothing stands out as a problem here. The balance of groundwork, reach, and testing looks proportionate to what you told us.");
+    para(t.prose.nothingWorthChecking);
   } else {
     bullets(notes.map((n) => (n.tone === "attention" ? `Worth attention: ${n.text}` : n.text)));
   }
 
   // ── 9. Scenarios ─────────────────────────────────────────────────────────────
 
-  sectionHeading("The other ways this could go");
+  sectionHeading(t.cards.otherScenarios);
   table(
     [
-      { header: "Scenario", width: 116 },
-      { header: "Estimated range", width: 120, align: "r" },
-      { header: "What it changes", width: 290 },
+      { header: t.report.tableHeaders.scenario, width: 116 },
+      { header: t.report.tableHeaders.estimatedRange, width: 120, align: "r" },
+      { header: t.report.tableHeaders.whatItChanges, width: 290 },
     ],
-    SCENARIOS.map((meta) => {
+    localScenarios(lang).map((meta) => {
       const s = result.scenarios[meta.key];
       return [
-        `${meta.label}${meta.key === plan.key ? " (shown above)" : ""}`,
-        formatRange(s.totalRange),
+        `${meta.label}${meta.key === plan.key ? ` ${t.phrases.scenarioShownHere}` : ""}`,
+        formatRange(s.totalRange, "USD", lang),
         meta.description,
       ];
     }),
   );
-  para("Scenarios change scope: reach, channel count, creative coverage, and testing depth. They are not the same plan at three price points.");
+  para(t.prose.scenariosFooter);
 
   // ── 10. Assumptions ──────────────────────────────────────────────────────────
 
-  sectionHeading("The assumptions behind these numbers");
+  sectionHeading(t.cards.assumptions);
   figures([
-    { label: "Planning mode", value: financial.mode === "budget" ? "Budget-first" : "Goal-first" },
-    { label: "Stated budget", value: financial.budgetTotal !== null ? formatMoney(financial.budgetTotal) : null },
-    { label: "Goal", value: financial.goalCount !== null ? `${financial.goalCount.toLocaleString()} results` : null },
-    { label: "Average value per customer", value: financial.avgValue !== null ? formatMoney(financial.avgValue) : null },
+    { label: t.report.figures.planningMode, value: financial.mode === "budget" ? t.report.figures.budgetFirst : t.report.figures.goalFirst },
+    { label: t.report.figures.statedBudget, value: financial.budgetTotal !== null ? formatMoney(financial.budgetTotal) : null },
+    { label: t.report.figures.goal, value: financial.goalCount !== null ? t.phrases.resultsGoal(financial.goalCount) : null },
+    { label: t.report.figures.avgValue, value: financial.avgValue !== null ? formatMoney(financial.avgValue) : null },
     {
-      label: `Conversion rate${financial.assumedConversion ? " (planning assumption)" : ""}`,
+      label: `${t.report.figures.conversionRate}${financial.assumedConversion ? ` (${t.phrases.planningAssumption})` : ""}`,
       value: asPct(financial.conversionRate), flag: financial.assumedConversion,
     },
     {
-      label: `Cost per result${financial.assumedCostPerResult ? " (planning assumption)" : ""}`,
+      label: `${t.report.figures.costPerResult}${financial.assumedCostPerResult ? ` (${t.phrases.planningAssumption})` : ""}`,
       value: financial.costPerResult !== null ? formatMoney(financial.costPerResult, "USD", { cents: true }) : null,
       flag: financial.assumedCostPerResult,
     },
     {
-      label: `Target frequency${financial.assumedFrequency ? " (planning assumption)" : ""}`,
-      value: financial.targetFrequency !== null ? `${financial.targetFrequency}x per person` : null,
+      label: `${t.report.figures.targetFrequency}${financial.assumedFrequency ? ` (${t.phrases.planningAssumption})` : ""}`,
+      value: financial.targetFrequency !== null ? t.phrases.perPerson(financial.targetFrequency) : null,
       flag: financial.assumedFrequency,
     },
-    { label: "Gross margin", value: asPct(financial.marginPct) },
-    { label: "Expected revenue", value: financial.expectedRevenue !== null ? formatMoney(financial.expectedRevenue) : null },
+    { label: t.report.figures.marginPct, value: asPct(financial.marginPct) },
+    { label: t.report.figures.expectedRevenue, value: financial.expectedRevenue !== null ? formatMoney(financial.expectedRevenue) : null },
   ]);
   if (financial.assumedConversion || financial.assumedCostPerResult || financial.assumedFrequency) {
-    para("Values marked as a planning assumption were not supplied; a starting point was used instead. They are the first numbers worth replacing with your own.");
+    para(t.prose.assumptionsFooter);
   }
 
   // ── 11. Disclaimer ───────────────────────────────────────────────────────────
 
-  sectionHeading("Please read this alongside the numbers");
-  para("This report contains planning estimates based on the information and assumptions entered. Actual advertising costs and campaign performance vary by industry, market, audience, platform, competition, creative quality, and execution. Results are not guaranteed. Market figures are planning references, not quotes or guaranteed prices, and nothing here commits you or LV Branding to a price. This tool is for planning purposes only and is not financial advice.");
-  para("Prepared with the LV Branding Campaign Investment Calculator. We are happy to work through any of it with you.");
+  sectionHeading(t.cards.disclaimerHeading);
+  para(t.prose.disclaimer);
+  para(t.prose.disclaimerPrepared);
 
   // ── Footer on every page ─────────────────────────────────────────────────────
 
@@ -615,17 +627,19 @@ export async function buildPlanPdf(
     doc.setLineWidth(0.5);
     doc.line(MARGIN, fy - 8, MARGIN + CONTENT_W, fy - 8);
     setFont(7, false, MUTED);
-    doc.text(`${PDF_TITLE} - ${PDF_SUBTITLE}`, MARGIN, fy);
-    doc.text(`Page ${p} of ${pages}`, MARGIN + CONTENT_W / 2, fy, { align: "center" });
+    // Product name only: the Spanish name plus tagline overran the centred
+    // page number, and the tagline already appears on the masthead.
+    doc.text(clean(t.meta.productName), MARGIN, fy);
+    doc.text(clean(t.report.pageOf(p, pages)), MARGIN + CONTENT_W / 2, fy, { align: "center" });
     setFont(7, true, BRAND);
-    doc.text(PDF_SITE, MARGIN + CONTENT_W, fy, { align: "right" });
+    doc.text(t.meta.site, MARGIN + CONTENT_W, fy, { align: "right" });
   }
 
   const buffer = doc.output("arraybuffer") as ArrayBuffer;
   return {
     blob:     new Blob([buffer], { type: "application/pdf" }),
     base64:   toBase64(buffer),
-    filename: pdfFilename(),
+    filename: pdfFilename(lang),
     bytes:    buffer.byteLength,
   };
 }

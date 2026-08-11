@@ -16,6 +16,10 @@ import { SCOPE_LEVERS, formatRange } from "@/lib/campaign/config";
 import type {
   CalculationResult, CalculatorAnswers, CategoryKey, ScenarioKey, Shares,
 } from "@/lib/campaign/types";
+import { useCalcCopy, useCalcLang } from "./lang";
+import {
+  categories as localCategories, scenario as localScenario, scenarios as localScenarios,
+} from "@/lib/campaign/localized";
 import AllocationDonut from "./AllocationDonut";
 import { StatusBadge } from "./shared";
 
@@ -42,6 +46,8 @@ export default function ResultsDashboard({
   answers, result, selected, onSelect, currentShares, onSharesChange,
   locked, onToggleLock, onReset, isCustomised, onPrint, onCopySummary, onAdjust,
 }: ResultsDashboardProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const [hovered, setHovered] = useState<CategoryKey | null>(null);
   // A clicked donut segment stays highlighted until clicked again; hover wins while it lasts.
   const [pinned, setPinned] = useState<CategoryKey | null>(null);
@@ -55,13 +61,13 @@ export default function ResultsDashboard({
   const allocatable = plan.total - plan.reserveAmount;
   const amounts = useMemo(() => allocationAmounts(allocatable, currentShares), [allocatable, currentShares]);
   const pcts = useMemo(() => displayPercents(currentShares), [currentShares]);
-  const summary = useMemo(() => recommendationSummary(answers, result), [answers, result]);
+  const summary = useMemo(() => recommendationSummary(answers, result, lang), [answers, result]);
   const protectedAmount = useMemo(
     () => (["strategy", "creative", "digital", "management", "testing"] as CategoryKey[])
       .reduce((t, k) => t + amounts[k], 0),
     [amounts],
   );
-  const levers = useMemo(() => planLevers(answers, result), [answers, result]);
+  const levers = useMemo(() => planLevers(answers, result, lang), [answers, result]);
   /*
    * An amount is only called "protected" when the displayed plan actually funds
    * that minimum. Labelling a smaller allocation as protected would claim work
@@ -74,8 +80,8 @@ export default function ResultsDashboard({
 
   const isConstrained = result.budgetConstrained;
   const showFeasibility = result.feasibility.applies;
-  const fitCopy = useMemo(() => feasibilityNarrative(answers, result.feasibility), [answers, result.feasibility]);
-  const paths = useMemo(() => feasibilityPaths(answers, result.feasibility), [answers, result.feasibility]);
+  const fitCopy = useMemo(() => feasibilityNarrative(answers, result.feasibility, lang), [answers, result.feasibility]);
+  const paths = useMemo(() => feasibilityPaths(answers, result.feasibility, lang), [answers, result.feasibility]);
 
   const copy = async () => {
     const ok = await onCopySummary();
@@ -136,7 +142,7 @@ export default function ResultsDashboard({
       {/* ── Scenario selector (doubles as the scenario comparison) ── */}
       <div role="radiogroup" aria-label="Investment scenario" className="grid gap-2 sm:grid-cols-3">
         {(["essential", "growth", "expansion"] as ScenarioKey[]).map((key) => {
-          const meta = scenarioMeta(key);
+          const meta = localScenario(key, lang);
           const scenario = result.scenarios[key];
           const isSelected = key === selected;
           const isRecommended = key === result.recommendedScenario;
@@ -145,7 +151,7 @@ export default function ResultsDashboard({
           // pilot, and the larger ones are priced at what the scope really costs.
           const isAffordablePlan = isConstrained && key === "essential";
           const label = isAffordablePlan
-            ? (scenario.isPreparationPhase ? "Preparation phase" : "Focused pilot")
+            ? (scenario.isPreparationPhase ? t.results.preparationPhase : t.results.focusedPilot)
             : meta.label;
           // Estimates are ranges; only the plan the budget actually funds is exact.
           const showRange = !isAffordablePlan && scenario.totalRange.max > scenario.totalRange.min;
@@ -182,7 +188,7 @@ export default function ResultsDashboard({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                        <Star size={9} aria-hidden="true" /> Recommended
+                        <Star size={9} aria-hidden="true" /> {t.results.recommended}
                       </span>
                     )
                   )}
@@ -193,24 +199,24 @@ export default function ResultsDashboard({
                   )}
                 </div>
                 <p className="mt-1 text-lg font-bold tabular-nums">
-                  {showRange ? formatRange(scenario.totalRange) : formatMoney(scenario.total)}
+                  {showRange ? formatRange(scenario.totalRange, "USD", lang) : formatMoney(scenario.total)}
                 </p>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                   {scenario.isPreparationPhase
-                    ? "Strategy and setup sprint · no media activation"
+                    ? t.results.prepSprintTagline
                     : isAffordablePlan
                       ? (scenario.recommendedChannels === 0
-                          ? "No media activation at this investment"
-                          : `Reduced scope · ${scenario.recommendedChannels} channel${scenario.recommendedChannels === 1 ? "" : "s"}`)
+                          ? t.results.noMediaActivation
+                          : t.results.reducedScope(scenario.recommendedChannels))
                       /* Growth and Expansion are estimates of their own scope, so
                          they describe the channels that scope funds. */
-                      : `${meta.tagline} · ${scenario.requirements.activeChannels.length} channel${scenario.requirements.activeChannels.length === 1 ? "" : "s"}`}
+                      : t.results.scopeChannels(meta.tagline, scenario.requirements.activeChannels.length)}
                 </p>
                 {isAffordablePlan && (
                   <p className="mt-1 text-[11px] leading-relaxed text-primary">
                     {scenario.isPreparationPhase
-                      ? "This funds preparation only. It is not a complete campaign and does not include media activation."
-                      : `This is a reduced-scope plan, not the complete ${result.feasibility.selectedChannels}-channel campaign originally selected.`}
+                      ? t.results.prepOnlyNote
+                      : t.results.reducedScopeNote(result.feasibility.selectedChannels)}
                   </p>
                 )}
               </button>
@@ -220,11 +226,11 @@ export default function ResultsDashboard({
                 onClick={() => setWhyOpen(isWhyOpen ? null : key)}
                 className="flex items-center gap-1 px-4 pb-3 pt-1 text-[11px] font-medium text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-b-xl w-fit"
               >
-                <HelpCircle size={11} aria-hidden="true" /> Why this amount?
+                <HelpCircle size={11} aria-hidden="true" /> {t.results.whyThisAmount}
               </button>
               {isWhyOpen && (
                 <p className="border-t border-border/60 px-4 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {scenarioRationale(answers, scenario)}
+                  {scenarioRationale(answers, scenario, lang)}
                 </p>
               )}
             </div>
@@ -236,15 +242,15 @@ export default function ResultsDashboard({
           then names the levers so a large total reads as a decision, not a price. */}
       <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          <span className="font-semibold text-foreground">Why we suggest this:</span>{" "}
+          <span className="font-semibold text-foreground">{t.results.whySuggest}</span>{" "}
           {summary}
         </p>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{levers}</p>
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {scenarioMeta(selected).description}{" "}
-        <span className="text-muted-foreground/80">{scenarioMeta(selected).limitations}</span>
+        {localScenario(selected, lang).description}{" "}
+        <span className="text-muted-foreground/80">{localScenario(selected, lang).limitations}</span>
       </p>
 
       {/* The central distinction: media buys distribution; the protected
@@ -252,38 +258,38 @@ export default function ResultsDashboard({
       <div className="grid gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            {fundsProtectedMinimum ? "Protected campaign investment" : "Current phase allocation"}
+            {fundsProtectedMinimum ? t.results.protectedInvestment : t.results.currentPhaseAllocation}
           </p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(protectedAmount)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {fundsProtectedMinimum
-              ? "This is the work that makes a campaign worth running: strategy, creative, the place people land, running it, and improving it."
-              : `This is what the current phase funds. It sits below the lean minimum of ${formatRange(plan.requirements.protectedTotal)}, so we are not going to call it a protected campaign investment.`}
+              ? t.results.protectedBlurb
+              : t.results.belowMinimumBlurb(t.formatRange(plan.requirements.protectedTotal, formatMoney))}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Media distribution</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{t.results.mediaDistribution}</p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(amounts.media)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            What you pay the platforms to put your campaign in front of people.
+            {t.results.mediaBlurb}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign reserve</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{t.results.campaignReserve}</p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(plan.reserveAmount)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            Set aside for changes you approve, things that come up in production, or an opportunity
-            worth chasing while the campaign is live.
+            {t.results.reserveBlurb}
           </p>
         </div>
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {formatMoney(protectedAmount)} {fundsProtectedMinimum ? "protected" : "this phase"} +{" "}
-        {formatMoney(amounts.media)} media + {formatMoney(plan.reserveAmount)} reserve ={" "}
-        {formatMoney(plan.total)} total. The media budget
-        buys distribution; the protected campaign investment funds the strategy, creative production,
-        digital infrastructure, management, and optimization required to make that distribution
-        purposeful and accountable.
+        {t.results.identity({
+          protectedAmount: formatMoney(protectedAmount),
+          media: formatMoney(amounts.media),
+          reserve: formatMoney(plan.reserveAmount),
+          total: formatMoney(plan.total),
+          funded: fundsProtectedMinimum,
+        })}
       </p>
 
       {/* ── Donut + controls ── */}
@@ -294,7 +300,7 @@ export default function ResultsDashboard({
             amounts={amounts}
             pcts={pcts}
             total={allocatable}
-            totalLabel={plan.reserveAmount > 0 ? "Campaign allocation" : "Total investment"}
+            totalLabel={plan.reserveAmount > 0 ? t.results.campaignAllocation : t.results.totalInvestment}
             active={active}
             pinned={pinned}
             onHover={setHovered}
@@ -311,13 +317,13 @@ export default function ResultsDashboard({
                 <caption className="sr-only">Allocation of the selected scenario by category</caption>
                 <thead>
                   <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-                    <th scope="col" className="py-1.5 pr-2 font-semibold">Category</th>
-                    <th scope="col" className="py-1.5 pr-2 text-right font-semibold">Amount</th>
-                    <th scope="col" className="py-1.5 text-right font-semibold">Share</th>
+                    <th scope="col" className="py-1.5 pr-2 font-semibold">{t.results.category}</th>
+                    <th scope="col" className="py-1.5 pr-2 text-right font-semibold">{t.results.amount}</th>
+                    <th scope="col" className="py-1.5 text-right font-semibold">{t.results.share}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {CATEGORIES.map((cat) => (
+                  {localCategories(lang).map((cat) => (
                     <tr key={cat.key} className="border-b border-border/50 last:border-0">
                       <th scope="row" className="py-1.5 pr-2 text-left font-medium">{cat.label}</th>
                       <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoney(amounts[cat.key])}</td>
@@ -326,13 +332,13 @@ export default function ResultsDashboard({
                   ))}
                   {plan.reserveAmount > 0 && (
                     <tr className="border-b border-border/50">
-                      <th scope="row" className="py-1.5 pr-2 text-left font-medium">Campaign reserve</th>
+                      <th scope="row" className="py-1.5 pr-2 text-left font-medium">{t.results.campaignReserve}</th>
                       <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoney(plan.reserveAmount)}</td>
                       <td className="py-1.5 text-right tabular-nums text-muted-foreground">held separately</td>
                     </tr>
                   )}
                   <tr>
-                    <th scope="row" className="py-1.5 pr-2 text-left font-bold">Total investment</th>
+                    <th scope="row" className="py-1.5 pr-2 text-left font-bold">{t.results.totalInvestment}</th>
                     <td className="py-1.5 pr-2 text-right font-bold tabular-nums">{formatMoney(plan.total)}</td>
                     <td className="py-1.5 text-right font-bold tabular-nums">100%</td>
                   </tr>
@@ -346,7 +352,7 @@ export default function ResultsDashboard({
         <div className="space-y-1">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Adjust the allocation
+              {t.results.adjustAllocation}
             </p>
             <Button
               variant="ghost" size="sm"
@@ -354,11 +360,11 @@ export default function ResultsDashboard({
               onClick={onReset}
               disabled={!isCustomised}
             >
-              <RotateCcw size={12} /> Reset to recommendation
+              <RotateCcw size={12} /> {t.results.resetAllocation}
             </Button>
           </div>
 
-          {CATEGORIES.map((cat) => {
+          {localCategories(lang).map((cat) => {
             const share = currentShares[cat.key];
             const pct = pcts[cat.key];
             const rec = plan.shares[cat.key];
@@ -427,17 +433,16 @@ export default function ResultsDashboard({
                   {/* A minimum above the current allocation is always qualified,
                       so it can never read as work this phase will deliver. */}
                   {cat.key === "media"
-                    ? "Adjustable. Reducing media reduces reach, channels, or duration."
+                    ? t.results.mediaAdjustable
                     : amounts[cat.key] === 0
-                      ? `Lean category minimum: ${formatMoney(floorAmount)} (deferred from this phase)`
+                      ? t.results.floorDeferred(formatMoney(floorAmount))
                       : amounts[cat.key] < floorAmount
-                        ? `Lean category minimum: ${formatMoney(floorAmount)} (partially funded this phase)`
-                        : `Lean category minimum: ${formatMoney(floorAmount)}`}
+                        ? t.results.floorPartial(formatMoney(floorAmount))
+                        : t.results.floorPlain(formatMoney(floorAmount))}
                 </p>
                 {atFloor && (
                   <p className="mt-1 pl-5 text-[10px] leading-relaxed text-primary">
-                    This one covers work the campaign depends on. To bring it down, we would change
-                    the scope rather than remove the work itself.
+                    {t.results.floorProtected}
                   </p>
                 )}
               </div>
@@ -464,7 +469,7 @@ export default function ResultsDashboard({
           <Printer size={13} /> Print / save as PDF
         </Button>
         <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={copy}>
-          {copied ? <><Check size={13} className="text-primary" /> Copied</> : <><Copy size={13} /> Copy summary</>}
+          {copied ? <><Check size={13} className="text-primary" /> Copied</> : <><Copy size={13} /> {t.results.copySummary}</>}
         </Button>
         <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={onAdjust}>
           <SlidersHorizontal size={13} /> Adjust assumptions

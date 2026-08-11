@@ -23,6 +23,13 @@ import type {
   CurrencyCode, FinancialMode, ObjectiveKey, ReadinessGroupKey, ReadinessKey,
   ReadinessState,
 } from "@/lib/campaign/types";
+import { useCalcCopy, useCalcLang } from "./lang";
+import {
+  audienceBands as localAudienceBands, audienceFocusOptions, channels as localChannels,
+  destinations as localDestinations, durationPresets as localDurations, industries as localIndustries,
+  objectives as localObjectives, reaches as localReaches, readinessGroups as localGroups,
+  readinessItem, readinessStates as localStates, relevanceLabel, stages as localStages,
+} from "@/lib/campaign/localized";
 import {
   Field, NumberField, OptionCards, ToggleChips,
   formatNumericInput, parseMoney, parsePercent,
@@ -42,6 +49,8 @@ interface StepProps {
 // ── Step 1: Business profile ────────────────────────────────────────────────────
 
 export function ProfileStep({ answers, onChange, errors }: StepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const p = answers.profile;
   const set = (patch: Partial<typeof p>) =>
     onChange((prev) => ({ ...prev, profile: { ...prev.profile, ...patch } }));
@@ -49,37 +58,37 @@ export function ProfileStep({ answers, onChange, errors }: StepProps) {
   return (
     <div className="space-y-6">
       <OptionCards
-        legend="Who do you primarily sell or communicate to?"
+        legend={t.steps.profile.audienceFocus}
         columns={2}
-        options={AUDIENCE_FOCUS_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+        options={audienceFocusOptions(lang).map((o) => ({ value: o.key, label: o.label }))}
         value={p.audienceFocus}
         onChange={(audienceFocus) => set({ audienceFocus })}
         error={errors.audienceFocus}
       />
       <OptionCards
-        legend="What stage is the business in?"
-        options={BUSINESS_STAGES.map((s) => ({ value: s.key, label: s.label, hint: s.hint }))}
+        legend={t.steps.profile.stage}
+        options={localStages(lang).map((s) => ({ value: s.key, label: s.label, hint: s.hint }))}
         value={p.stage}
         onChange={(stage) => set({ stage })}
         error={errors.stage}
       />
       <OptionCards
-        legend="How far does your market reach?"
-        options={MARKET_REACHES.map((r) => ({ value: r.key, label: r.label }))}
+        legend={t.steps.profile.reach}
+        options={localReaches(lang).map((r) => ({ value: r.key, label: r.label }))}
         value={p.reach}
         onChange={(reach) => set({ reach })}
         error={errors.reach}
       />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Industry" error={errors.industry}>
+        <Field label={t.steps.profile.industry} error={errors.industry}>
           <Select value={p.industry || undefined} onValueChange={(industry) => set({ industry })}>
-            <SelectTrigger aria-label="Industry"><SelectValue placeholder="Choose an industry" /></SelectTrigger>
+            <SelectTrigger aria-label="Industry"><SelectValue placeholder={t.steps.profile.industryPlaceholder} /></SelectTrigger>
             <SelectContent>
-              {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+              {localIndustries(lang).map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Currency">
+        <Field label={t.steps.profile.currency}>
           <Select value={p.currency} onValueChange={(currency) => set({ currency: currency as CurrencyCode })}>
             <SelectTrigger aria-label="Currency"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -97,11 +106,13 @@ export function ProfileStep({ answers, onChange, errors }: StepProps) {
 // ── Step 2: Campaign objective ──────────────────────────────────────────────────
 
 export function ObjectiveStep({ answers, onChange, errors }: StepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   return (
     <div className="space-y-4">
       <OptionCards
-        legend="What is the one outcome this campaign exists to produce?"
-        options={OBJECTIVES.map((o) => ({ value: o.key, label: o.label }))}
+        legend={t.steps.objective.heading}
+        options={localObjectives(lang).map((o) => ({ value: o.key, label: o.label }))}
         value={answers.objective}
         onChange={(objective: ObjectiveKey) => onChange((prev) => ({ ...prev, objective }))}
         error={errors.objective}
@@ -117,6 +128,8 @@ export function ObjectiveStep({ answers, onChange, errors }: StepProps) {
 // ── Step 3: Campaign scope ──────────────────────────────────────────────────────
 
 export function ScopeStep({ answers, onChange, errors }: StepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const s = answers.scope;
   const set = (patch: Partial<typeof s>) =>
     onChange((prev) => ({ ...prev, scope: { ...prev.scope, ...patch } }));
@@ -129,7 +142,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
           Campaign duration
         </p>
         <div role="radiogroup" aria-label="Campaign duration" className="flex flex-wrap gap-2">
-          {DURATION_PRESETS.map((d) => {
+          {localDurations(lang).map((d) => {
             const active = isPreset && s.durationDays === d.days;
             return (
               <button
@@ -160,7 +173,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
         </div>
         {s.customDuration && (
           <div className="mt-3 max-w-[200px]">
-            <Field label="Duration in days" error={errors.duration}>
+            <Field label={t.steps.scope.durationDays} error={errors.duration}>
               <Input
                 inputMode="numeric"
                 value={s.durationDays ? String(s.durationDays) : ""}
@@ -179,8 +192,8 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
       </div>
 
       <ToggleChips
-        legend="Which advertising channels are you considering?"
-        options={CHANNELS.map((c) => ({ value: c.key, label: c.label }))}
+        legend={t.steps.scope.channels}
+        options={localChannels(lang).map((c) => ({ value: c.key, label: c.label }))}
         selected={s.channels}
         onToggle={(key: ChannelKey) =>
           // Functional update all the way down: the toggle must read the channel
@@ -200,16 +213,16 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Estimated audience size" optional hint="If you know roughly how many people you're trying to reach.">
+        <Field label={t.steps.scope.audience} optional hint={t.steps.scope.audienceHint}>
           <Select value={s.audience} onValueChange={(audience) => set({ audience: audience as typeof s.audience })}>
             <SelectTrigger aria-label="Estimated audience size"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {AUDIENCE_BANDS.map((a) => <SelectItem key={a.key} value={a.key}>{a.label}</SelectItem>)}
+              {localAudienceBands(lang).map((a) => <SelectItem key={a.key} value={a.key}>{a.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
         <OptionCards
-          legend="Timing"
+          legend={t.steps.scope.timing}
           columns={2}
           options={[
             { value: "always-on", label: "Always-on", hint: "Runs continuously, can start anytime" },
@@ -239,7 +252,8 @@ function ReadinessRow({
   assessment: ComponentAssessment;
   onSelect: (state: ReadinessState) => void;
 }) {
-  const item = readinessItemMeta(assessment.key);
+  const lang = useCalcLang();
+  const item = readinessItem(assessment.key, lang);
   const groupId = `readiness-${assessment.key}`;
 
   return (
@@ -247,14 +261,14 @@ function ReadinessRow({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span id={groupId} className="text-xs font-semibold">{item.label}</span>
         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", RELEVANCE_CHIP[assessment.relevance])}>
-          {RELEVANCE_LABELS[assessment.relevance]}
+          {relevanceLabel(assessment.relevance, lang)}
         </span>
       </div>
       {assessment.reason && (
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{assessment.reason}</p>
       )}
       <div role="radiogroup" aria-labelledby={groupId} className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        {READINESS_STATES.map((state) => {
+        {localStates(lang).map((state) => {
           const active = assessment.state === state.key;
           return (
             <button
@@ -282,6 +296,8 @@ function ReadinessRow({
 }
 
 export function ReadinessStep({ answers, onChange, errors }: StepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const setState = (key: ReadinessKey, value: ReadinessState) =>
     onChange((prev) => ({ ...prev, readiness: { ...prev.readiness, [key]: value } }));
 
@@ -324,9 +340,9 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
           asked before the checklist rather than assumed. */}
       <div>
         <OptionCards
-          legend="Where should people go, or what should they do, after seeing the campaign?"
+          legend={t.steps.destination.heading}
           columns={2}
-          options={DESTINATIONS.map((d) => ({ value: d.key, label: d.label }))}
+          options={localDestinations(lang).map((d) => ({ value: d.key, label: d.label }))}
           value={answers.destination}
           onChange={(destination) => onChange((prev) => ({ ...prev, destination }))}
           error={errors.destination}
@@ -336,7 +352,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
       {answers.destination && (
         <>
 
-          {READINESS_GROUPS.map((group) => {
+          {localGroups(lang).map((group) => {
             const rows = applicable.filter((a) => readinessItemMeta(a.key).group === group.key);
             if (rows.length === 0) return null;
             const answered = rows.filter((a) => a.state !== null).length;
@@ -453,6 +469,8 @@ function AssumptionRow({ active, explanation, onUse }: AssumptionRowProps) {
 
 /** Keeps raw input strings locally; parsed values propagate to `answers` on each change. */
 export function FinancialStep({ answers, onChange, errors }: StepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const fin = answers.financial;
   const obj = answers.objective ? objectiveMeta(answers.objective) : null;
   const usesLeadStep = obj?.usesLeadStep ?? false;
@@ -503,7 +521,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
   return (
     <div className="space-y-6">
       <OptionCards
-        legend="How would you like to plan?"
+        legend={t.steps.financial.heading}
         columns={2}
         options={[
           { value: "budget", label: "I have a budget and want to allocate it", hint: "Start with your available investment and build a balanced allocation." },
@@ -516,14 +534,14 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
       {fin.mode === "budget" ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
-            label="Total available campaign budget"
+            label={t.steps.financial.budgetTotal}
             prefix="$" placeholder="25,000"
             value={raw.budgetTotal} onChange={bindMoney("budgetTotal")}
             error={errors.budgetTotal}
             hint="Everything: strategy, creative, media, and management, not just ad spend."
           />
           <NumberField
-            label="Expected revenue from the campaign"
+            label={t.steps.financial.expectedRevenue}
             prefix="$" placeholder="80,000" optional
             value={raw.expectedRevenue} onChange={bindMoney("expectedRevenue")}
             error={errors.expectedRevenue}
@@ -539,7 +557,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
           />
           {obj?.perThousand && (
             <NumberField
-              label="Target frequency"
+              label={t.steps.financial.targetFrequency}
               placeholder={String(obj.defaultFrequency ?? 3)}
               value={raw.targetFrequency}
               onChange={(v) => { setRaw((r) => ({ ...r, targetFrequency: v })); setFin({ targetFrequency: parseMoney(v), assumedFrequency: false }); }}
@@ -569,7 +587,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
           />
           {usesLeadStep && (
             <NumberField
-              label="Lead-to-customer conversion rate"
+              label={t.steps.financial.conversionRate}
               suffix="%" placeholder={obj ? String(obj.defaultConversion * 100) : "15"}
               value={raw.conversionRate} onChange={bindPercent("conversionRate")}
               error={errors.conversionRate}
@@ -591,13 +609,13 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
-            label="Average customer or transaction value"
+            label={t.steps.financial.avgValue}
             prefix="$" placeholder="400" optional
             value={raw.avgValue} onChange={bindMoney("avgValue")}
             error={errors.avgValue}
           />
           <NumberField
-            label="Gross profit margin"
+            label={t.steps.financial.marginPct}
             suffix="%" placeholder="50" optional
             value={raw.marginPct} onChange={bindPercent("marginPct")}
             error={errors.marginPct}

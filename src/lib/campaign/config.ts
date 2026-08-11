@@ -33,11 +33,14 @@ export function formatMoney(amount: number, currency: CurrencyCode = "USD", opts
 }
 
 /** Public estimates are ranges; a single number would be false precision. */
-export function formatRange(r: { min: number; max: number }, currency: CurrencyCode = "USD"): string {
+export function formatRange(r: { min: number; max: number }, currency: CurrencyCode = "USD", lang: "en" | "es" = "en"): string {
   const lo = Math.round(r.min);
   const hi = Math.round(r.max);
   if (hi <= lo) return formatMoney(lo, currency);
-  return `${formatMoney(lo, currency)} to ${formatMoney(hi, currency)}`;
+  // Spanish joins a range with "a", not "to". The default keeps every existing
+  // English call site unchanged.
+  const joiner = lang === "es" ? "a" : "to";
+  return `${formatMoney(lo, currency)} ${joiner} ${formatMoney(hi, currency)}`;
 }
 
 // ── Allocation categories ───────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import {
 import type {
   CalculationResult, CalculatorAnswers, ScenarioPlan,
 } from "./types";
+import type { Lang } from "./copy";
 
 /** The form key the edge function uses to pick labels, tags, and reply copy. */
 export const LEAD_SOURCE = "campaign-calculator";
@@ -219,6 +220,7 @@ export function buildLeadBody(
   plan: ScenarioPlan,
   intent: LeadIntent,
   contact: LeadContact,
+  lang: Lang = "en",
 ): CampaignLeadBody {
   const { profile, scope, financial } = answers;
   const objective = answers.objective ? objectiveMeta(answers.objective).label : null;
@@ -244,7 +246,9 @@ export function buildLeadBody(
 
   return {
     source:          LEAD_SOURCE,
-    lang:            "en",
+    // Switches the edge function to the Spanish auto-reply and the "Español"
+    // CRM tag, both of which already exist server-side.
+    lang,
     event_type:      intentMeta(intent).label,
     services:        labelsFor(scope.channels, CHANNELS),
     industry:        profile.industry || null,

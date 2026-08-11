@@ -27,6 +27,9 @@ import {
   affordableChannels, buildRequirements, campaignMonths, channelLabel,
 } from "./requirements";
 import { PREPARATION_PHASE, RESERVE } from "./config";
+import { narrativesFor, type Lang } from "./copy";
+import { copyFor } from "./copy/resolve";
+import { readinessClause } from "./localized";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
   CategoryInsight, CategoryKey, ChannelKey, ComponentAssessment,
@@ -474,7 +477,7 @@ const gapRange = (required: Range, available: number): Range => ({
   max: Math.max(0, required.max - available),
 });
 
-export function feasibility(answers: CalculatorAnswers): FeasibilityResult {
+export function feasibility(answers: CalculatorAnswers, lang: Lang = "en"): FeasibilityResult {
   const minimumViable = scopeRequirements(answers, "lean");
   const completeScope = scopeRequirements(answers, "full");
   const available = answers.financial.mode === "budget"
@@ -503,8 +506,10 @@ export function feasibility(answers: CalculatorAnswers): FeasibilityResult {
   const score = completeScope.total.min > 0
     ? clamp(Math.round(safeDiv(available, completeScope.total.min, 0) * 100), 0, 100)
     : 0;
-  const scoreLabel = (FEASIBILITY_SCORE_BANDS.find((b) => score >= b.min)
-    ?? FEASIBILITY_SCORE_BANDS[FEASIBILITY_SCORE_BANDS.length - 1]).label;
+  // The band is chosen from the model; only its wording comes from the language.
+  const bandIndex = Math.max(0, FEASIBILITY_SCORE_BANDS.findIndex((b) => score >= b.min));
+  const scoreLabel = copyFor(lang).feasibilityScoreLabels[bandIndex]
+    ?? FEASIBILITY_SCORE_BANDS[bandIndex].label;
 
   return {
     status, applies, available, minimumViable, completeScope,
@@ -692,7 +697,7 @@ export function buildScenario(
 
 // ── Category insights (why each allocation moved) ───────────────────────────────
 
-function categoryInsights(answers: CalculatorAnswers): CategoryInsight[] {
+function categoryInsights(answers: CalculatorAnswers, lang: Lang = "en"): CategoryInsight[] {
   const byCategory = new Map<CategoryKey, string[]>();
   const add = (key: CategoryKey, clause: string) => {
     const list = byCategory.get(key) ?? [];
@@ -705,7 +710,7 @@ function categoryInsights(answers: CalculatorAnswers): CategoryInsight[] {
   // when they are not already ready.
   for (const a of ready.assessments) {
     if (a.relevance === "not-required" || stateScore(a.state) >= 1) continue;
-    add(readinessItemMeta(a.key).affects, readinessItemMeta(a.key).clause);
+    add(readinessItemMeta(a.key).affects, readinessClause(a.key, lang));
   }
   const channels = answers.scope.channels.length;
   if (channels >= 4) {
@@ -731,7 +736,11 @@ export function balanceNotes(
   answers: CalculatorAnswers,
   plan: ScenarioPlan,
   currentShares?: Shares,
+  lang: Lang = "en",
 ): BalanceNote[] {
+  // Which notes fire is logic and stays here; how they are worded belongs to
+  // the language, so the text comes from the narrative layer.
+  const t = narrativesFor(lang).balance;
   const shares = currentShares ?? plan.shares;
   const amounts = currentShares ? allocationAmounts(plan.total, currentShares) : plan.amounts;
   const notes: BalanceNote[] = [];
@@ -746,32 +755,32 @@ export function balanceNotes(
   if (shares.media > 0.55 && (gapCreative >= 2 || gapKeys.has("message"))) {
     notes.push({
       id: "media-heavy", tone: "attention",
-      text: `Your current allocation places ${Math.round(shares.media * 100)}% into paid media, but your answers indicate the campaign creative still needs development. Consider strengthening the foundation before increasing media spend.`,
+      text: t.mediaHeavy(Math.round(shares.media * 100)),
     });
   }
   if (gapKeys.has("tracking") && relevanceOf("tracking") === "essential") {
     notes.push({
       id: "tracking", tone: "attention",
-      text: "Conversion tracking isn't ready yet. Without it, media spend can't be evaluated or improved. Your digital-experience allocation reserves room to set it up first.",
+      text: t.tracking,
     });
   }
   if (gapKeys.has("landingPage") && relevanceOf("landingPage") === "essential") {
     notes.push({
       id: "landing", tone: "attention",
-      text: "Your answers indicate the landing page still needs work. Traffic converts at the destination, so this is worth funding before scaling media.",
+      text: t.landing,
     });
   }
   const selected = answers.scope.channels.length;
   if (selected > plan.supportedChannels) {
     notes.push({
       id: "channels", tone: "attention",
-      text: `You selected ${selected} channels, but the media budget in this scenario comfortably supports about ${plan.supportedChannels}. Fewer channels with real budgets usually beat many channels with thin ones.`,
+      text: t.channels(selected, plan.supportedChannels),
     });
   }
   if (shares.testing < 0.05) {
     notes.push({
       id: "testing", tone: "info",
-      text: "Testing sits below 5% of the plan. A small reserve for experiments is usually what turns a decent campaign into a good one by the second month.",
+      text: t.testing,
     });
   }
   if (answers.financial.mode === "goal" && plan.estimatedResults !== null) {
@@ -779,14 +788,14 @@ export function balanceNotes(
     if (required !== null && amounts.media < required * 0.85) {
       notes.push({
         id: "goal-gap", tone: "attention",
-        text: `Reaching this scenario's goal is estimated to need about ${formatMoney(roundTotal(required))} in media, but the current allocation assigns ${formatMoney(amounts.media)}. Either the goal, the assumptions, or the media share needs another look.`,
+        text: t.goalGap(formatMoney(roundTotal(required)), formatMoney(amounts.media)),
       });
     }
   }
   if (answers.scope.durationDays <= 45 && answers.scope.timeSensitive && gapCreative >= 3) {
     notes.push({
       id: "timeline", tone: "info",
-      text: "Several creative assets still need production inside a short, fixed window. Building lead time into the plan, or simplifying the launch creative, will protect the schedule.",
+      text: t.timeline,
     });
   }
 
@@ -797,19 +806,19 @@ export function balanceNotes(
   if (isAwareness && goal > 0 && audienceMax !== null && goal > audienceMax) {
     notes.push({
       id: "reach-vs-audience", tone: "attention", critical: true,
-      text: `Your desired reach (${goal.toLocaleString()} people) is larger than the audience size you selected earlier (${audienceBandMeta(answers.scope.audience).label.toLowerCase()}). Review your audience estimate or expand the campaign's geographic market.`,
+      text: t.reachVsAudience(goal, audienceBandMeta(answers.scope.audience).label),
     });
   }
   if (answers.profile.reach === "local" && answers.scope.audience === "over-1m") {
     notes.push({
       id: "local-vs-scale", tone: "attention", critical: true,
-      text: "You described a local market with an audience over 1 million people. That combination is unusual; either the audience estimate includes people outside your service area, or the market reach is broader than local.",
+      text: t.localVsScale,
     });
   }
   if (answers.scope.durationDays <= 30 && (answers.scope.audience === "over-1m" || (isAwareness && goal >= 500_000))) {
     notes.push({
       id: "duration-vs-scale", tone: "info",
-      text: "Reaching an audience this large inside 30 days concentrates the entire media budget into a very short window. A longer flight usually buys the same reach at a healthier pace, with room to learn.",
+      text: t.durationVsScale,
     });
   }
 
@@ -821,100 +830,30 @@ export function balanceNotes(
 // ── Plain-language explanations ─────────────────────────────────────────────────
 
 /** One sentence on how a scenario's total was derived. Shown as "Why this amount?". */
-export function scenarioRationale(answers: CalculatorAnswers, plan: ScenarioPlan): string {
-  const sMeta = scenarioMeta(plan.key);
-  const fin = answers.financial;
-
-  if (fin.mode === "budget") {
-    // Scenarios are priced from their scope, so the total does not always equal
-    // the stated budget. Describing it by budgetFactor alone contradicted the
-    // allocation table whenever the two diverged, so the sentence is built from
-    // plan.total and states the difference plainly.
-    const budget = num(fin.budgetTotal) ?? 0;
-    const total = plan.total;
-    const delta = total - budget;
-    const withinRounding = Math.abs(delta) <= Math.max(50, budget * 0.02);
-
-    if (budget <= 0 || withinRounding) {
-      return `${sMeta.label} allocates ${formatMoney(total)}, rounded for planning.`;
-    }
-    if (delta > 0) {
-      return `${sMeta.label} prices this scope at ${formatMoney(total)}, about ${formatMoney(delta)} above the ${formatMoney(budget)} you stated. That is what the scope costs rather than a suggestion to spend more; the scenarios below show what a smaller one looks like.`;
-    }
-    return `${sMeta.label} prices this scope at ${formatMoney(total)}, leaving about ${formatMoney(-delta)} of your stated ${formatMoney(budget)} budget uncommitted while the campaign proves itself.`;
-  }
-
-  const obj = answers.objective ? objectiveMeta(answers.objective) : null;
-  if (!obj || plan.estimatedResults === null) {
-    return `${sMeta.label} is sized from your goal and cost assumptions.`;
-  }
-  const cost = num(fin.costPerResult) ?? obj.defaultCostPerResult;
-  if (obj.perThousand) {
-    const frequency = clamp(num(fin.targetFrequency) ?? obj.defaultFrequency ?? 3, ASSUMPTIONS.minFrequency, ASSUMPTIONS.maxFrequency);
-    const impressions = plan.estimatedResults * frequency;
-    return `${sMeta.label} pursues about ${plan.estimatedResults.toLocaleString()} people at a frequency of ${frequency}, or roughly ${impressions.toLocaleString()} impressions at a ${formatMoney(cost)} CPM. That prices media at about ${formatMoney(plan.amounts.media)}, and the full total funds the strategy, creative, and management around it.`;
-  }
-  const unit = obj.usesLeadStep ? "lead" : obj.unitSingular;
-  return `${sMeta.label} pursues about ${plan.estimatedResults.toLocaleString()} ${obj.unitNoun} at an assumed ${formatMoney(cost)} per ${unit}. That prices media at about ${formatMoney(plan.amounts.media)}, and the full total funds the strategy, creative, and management around it.`;
+export function scenarioRationale(
+  answers: CalculatorAnswers, plan: ScenarioPlan, lang: Lang = "en",
+): string {
+  return narrativesFor(lang).scenarioRationale(answers, plan);
 }
 
 /**
  * Short paragraph tying the recommendation to the user's own answers, so the
  * plan reads as a response to them rather than arbitrary percentages.
  */
-export function recommendationSummary(answers: CalculatorAnswers, result: CalculationResult): string {
-  const ready = result.readiness;
-  const channels = answers.scope.channels.length;
-  const days = answers.scope.durationDays;
-  const essentialGaps = ready.gaps.essential.length;
-
-  const foundation =
-    essentialGaps >= 5 ? "still needs most of the pieces it depends on"
-    : essentialGaps >= 2 ? "still needs a few key pieces built"
-    : essentialGaps === 1 ? "is nearly there, with one piece left to sort out"
-    : "already has the pieces it needs";
-
-  const scopeBits: string[] = [];
-  scopeBits.push(`targets ${channels} advertising channel${channels === 1 ? "" : "s"}`);
-  if (answers.objective === "awareness" && answers.financial.mode === "goal" && num(answers.financial.goalCount)) {
-    scopeBits.push(`aims to reach about ${(num(answers.financial.goalCount) ?? 0).toLocaleString()} people`);
-  } else if (answers.scope.audience !== "unknown") {
-    scopeBits.push(`speaks to an audience of ${audienceBandMeta(answers.scope.audience).label.toLowerCase()}`);
-  }
-  scopeBits.push(`runs over ${days >= 60 ? `${Math.round(days / 30)} months` : `${days} days`}`);
-
-  const consequence = ready.score < 65
-    ? "So we have set aside a real share of the investment for assets, tracking, testing, and running the campaign, before any of it goes to ads. That order matters more than most people expect."
-    : "Because the groundwork is largely done, more of the investment can go toward reaching people, while still funding testing and someone to actively run it.";
-
-  return `Your campaign ${foundation}, ${scopeBits.join(", ")}. ${consequence}`;
+export function recommendationSummary(
+  answers: CalculatorAnswers, result: CalculationResult, lang: Lang = "en",
+): string {
+  return narrativesFor(lang).recommendationSummary(answers, result);
 }
 
 /**
  * Names the levers behind the number, so a large total reads as a set of
  * planning decisions rather than a fixed price.
  */
-export function planLevers(answers: CalculatorAnswers, result: CalculationResult): string {
-  const drivers: string[] = [];
-  const isAwarenessGoal = answers.objective === "awareness" && answers.financial.mode === "goal";
-  const goal = num(answers.financial.goalCount) ?? 0;
-
-  if (isAwarenessGoal && goal > 0) drivers.push("the scale of the audience you want to reach");
-  else if (answers.scope.audience === "over-1m" || answers.scope.audience === "100k-1m") drivers.push("the size of the audience");
-  if (result.readiness.gaps.essential.length >= 2) drivers.push("the fact that essential campaign components still need to be created");
-  if (answers.scope.channels.length >= 3) drivers.push("the number of channels selected");
-
-  const levers: string[] = [];
-  if (isAwarenessGoal && goal > 0) levers.push("reducing the reach or frequency");
-  if (answers.scope.channels.length >= 2) levers.push("narrowing the channel mix");
-  if (result.readiness.gaps.essential.length >= 1 || result.readiness.needsReview >= 1) levers.push("using existing campaign assets");
-  if (levers.length === 0) levers.push("adjusting the scope");
-
-  // Drivers are all true at once ("and"); levers are alternatives ("or").
-  const driverText = drivers.length > 0
-    ? `The number comes from ${joinList(drivers, "and")}.`
-    : "The number comes from the scope you described.";
-  return `${driverText} ${capitalize(joinList(levers, "or"))} would change it, and any of those is a reasonable choice to make.`;
+export function planLevers(
+  answers: CalculatorAnswers, result: CalculationResult, lang: Lang = "en",
+): string {
+  return narrativesFor(lang).planLevers(answers, result);
 }
 
 function joinList(items: string[], conjunction: "and" | "or" = "and"): string {
@@ -935,36 +874,17 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  * Results copy that separates confirmed requirements from possible needs, so a
  * recommended-but-unconfirmed asset never reads as a mandatory purchase.
  */
-export function readinessNarrative(result: ReadinessResult): string {
-  const bandMeta = READINESS_BANDS.find((b) => b.band === result.band);
-  const label = (k: ReadinessKey) => readinessItemMeta(k).label.toLowerCase();
-
-  const parts: string[] = [bandMeta?.summary ?? ""];
-
-  if (result.gaps.essential.length > 0) {
-    const names = result.gaps.essential.slice(0, 4).map(label);
-    const more = result.gaps.essential.length - names.length;
-    // Fold the overflow count into the list so it gets one conjunction, not two.
-    const items = more > 0 ? [...names, `${more} more`] : names;
-    parts.push(`Based on your answers, ${joinList(items)} need attention before launch.`);
-  }
-  if (result.gaps.recommended.length > 0) {
-    const names = result.gaps.recommended.slice(0, 3).map(label);
-    parts.push(
-      `${capitalize(joinList(names))} ${names.length === 1 ? "is" : "are"} recommended because of the channels selected, but the exact requirements should be confirmed during campaign planning.`,
-    );
-  }
-  if (result.gaps.essential.length === 0 && result.gaps.recommended.length === 0) {
-    parts.push("Nothing essential is outstanding, so the plan leans toward distribution and optimization.");
-  }
-  return parts.filter(Boolean).join(" ");
+export function readinessNarrative(
+  result: ReadinessResult, lang: Lang = "en",
+): string {
+  return narrativesFor(lang).readiness(result);
 }
 
 // ── Full calculation ────────────────────────────────────────────────────────────
 
-export function calculate(answers: CalculatorAnswers): CalculationResult {
+export function calculate(answers: CalculatorAnswers, lang: Lang = "en"): CalculationResult {
   const readiness = readinessScore(answers);
-  const fit = feasibility(answers);
+  const fit = feasibility(answers, lang);
   const budgetConstrained = fit.applies && fit.status !== "scope-supported";
 
   const scenarios = {
@@ -986,56 +906,23 @@ export function calculate(answers: CalculatorAnswers): CalculationResult {
   // Contradictions are judged against the recommendation itself. While one is
   // open the UI withholds the "Recommended" badge: endorsing a plan built on an
   // assumption we can already see is wrong would cost the tool its credibility.
-  const contradictions = balanceNotes(answers, scenarios[recommendedScenario]).filter((n) => n.critical);
+  const contradictions = balanceNotes(answers, scenarios[recommendedScenario], undefined, lang).filter((n) => n.critical);
 
   return {
     readiness, feasibility: fit, scenarios, recommendedScenario,
-    insights: categoryInsights(answers), contradictions, budgetConstrained,
+    insights: categoryInsights(answers, lang), contradictions, budgetConstrained,
   };
 }
 
 // ── Feasibility copy ────────────────────────────────────────────────────────────
 
 /** Headline and explanation for the budget-and-scope status. */
-export function feasibilityNarrative(answers: CalculatorAnswers, fit: FeasibilityResult): {
-  headline: string;
-  detail:   string;
-} {
-  const months = Math.round(campaignMonths(answers.scope.durationDays));
-  const duration = months >= 2 ? `${months} months` : `${answers.scope.durationDays} days`;
-  const channels = fit.selectedChannels;
-  const lean = fit.minimumViable;
-  const full = fit.completeScope;
-
-  if (!fit.applies) {
-    return {
-      headline: "Here is what your goal would take.",
-      detail: `You told us the outcome you want, so we worked backwards from it. The full scope you selected estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is the protected campaign investment that makes the media worth buying.`,
-    };
-  }
-
-  if (fit.status === "scope-supported") {
-    return {
-      headline: "Good news: your investment covers the scope you selected.",
-      detail: `It supports the estimated ${formatRange(full.total)} for ${channels} channel${channels === 1 ? "" : "s"} over ${duration}. We would still walk through the details with you before anything goes live, because a plan on paper and a plan in market are not quite the same thing.`,
-    };
-  }
-  if (fit.status === "focused-pilot") {
-    return {
-      headline: "You can start with a focused, one-channel campaign.",
-      detail: `A lean professional campaign runs around ${formatRange(lean.total)}, while the full scope you selected is closer to ${formatRange(full.total)}. Starting focused is a perfectly good way in, and the plan below sets out exactly what it includes, what it reuses, and what waits for later.`,
-    };
-  }
-  if (fit.status === "campaign-preparation") {
-    return {
-      headline: "You can build the foundation now and activate media next.",
-      detail: `Your investment can cover the groundwork, but what is left does not yet reach the ${formatRange(lean.media)} a single channel needs over ${duration} to run properly. Splitting the work into two phases is a sensible way to do this well rather than thinly.`,
-    };
-  }
-  return {
-    headline: "Let's start with preparation.",
-    detail: `Your ${formatMoney(fit.available)} sits below the ${formatRange(lean.total)} a campaign needs to run responsibly, and knowing that now is genuinely useful. It can fund a focused strategy and setup sprint, which is a strong first step. To be clear about what that means: this phase does not include running ads or delivering a complete campaign. For reference, the full scope you selected estimates at ${formatRange(full.total)}.`,
-  };
+export function feasibilityNarrative(
+  answers: CalculatorAnswers,
+  fit: FeasibilityResult,
+  lang: Lang = "en",
+): { headline: string; detail: string } {
+  return narrativesFor(lang).feasibility(answers, fit);
 }
 
 export interface FeasibilityPath {
@@ -1045,29 +932,12 @@ export interface FeasibilityPath {
 }
 
 /** The practical ways forward when the investment cannot fund the selected scope. */
-export function feasibilityPaths(answers: CalculatorAnswers, fit: FeasibilityResult): FeasibilityPath[] {
-  if (!fit.applies || fit.status === "scope-supported") return [];
-  const lean = fit.minimumViable;
-  const full = fit.completeScope;
-  const cheapest = lean.channelMediaFloors.slice().sort((a, b) => a.amount - b.amount)[0];
-
-  return [
-    {
-      id: "preparation",
-      title: "Start with a strategy sprint",
-      text: `We would use the ${formatMoney(fit.available)} to define your objective and audience, recommend the one channel worth starting on, set the core message direction, and build a basic activation plan. Running ads is not part of this phase.`,
-    },
-    {
-      id: "pilot",
-      title: "Focus on one channel",
-      text: `If you can reuse your existing brand identity, website, and tracking, a lean campaign on a single channel${cheapest ? ` (${channelLabel(cheapest.channel)}, about ${formatMoney(cheapest.amount)} of media)` : ""} comes in around ${formatRange(lean.total)}. Fewer things done properly usually beats more things done thinly.`,
-    },
-    {
-      id: "increase",
-      title: "Build up to the full scope",
-      text: `The ${fit.selectedChannels}-channel campaign you first described estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is the work that makes the media worth buying. Worth keeping in view as a target, even if it is not this phase.`,
-    },
-  ];
+export function feasibilityPaths(
+  answers: CalculatorAnswers,
+  fit: FeasibilityResult,
+  lang: Lang = "en",
+): FeasibilityPath[] {
+  return narrativesFor(lang).paths(answers, fit);
 }
 
 // ── Shareable text summary ──────────────────────────────────────────────────────
@@ -1077,24 +947,26 @@ export function buildTextSummary(
   plan: ScenarioPlan,
   currentShares: Shares,
   readiness: ReadinessResult,
+  lang: Lang = "en",
 ): string {
+  const n = narrativesFor(lang).summary;
   const amounts = allocationAmounts(plan.total, currentShares);
   const pcts = displayPercents(currentShares);
   const lines: string[] = [];
-  lines.push("CAMPAIGN INVESTMENT PLAN (planning estimate)");
-  lines.push(`Scenario: ${scenarioMeta(plan.key).label}`);
-  lines.push(`Total investment: ${formatMoney(plan.total)}`);
+  lines.push(n.title);
+  lines.push(`${scenarioMeta(plan.key).label}`);
+  lines.push(`${n.total}: ${formatMoney(plan.total)}`);
   lines.push("");
   for (const key of CATEGORY_KEYS) {
     lines.push(`${categoryMeta(key).label}: ${formatMoney(amounts[key])} (${pcts[key]}%)`);
   }
   lines.push("");
-  lines.push(`Your starting point: ${readiness.score}/100`);
+  lines.push(`${n.startingPoint}: ${readiness.score}/100`);
   if (plan.breakEven) {
     lines.push(`Break-even: about ${plan.breakEven.breakEvenUnits.toLocaleString()} ${plan.breakEven.unitNoun}`);
   }
   lines.push("");
-  lines.push("Estimates depend on the assumptions entered and do not guarantee campaign performance.");
+  lines.push(n.disclaimer);
   lines.push("Built with the LV Branding Campaign Investment Calculator · lvbranding.com");
   return lines.join("\n");
 }

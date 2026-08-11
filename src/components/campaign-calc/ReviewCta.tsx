@@ -21,6 +21,7 @@ import { buildPlanPdf, downloadPdf, type PlanPdf } from "@/lib/campaign/pdf";
 import type {
   CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
 } from "@/lib/campaign/types";
+import { useCalcCopy, useCalcLang } from "./lang";
 
 /** SendGrid caps a message at 30MB; this is a far more conservative guard. */
 const MAX_ATTACHMENT_BYTES = 4_000_000;
@@ -33,7 +34,9 @@ interface ReviewCtaProps {
 }
 
 export default function ReviewCta({ answers, result, plan, currentShares }: ReviewCtaProps) {
-  const copy = CTA_COPY[result.feasibility.status];
+  const t = useCalcCopy();
+  const lang = useCalcLang();
+  const copy = t.cta.byStatus[result.feasibility.status];
 
   const [name,   setName]   = useState("");
   const [email,  setEmail]  = useState("");
@@ -53,9 +56,9 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
     if (status === "sending") return;
 
     const next: typeof errors = {};
-    if (!name.trim())    next.name  = "Please add your name.";
-    if (!email.trim())   next.email = "Please add your email.";
-    else if (!isEmail(email)) next.email = "That email does not look right.";
+    if (!name.trim())    next.name  = t.cta.errorName;
+    if (!email.trim())   next.email = t.cta.errorEmail;
+    else if (!isEmail(email)) next.email = t.cta.errorEmailInvalid;
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -65,7 +68,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
     // goes through and the prospect is told the copy is not attached.
     let built: PlanPdf | null = null;
     try {
-      built = await buildPlanPdf(answers, result, plan, currentShares);
+      built = await buildPlanPdf(answers, result, plan, currentShares, lang);
       setPdf(built);
     } catch (err) {
       console.error("Plan PDF generation failed", err);
@@ -77,7 +80,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
     try {
       const body = buildLeadBody(answers, result, plan, intent, {
         name, email, phone, hp: hp.current,
-      });
+      }, lang);
       if (attachable) {
         body.attachment = { filename: attachable.filename, content_base64: attachable.base64 };
       }
@@ -96,7 +99,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
     let file = pdf;
     if (!file) {
       try {
-        file = await buildPlanPdf(answers, result, plan, currentShares);
+        file = await buildPlanPdf(answers, result, plan, currentShares, lang);
         setPdf(file);
       } catch (err) {
         console.error("Plan PDF generation failed", err);
@@ -118,15 +121,11 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
           </span>
           <div className="min-w-0">
             <h3 id="cta-h" className="text-sm font-semibold">
-              Got it, {name.trim().split(/\s+/)[0]}. Your plan is on its way.
+              {t.cta.successHeading(name.trim().split(/\s+/)[0])}
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {emailed
-                ? <>Your plan is heading to {email.trim()} as a PDF, and it reached our team with
-                    everything you worked out here.</>
-                : <>It reached our team with everything you worked out here. The PDF was too large
-                    to email, so grab it below and it is yours.</>}{" "}
-              Someone will follow up within one business day, and they will have read the plan first.
+              {emailed ? t.cta.successEmailed(email.trim()) : t.cta.successNotEmailed}{" "}
+              {t.cta.successFollowUp}
             </p>
 
             <Button
@@ -137,11 +136,11 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
               className="mt-3 gap-1.5 bg-background"
             >
               <Download size={14} aria-hidden="true" />
-              Download your plan (PDF)
+              {t.cta.download}
             </Button>
 
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              Nothing on this page changed. Print it or copy the summary any time.
+              {t.cta.successUnchanged}
             </p>
           </div>
         </div>
@@ -168,7 +167,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="cta-name" className="text-xs">Your name</Label>
+            <Label htmlFor="cta-name" className="text-xs">{t.cta.name}</Label>
             <Input
               id="cta-name" value={name} autoComplete="name"
               aria-invalid={Boolean(errors.name)}
@@ -180,7 +179,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cta-email" className="text-xs">Email</Label>
+            <Label htmlFor="cta-email" className="text-xs">{t.cta.email}</Label>
             <Input
               id="cta-email" type="email" value={email} autoComplete="email" inputMode="email"
               aria-invalid={Boolean(errors.email)}
@@ -195,7 +194,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
 
         <div className="space-y-1.5 sm:max-w-[calc(50%-0.375rem)]">
           <Label htmlFor="cta-phone" className="text-xs">
-            Phone <span className="font-normal text-muted-foreground">(optional)</span>
+            {t.cta.phone} <span className="font-normal text-muted-foreground">{t.cta.optional}</span>
           </Label>
           <Input
             id="cta-phone" type="tel" value={phone} autoComplete="tel"
@@ -204,9 +203,9 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
         </div>
 
         <fieldset className="space-y-2">
-          <legend className="text-xs font-medium">What would help most right now?</legend>
+          <legend className="text-xs font-medium">{t.cta.intentQuestion}</legend>
           <div className="grid gap-2 sm:grid-cols-2">
-            {LEAD_INTENTS.map((option) => {
+            {t.cta.intents.map((option) => {
               const checked = intent === option.key;
               return (
                 <label
@@ -221,7 +220,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
                 >
                   <input
                     type="radio" name="cta-intent" value={option.key} checked={checked}
-                    onChange={() => setIntent(option.key)}
+                    onChange={() => setIntent(option.key as LeadIntent)}
                     className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary focus:outline-none"
                   />
                   <span className="min-w-0">
@@ -244,7 +243,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
               className="transition-transform group-open:rotate-180 motion-reduce:transition-none"
               aria-hidden="true"
             />
-            Your plan goes with this as a PDF. See exactly what we receive.
+            {t.cta.disclosure}
           </summary>
           <dl className="mt-2 space-y-1 border-t border-border pt-2 text-[11px] leading-relaxed">
             {summary.map((line) => (
@@ -254,9 +253,9 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
               </div>
             ))}
             <div className="flex flex-wrap gap-x-2 pt-1">
-              <dt className="shrink-0 font-medium text-muted-foreground">Plus:</dt>
+              <dt className="shrink-0 font-medium text-muted-foreground">+</dt>
               <dd className="min-w-0 text-foreground">
-                your objective, channels, market, and the answers behind the plan.
+                {t.cta.plusLine}
               </dd>
             </div>
           </dl>
@@ -264,7 +263,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
 
         {status === "error" && (
           <p role="alert" className="text-xs text-destructive">
-            That did not go through. Please try again, or email us at{" "}
+            {t.cta.submitFailed}{" "}
             <a href="mailto:luis@lvbranding.com" className="font-medium underline underline-offset-2">
               luis@lvbranding.com
             </a>.
@@ -276,7 +275,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
             {status === "sending" ? (
               <>
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                Preparing your plan
+                {t.cta.submitting}
               </>
             ) : (
               <>
@@ -286,12 +285,11 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
             )}
           </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            We email you the PDF and you can download it here too. No obligation, and the plan
-            stays yours either way.
+            {t.cta.reassurance}
           </p>
         </div>
         <p aria-live="polite" className="sr-only">
-          {status === "sending" ? "Sending your plan." : ""}
+          {status === "sending" ? t.cta.submitting : ""}
         </p>
       </form>
     </section>
