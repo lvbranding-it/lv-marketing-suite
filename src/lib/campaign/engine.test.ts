@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   allocationAmounts, balanceNotes, breakEven, buildScenario, calculate, clamp,
-  componentAssessments, displayPercents, estimateMediaSpend, planLevers,
+  componentAssessments, displayPercents, estimateMediaSpend, feasibility,
+  feasibilityNarrative, feasibilityPaths, planLevers, protectedFloorShare,
   readinessNarrative, readinessScore, rebalanceShares, recommendationSummary,
-  recommendedShares, roundTotal, safeDiv, scenarioRationale, shareStatus,
+  roundTotal, safeDiv, scenarioRationale, selectedScopeRequirements, shareStatus,
 } from "./engine";
-import { ALLOCATION_RANGES, CATEGORY_KEYS, formatMoney } from "./config";
+import { CATEGORY_KEYS, formatMoney } from "./config";
 import { EMPTY_READINESS, emptyAnswers } from "./persist";
 import type {
   CalculatorAnswers, CategoryKey, ReadinessState, Shares,
@@ -48,34 +49,27 @@ function goalAnswers(overrides?: Partial<CalculatorAnswers["financial"]>): Calcu
 
 const shareSum = (s: Shares) => CATEGORY_KEYS.reduce((sum, k) => sum + s[k], 0);
 
-// ── Shares ──────────────────────────────────────────────────────────────────────
+// ── Shares (now derived from requirements, not the other way round) ────────────
 
-describe("recommendedShares", () => {
+const sharesOf = (a: CalculatorAnswers, k: "essential" | "growth" | "expansion" = "growth") =>
+  buildScenario(a, k).shares;
+
+describe("requirement-derived shares", () => {
   it("always sums to 1 across many input combinations", () => {
-    const variants = [budgetAnswers(), goalAnswers(), emptyAnswers()];
-    variants.push(withReadiness(budgetAnswers(), null), withReadiness(budgetAnswers(), "ready"));
+    const variants = [budgetAnswers(), goalAnswers(), emptyAnswers(),
+      withReadiness(budgetAnswers(), null), withReadiness(budgetAnswers(), "ready")];
     for (const a of variants) {
       for (const scenario of ["essential", "growth", "expansion"] as const) {
-        expect(shareSum(recommendedShares(a, scenario))).toBeCloseTo(1, 9);
+        expect(shareSum(sharesOf(a, scenario))).toBeCloseTo(1, 9);
       }
     }
   });
 
-  it("keeps every category within (or extremely near) its hard bounds", () => {
-    const shares = recommendedShares(budgetAnswers(), "growth");
-    for (const key of CATEGORY_KEYS) {
-      const [lo, hi] = ALLOCATION_RANGES[key].hard;
-      expect(shares[key] * 100).toBeGreaterThanOrEqual(lo - 1.5);
-      expect(shares[key] * 100).toBeLessThanOrEqual(hi + 1.5);
-    }
-  });
-
-  it("shifts budget toward strategy/creative when the foundation is missing", () => {
+  it("shifts budget toward strategy and creative when the foundation is missing", () => {
     const unready = withReadiness(budgetAnswers(), null);
     const ready = withReadiness(budgetAnswers(), "ready");
-
-    const su = recommendedShares(unready, "growth");
-    const sr = recommendedShares(ready, "growth");
+    const su = sharesOf(unready);
+    const sr = sharesOf(ready);
     expect(su.strategy).toBeGreaterThan(sr.strategy);
     expect(su.creative).toBeGreaterThan(sr.creative);
     expect(su.media).toBeLessThan(sr.media);
@@ -85,13 +79,13 @@ describe("recommendedShares", () => {
     const withPage = budgetAnswers();
     const withoutPage = budgetAnswers();
     withoutPage.readiness = { ...withoutPage.readiness, landingPage: "create" };
-    expect(recommendedShares(withoutPage, "growth").digital)
-      .toBeGreaterThan(recommendedShares(withPage, "growth").digital);
+    expect(sharesOf(withoutPage).digital).toBeGreaterThan(sharesOf(withPage).digital);
   });
 
-  it("gives expansion a larger testing share than essential (scenario ≠ flat multiplier)", () => {
+  it("gives expansion a larger testing amount than essential", () => {
     const a = budgetAnswers();
-    expect(recommendedShares(a, "expansion").testing).toBeGreaterThan(recommendedShares(a, "essential").testing);
+    expect(buildScenario(a, "expansion").requirements.testing)
+      .toBeGreaterThan(buildScenario(a, "essential").requirements.testing);
   });
 });
 
@@ -100,14 +94,14 @@ describe("recommendedShares", () => {
 describe("allocationAmounts", () => {
   it("amounts always total the investment exactly", () => {
     for (const total of [500, 2_000, 7_450, 25_000, 100_000, 1_234_500]) {
-      const shares = recommendedShares(budgetAnswers(), "growth");
+      const shares = sharesOf(budgetAnswers());
       const amounts = allocationAmounts(total, shares);
       expect(CATEGORY_KEYS.reduce((s, k) => s + amounts[k], 0)).toBe(total);
     }
   });
 
   it("handles zero and negative totals without NaN", () => {
-    const shares = recommendedShares(budgetAnswers(), "growth");
+    const shares = sharesOf(budgetAnswers());
     expect(CATEGORY_KEYS.reduce((s, k) => s + allocationAmounts(0, shares)[k], 0)).toBe(0);
     for (const k of CATEGORY_KEYS) {
       expect(Number.isFinite(allocationAmounts(-500, shares)[k])).toBe(true);
@@ -118,7 +112,7 @@ describe("allocationAmounts", () => {
 // ── Rebalancing ─────────────────────────────────────────────────────────────────
 
 describe("rebalanceShares", () => {
-  const base = recommendedShares(budgetAnswers(), "growth");
+  const base = sharesOf(budgetAnswers());
 
   it("keeps the sum at exactly 1 after adjustments", () => {
     const next = rebalanceShares(base, "media", 0.6, []);
@@ -224,6 +218,8 @@ describe("componentAssessments", () => {
     const video = componentAssessments(a).find((x) => x.key === "video");
     expect(video?.relevance).toBe("essential");
     expect(video?.reason).toContain("YouTube");
+    // Stated as a strong requirement, not an absolute claim about the platform.
+    expect(video?.reason).not.toContain("can only run");
   });
 
   it("excludes video entirely when no selected channel can run it", () => {
@@ -329,14 +325,24 @@ describe("estimateMediaSpend", () => {
 // ── Scenarios ───────────────────────────────────────────────────────────────────
 
 describe("buildScenario / calculate", () => {
-  it("budget-first totals scale by scenario factor, not category-flat multiplication", () => {
+  it("prices a comfortably funded budget-first plan at the budget, with surplus to media", () => {
+    // Give the plan clear headroom over its requirement.
+    const a = budgetAnswers();
+    const required = selectedScopeRequirements(a).total;
+    a.financial = { ...a.financial, budgetTotal: Math.ceil(required * 2) };
+    const result = calculate(a);
+    expect(result.budgetConstrained).toBe(false);
+    expect(result.scenarios.growth.total).toBe(roundTotal(a.financial.budgetTotal as number));
+    expect(result.scenarios.essential.total).toBeLessThan(result.scenarios.growth.total);
+    expect(result.scenarios.expansion.total).toBeGreaterThan(result.scenarios.growth.total);
+  });
+
+  it("never quotes below the real requirement, even for a small stated budget", () => {
     const a = budgetAnswers({ budgetTotal: 25_000 });
     const result = calculate(a);
-    expect(result.scenarios.growth.total).toBe(25_000);
-    expect(result.scenarios.essential.total).toBe(20_000);   // 0.8 ×
-    expect(result.scenarios.expansion.total).toBe(31_300);   // 1.25 ×, rounded to $100
-    // Different shares per scenario prove it's not a flat multiplier.
-    expect(result.scenarios.expansion.shares.testing).toBeGreaterThan(result.scenarios.essential.shares.testing);
+    // Growth is the selected scope, so it costs what that scope costs.
+    expect(result.scenarios.growth.total).toBe(roundTotal(selectedScopeRequirements(a).total));
+    expect(result.scenarios.expansion.total).toBeGreaterThan(result.scenarios.growth.total);
   });
 
   it("goal-first total derives from media need ÷ media share", () => {
@@ -348,19 +354,27 @@ describe("buildScenario / calculate", () => {
     expect(Math.abs(plan.amounts.media - 4_000)).toBeLessThan(300);
   });
 
-  it("scenario amounts always equal the scenario total", () => {
+  it("category amounts plus the reserve always equal the scenario total", () => {
+    // I = P + M + R, so the six categories sum to the total minus the reserve.
     for (const answers of [budgetAnswers(), goalAnswers()]) {
       const result = calculate(answers);
       for (const key of ["essential", "growth", "expansion"] as const) {
         const plan = result.scenarios[key];
-        expect(CATEGORY_KEYS.reduce((s, k) => s + plan.amounts[k], 0)).toBe(plan.total);
+        const allocated = CATEGORY_KEYS.reduce((s, k) => s + plan.amounts[k], 0);
+        expect(allocated + plan.reserveAmount).toBe(plan.total);
+        expect(plan.reserveAmount).toBeGreaterThan(0);
       }
     }
   });
 
-  it("recommends Essential for small stated budgets, Growth otherwise", () => {
+  it("recommends the pilot whenever the budget cannot fund the scope, Growth otherwise", () => {
     expect(calculate(budgetAnswers({ budgetTotal: 3_000 })).recommendedScenario).toBe("essential");
-    expect(calculate(budgetAnswers({ budgetTotal: 25_000 })).recommendedScenario).toBe("growth");
+    const generous = budgetAnswers();
+    generous.financial = {
+      ...generous.financial,
+      budgetTotal: Math.ceil(selectedScopeRequirements(generous).total * 2),
+    };
+    expect(calculate(generous).recommendedScenario).toBe("growth");
     expect(calculate(goalAnswers()).recommendedScenario).toBe("growth");
   });
 
@@ -543,9 +557,9 @@ describe("numeric guards and formatting", () => {
 
   it("displayPercents always totals exactly 100", () => {
     const variants: Shares[] = [
-      recommendedShares(budgetAnswers(), "growth"),
-      recommendedShares(goalAnswers(), "essential"),
-      rebalanceShares(recommendedShares(budgetAnswers(), "growth"), "media", 0.57, []),
+      sharesOf(budgetAnswers()),
+      sharesOf(goalAnswers(), "essential"),
+      rebalanceShares(sharesOf(budgetAnswers()), "media", 0.57, []),
       { strategy: 1 / 6, creative: 1 / 6, digital: 1 / 6, media: 1 / 6, management: 1 / 6, testing: 1 / 6 },
     ];
     for (const shares of variants) {
@@ -606,5 +620,226 @@ describe("contradictions and explanation copy", () => {
     expect(text).toMatch(/would change the recommendation\.$/);
     // Drivers are simultaneous, so they read as a conjunction, not alternatives.
     expect(text).toContain("components still need to be created, and the number of channels");
+  });
+});
+
+// ── Feasibility: can this budget do this job? ───────────────────────────────────
+
+describe("feasibility", () => {
+  /** The reported case: 5 channels, 90 days, almost nothing ready, $3,000. */
+  function constrainedAnswers(): CalculatorAnswers {
+    const a = budgetAnswers({ budgetTotal: 3_000 });
+    a.scope = {
+      ...a.scope,
+      channels: ["google-search", "google-display", "youtube", "meta-facebook", "instagram"],
+      audience: "100k-1m",
+      durationDays: 90,
+    };
+    a.destination = "landing-page";
+    a.readiness = { ...withReadiness(a, "create").readiness, positioning: "ready" };
+    return a;
+  }
+
+  it("does not apply in goal-first mode", () => {
+    expect(feasibility(goalAnswers()).applies).toBe(false);
+  });
+
+  it("prices the requirement bottom up: I = P + M + R", () => {
+    const req = selectedScopeRequirements(constrainedAnswers());
+    const P = req.strategy + req.creative + req.digital + req.management + req.testing;
+    expect(req.protectedTotal).toBeCloseTo(P, 6);
+    expect(req.total).toBeCloseTo(req.protectedTotal + req.media + req.reserve, 6);
+    // Every protected line is a real, positive requirement here.
+    for (const k of ["strategy", "creative", "digital", "management", "testing"] as const) {
+      expect(req[k]).toBeGreaterThan(0);
+    }
+  });
+
+  it("rates the reported $3,000 five-channel case as foundation phase only", () => {
+    const fit = feasibility(constrainedAnswers());
+    expect(fit.applies).toBe(true);
+    // The protected requirements alone exceed the budget.
+    expect(fit.budget).toBeLessThan(fit.requirements.protectedTotal);
+    expect(fit.status).toBe("foundation-only");
+    expect(fit.fundingGap).toBeGreaterThan(0);
+    expect(fit.score).toBeLessThan(50);
+  });
+
+  it("walks up the statuses as the budget grows", () => {
+    const a = constrainedAnswers();
+    const req = selectedScopeRequirements(a);
+    const P = req.protectedTotal;
+    const allChannels = req.channelMediaFloors.reduce((t, f) => t + f.amount, 0);
+
+    const at = (budget: number) =>
+      feasibility({ ...a, financial: { ...a.financial, budgetTotal: budget } }).status;
+
+    expect(at(P - 1_000)).toBe("foundation-only");
+    expect(at(P + 10)).toBe("preparation");
+    expect(at(P + req.singleChannelFloor + 10)).toBe("pilot");
+    expect(at(P + allChannels + 10)).toBe("supported");
+  });
+
+  it("scores the budget against the requirement", () => {
+    const a = constrainedAnswers();
+    const req = selectedScopeRequirements(a);
+    const half = { ...a, financial: { ...a.financial, budgetTotal: req.total / 2 } };
+    expect(feasibility(half).score).toBe(50);
+    const full = { ...a, financial: { ...a.financial, budgetTotal: req.total } };
+    expect(feasibility(full).score).toBe(100);
+    expect(feasibility(full).fundingGap).toBeLessThanOrEqual(0);
+  });
+
+  it("costs less when components are already ready", () => {
+    const unready = constrainedAnswers();
+    const ready = { ...unready, readiness: withReadiness(unready, "ready").readiness };
+    expect(selectedScopeRequirements(ready).protectedTotal)
+      .toBeLessThan(selectedScopeRequirements(unready).protectedTotal);
+  });
+
+  it("treats 'needs review' as cheaper than 'needs creating', per component", () => {
+    const create = constrainedAnswers();
+    const review = { ...create, readiness: withReadiness(create, "review").readiness };
+    expect(selectedScopeRequirements(review).protectedTotal)
+      .toBeLessThan(selectedScopeRequirements(create).protectedTotal);
+  });
+
+  it("charges the concept once and adds adaptation per channel", () => {
+    const one = constrainedAnswers();
+    one.scope = { ...one.scope, channels: ["google-search"] };
+    const five = constrainedAnswers();
+    const creativeOne = selectedScopeRequirements(one).creative;
+    const creativeFive = selectedScopeRequirements(five).creative;
+    // More channels cost more, but nowhere near five times more.
+    expect(creativeFive).toBeGreaterThan(creativeOne);
+    expect(creativeFive).toBeLessThan(creativeOne * 5);
+  });
+
+  it("scales strategy with scope rather than charging a flat fee", () => {
+    const small = constrainedAnswers();
+    small.scope = { ...small.scope, channels: ["google-search"], audience: "under-10k" };
+    small.profile = { ...small.profile, reach: "local" };
+    const big = constrainedAnswers();
+    big.profile = { ...big.profile, reach: "international" };
+    expect(selectedScopeRequirements(big).scopeFactor)
+      .toBeGreaterThan(selectedScopeRequirements(small).scopeFactor);
+    expect(selectedScopeRequirements(big).strategy)
+      .toBeGreaterThan(selectedScopeRequirements(small).strategy);
+  });
+
+  it("respects the per-channel media floor even when the goal implies less", () => {
+    const a = goalAnswers({ goalCount: 1, costPerResult: 1, conversionRate: 0.5 });
+    const req = selectedScopeRequirements(a);
+    const floors = req.channelMediaFloors.reduce((t, f) => t + f.amount, 0);
+    expect(req.media).toBeGreaterThanOrEqual(floors);
+  });
+});
+
+describe("constrained scenarios", () => {
+  function constrained(budget = 3_000): CalculatorAnswers {
+    const a = budgetAnswers({ budgetTotal: budget });
+    a.scope = {
+      ...a.scope,
+      channels: ["google-search", "google-display", "youtube", "meta-facebook", "instagram"],
+      durationDays: 90,
+    };
+    a.destination = "landing-page";
+    a.readiness = { ...withReadiness(a, "create").readiness, positioning: "ready" };
+    return a;
+  }
+
+  it("flags the plan as budget-constrained and recommends the pilot", () => {
+    const result = calculate(constrained());
+    expect(result.budgetConstrained).toBe(true);
+    expect(result.recommendedScenario).toBe("essential");
+  });
+
+  it("spends the whole budget on the pilot instead of holding a fraction back", () => {
+    expect(calculate(constrained()).scenarios.essential.total).toBe(3_000);
+  });
+
+  it("prices the larger scenarios at what the selected scope really costs", () => {
+    const result = calculate(constrained());
+    expect(result.scenarios.growth.total).toBe(roundTotal(result.scenarios.growth.requirements.total));
+    expect(result.scenarios.growth.total).toBeGreaterThan(result.scenarios.essential.total);
+    expect(result.scenarios.expansion.total).toBeGreaterThan(result.scenarios.growth.total);
+  });
+
+  it("reduces the pilot's channel mix to what the budget can carry", () => {
+    const plan = calculate(constrained()).scenarios.essential;
+    expect(plan.plannedChannels.length).toBeLessThan(5);
+  });
+
+  it("keeps protected + media + reserve equal to the total at any budget", () => {
+    for (const budget of [3_000, 30_000, 250_000]) {
+      const result = calculate(constrained(budget));
+      for (const key of ["essential", "growth", "expansion"] as const) {
+        const plan = result.scenarios[key];
+        const protectedSum = (["strategy", "creative", "digital", "management", "testing"] as const)
+          .reduce((t, k) => t + plan.amounts[k], 0);
+        expect(protectedSum + plan.amounts.media + plan.reserveAmount).toBe(plan.total);
+      }
+    }
+  });
+
+  it("never claims a channel the media line cannot fund", () => {
+    const plan = calculate(constrained(3_000)).scenarios.essential;
+    if (plan.amounts.media < plan.requirements.singleChannelFloor) {
+      expect(plan.recommendedChannels).toBe(0);
+      expect(plan.plannedChannels).toHaveLength(0);
+    }
+  });
+
+  it("protects the foundation before media when the budget falls short", () => {
+    // Media absorbs the shortfall first; the protected work is what the
+    // campaign depends on, so it is the last thing cut.
+    const plan = calculate(constrained(3_000)).scenarios.essential;
+    const protectedSum = (["strategy", "creative", "digital", "management", "testing"] as const)
+      .reduce((t, k) => t + plan.amounts[k], 0);
+    expect(protectedSum).toBeGreaterThan(plan.amounts.media);
+  });
+
+  it("leaves an adequately funded plan unconstrained and lets surplus buy media", () => {
+    const a = constrained();
+    const req = selectedScopeRequirements(a);
+    const generous = req.total * 3;
+    a.financial = { ...a.financial, budgetTotal: generous };
+    const result = calculate(a);
+    expect(result.budgetConstrained).toBe(false);
+    // Surplus flows to media, not to inflated protected lines.
+    expect(result.scenarios.growth.amounts.media).toBeGreaterThan(req.media);
+    // Within one allocation rounding step of the protected requirement.
+    expect(Math.abs(result.scenarios.growth.amounts.strategy - req.strategy)).toBeLessThanOrEqual(100);
+  });
+
+  it("offers three concrete paths forward when constrained", () => {
+    const a = constrained();
+    const paths = feasibilityPaths(a, feasibility(a));
+    expect(paths.map((p) => p.id)).toEqual(["pilot", "foundation", "increase"]);
+  });
+
+  it("offers no paths when the scope is supported", () => {
+    const a = constrained();
+    a.financial = { ...a.financial, budgetTotal: selectedScopeRequirements(a).total * 3 };
+    expect(feasibilityPaths(a, feasibility(a))).toHaveLength(0);
+  });
+});
+
+describe("protected allocation rule", () => {
+  it("reports a protected floor for every category except media", () => {
+    const plan = buildScenario(budgetAnswers(), "growth");
+    for (const key of ["strategy", "creative", "digital", "management", "testing"] as const) {
+      expect(protectedFloorShare(key, plan.requirements, plan.total)).toBeGreaterThan(0);
+    }
+    expect(protectedFloorShare("media", plan.requirements, plan.total)).toBe(0);
+  });
+
+  it("never reports a floor above 100%", () => {
+    const plan = buildScenario(budgetAnswers({ budgetTotal: 500 }), "growth");
+    for (const key of CATEGORY_KEYS) {
+      const floor = protectedFloorShare(key, plan.requirements, plan.total);
+      expect(floor).toBeGreaterThanOrEqual(0);
+      expect(floor).toBeLessThanOrEqual(1);
+    }
   });
 });

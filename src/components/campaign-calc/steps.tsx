@@ -3,7 +3,7 @@
 // so typing is never interrupted. All business math lives in src/lib/campaign.
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { ChevronDown, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,7 +20,8 @@ import { componentAssessments, readinessScore } from "@/lib/campaign/engine";
 import { validateStep, type StepErrors } from "@/lib/campaign/validate";
 import type {
   CalculatorAnswers, ChannelKey, ComponentAssessment, ComponentRelevance,
-  CurrencyCode, FinancialMode, ObjectiveKey, ReadinessKey, ReadinessState,
+  CurrencyCode, FinancialMode, ObjectiveKey, ReadinessGroupKey, ReadinessKey,
+  ReadinessState,
 } from "@/lib/campaign/types";
 import {
   Field, NumberField, OptionCards, ToggleChips,
@@ -284,10 +285,30 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
   const setState = (key: ReadinessKey, value: ReadinessState) =>
     onChange((prev) => ({ ...prev, readiness: { ...prev.readiness, [key]: value } }));
 
+  /** Fills only the untouched components, so existing answers are never overwritten. */
+  const markGroupUnsure = (keys: ReadinessKey[]) =>
+    onChange((prev) => {
+      const readiness = { ...prev.readiness };
+      for (const key of keys) if (readiness[key] === null) readiness[key] = "unsure";
+      return { ...prev, readiness };
+    });
+
   const assessments = componentAssessments(answers);
   const byKey = new Map(assessments.map((a) => [a.key, a]));
   const applicable = assessments.filter((a) => a.relevance !== "not-required");
   const notRequired = assessments.filter((a) => a.relevance === "not-required");
+
+  // One section open at a time, defaulting to the first with unanswered items.
+  // The step is long otherwise, especially on a phone.
+  const firstIncomplete = READINESS_GROUPS.find((group) => {
+    const rows = applicable.filter((a) => readinessItemMeta(a.key).group === group.key);
+    return rows.length > 0 && rows.some((a) => a.state === null);
+  })?.key ?? READINESS_GROUPS[0].key;
+
+  const [manualGroup, setManualGroup] = useState<ReadinessGroupKey | null | undefined>(undefined);
+  // `undefined` means "follow the flow"; an explicit choice pins it open or shut.
+  const openGroup = manualGroup === undefined ? firstIncomplete : manualGroup;
+  const setOpenGroup = (next: ReadinessGroupKey | null) => setManualGroup(next);
 
   return (
     <div className="space-y-6">
@@ -318,21 +339,57 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
           {READINESS_GROUPS.map((group) => {
             const rows = applicable.filter((a) => readinessItemMeta(a.key).group === group.key);
             if (rows.length === 0) return null;
+            const answered = rows.filter((a) => a.state !== null).length;
+            const complete = answered === rows.length;
+            const isOpen = openGroup === group.key;
+
             return (
-              <section key={group.key} className="space-y-2">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide">{group.label}</h3>
-                  <p className="text-[11px] text-muted-foreground">{group.blurb}</p>
-                </div>
-                <div className="grid gap-2 lg:grid-cols-2">
-                  {rows.map((a) => (
-                    <ReadinessRow
-                      key={a.key}
-                      assessment={byKey.get(a.key) as ComponentAssessment}
-                      onSelect={(state) => setState(a.key, state)}
-                    />
-                  ))}
-                </div>
+              <section key={group.key} className="rounded-lg border border-border">
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenGroup(isOpen ? null : group.key)}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+                >
+                  <ChevronDown
+                    size={14}
+                    aria-hidden="true"
+                    className={cn("shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold uppercase tracking-wide">{group.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{group.blurb}</span>
+                  </span>
+                  <span className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    complete ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground",
+                  )}>
+                    {answered} of {rows.length} answered
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-2 border-t border-border p-3">
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {rows.map((a) => (
+                        <ReadinessRow
+                          key={a.key}
+                          assessment={byKey.get(a.key) as ComponentAssessment}
+                          onSelect={(state) => setState(a.key, state)}
+                        />
+                      ))}
+                    </div>
+                    {answered < rows.length && (
+                      <button
+                        type="button"
+                        onClick={() => markGroupUnsure(rows.map((a) => a.key))}
+                        className="text-[11px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                      >
+                        Mark the rest of this section as "Not sure"
+                      </button>
+                    )}
+                  </div>
+                )}
               </section>
             );
           })}

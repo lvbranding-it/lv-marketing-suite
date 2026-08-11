@@ -14,19 +14,22 @@
 //   Break-even units      = total investment ÷ gross profit per unit
 
 import {
-  ALLOCATION_RANGES, ASSUMPTIONS, CATEGORY_KEYS, CHANNELS,
+  ASSUMPTIONS, CATEGORY_KEYS, CHANNELS,
   CHANNELS_FAVOURING_VIDEO, CHANNELS_REQUIRING_IMAGERY, CHANNELS_REQUIRING_VIDEO,
   CHANNELS_SUPPORTING_VIDEO, CHANNELS_WITH_NATIVE_FORMS, DESTINATIONS,
-  DESTINATION_RULES, READINESS_BANDS,
+  DESTINATION_RULES, FEASIBILITY_SCORE_BANDS, READINESS_BANDS, RESERVE,
   READINESS_ITEMS, RELEVANCE_GAP_MULTIPLIER, RELEVANCE_WEIGHTS, SCENARIOS,
   audienceBandMeta, categoryMeta, formatMoney, objectiveMeta, readinessItemMeta,
   readinessStateMeta, scenarioMeta,
 } from "./config";
+import {
+  affordableChannels, buildRequirements, campaignMonths, channelLabel,
+} from "./requirements";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
   CategoryInsight, CategoryKey, ChannelKey, ComponentAssessment,
-  ComponentRelevance, ReadinessKey, ReadinessResult, ReadinessState, ScenarioKey,
-  ScenarioPlan, Shares,
+  ComponentRelevance, FeasibilityResult, ReadinessKey, ReadinessResult,
+  ReadinessState, Requirements, ScenarioKey, ScenarioPlan, Shares,
 } from "./types";
 
 // ── Numeric guards ──────────────────────────────────────────────────────────────
@@ -84,13 +87,17 @@ export function componentAssessments(answers: CalculatorAnswers): ComponentAsses
     positioning:    { relevance: "essential" },
     objectiveOffer: { relevance: "essential" },
     message:        { relevance: "essential" },
+    channelStrategy: channels.length > 1
+      ? { relevance: "essential", reason: `Running ${channels.length} channels together needs a plan for how they work as one campaign.` }
+      : { relevance: "recommended", reason: "A single channel still benefits from a deliberate plan, but the coordination burden is small." },
+    campaignPlan:   { relevance: "essential" },
     visualIdentity: visualChannels
       ? { relevance: "essential", reason: "Your channel mix is visual, so the campaign needs a consistent look." }
       : { relevance: "recommended", reason: "Your channels are mostly text-based, so visual direction matters less here." },
 
     // ── Creative assets: driven by the channels selected ──
     video: has(CHANNELS_REQUIRING_VIDEO)
-      ? { relevance: "essential", reason: `You selected ${channelNames(CHANNELS_REQUIRING_VIDEO, channels)}, which can only run video creative.` }
+      ? { relevance: "essential", reason: `You selected ${channelNames(CHANNELS_REQUIRING_VIDEO, channels)}, making video an important creative requirement for this channel mix.` }
       : has(CHANNELS_FAVOURING_VIDEO)
         ? { relevance: "recommended", reason: `Video typically outperforms static creative on ${channelNames(CHANNELS_FAVOURING_VIDEO, channels)}.` }
         : has(CHANNELS_SUPPORTING_VIDEO)
@@ -190,81 +197,24 @@ export function readinessScore(answers: CalculatorAnswers): ReadinessResult {
   return { score, band: bandEntry.band, assessments, essentialTotal, essentialReady, needsReview, gaps };
 }
 
-// ── Recommended allocation shares ───────────────────────────────────────────────
+// ── Allocation from requirements ────────────────────────────────────────────────
+// Shares are now DERIVED from real dollar requirements rather than driving them.
+// The percentages are a view of the plan, not the plan itself.
 
-/**
- * Builds the recommended share of each category as a decimal set summing to 1.
- * Starts from the midpoints of the configured planning ranges, then applies
- * answer-driven adjustments (in percentage points), clamps to hard bounds, and
- * normalises. The adjustments are the "adaptive ranges" behaviour: missing
- * foundations pull budget toward strategy/creative/digital; a complete
- * foundation releases budget toward media.
- */
-export function recommendedShares(answers: CalculatorAnswers, scenario: ScenarioKey): Shares {
-  const points: Record<CategoryKey, number> = {
-    strategy: 0, creative: 0, digital: 0, media: 0, management: 0, testing: 0,
-  };
-
-  // Base: midpoint of each planning range.
-  for (const key of CATEGORY_KEYS) {
-    const [lo, hi] = ALLOCATION_RANGES[key].base;
-    points[key] = (lo + hi) / 2;
+export function sharesFromAmounts(amounts: Record<CategoryKey, number>): Shares {
+  const total = CATEGORY_KEYS.reduce((t, k) => t + Math.max(0, amounts[k]), 0);
+  const out = {} as Shares;
+  if (total <= 0) {
+    for (const key of CATEGORY_KEYS) out[key] = 1 / CATEGORY_KEYS.length;
+    return out;
   }
-
-  // Readiness adjustments. A gap grows its category in proportion to how ready
-  // the component is AND how much it matters here, so a missing video only moves
-  // the plan when the channel mix actually needs video. [ASSUMPTION]
-  const ready = readinessScore(answers);
-  for (const a of ready.assessments) {
-    const item = readinessItemMeta(a.key);
-    const gap = (1 - stateScore(a.state)) * RELEVANCE_GAP_MULTIPLIER[a.relevance];
-    points[item.affects] += item.points * gap;
-  }
-  // A tracking gap also grows the testing reserve: measuring is the precondition
-  // for learning. Scaled the same way. [ASSUMPTION]
-  const trackingGap = ready.assessments.find((a) => a.key === "tracking");
-  if (trackingGap) {
-    points.testing += 1 * (1 - stateScore(trackingGap.state)) * RELEVANCE_GAP_MULTIPLIER[trackingGap.relevance];
-  }
-  // A complete foundation shifts weight toward distribution. [ASSUMPTION]
-  if (ready.score >= 85) points.media += 4;
-  else if (ready.score >= 65) points.media += 2;
-
-  // Scope adjustments. [ASSUMPTION]
-  const channels = answers.scope.channels.length;
-  if (channels >= 4) { points.management += 2; points.creative += 1.5; }
-  if (channels >= 6) { points.management += 1.5; }
-
-  const days = clamp(answers.scope.durationDays || 30, 7, 730);
-  if (days >= 180) { points.testing += 1.5; points.management += 1; }
-  if (days <= 45 && answers.scope.timeSensitive) { points.management += 2; points.creative += 1.5; }
-
-  if (answers.profile.stage === "new") points.strategy += 2;
-  if (answers.profile.stage === "established" && ready.score >= 65) points.media += 1;
-
-  // Scenario biases change scope emphasis, not overall scale. [ASSUMPTION]
-  const sMeta = scenarioMeta(scenario);
-  for (const key of CATEGORY_KEYS) {
-    points[key] += sMeta.biases[key] ?? 0;
-  }
-
-  // Clamp to hard bounds, then normalise to 1. A second clamp+normalise pass
-  // settles values that the first normalisation pushed past a bound.
-  for (let pass = 0; pass < 2; pass++) {
-    for (const key of CATEGORY_KEYS) {
-      const [lo, hi] = ALLOCATION_RANGES[key].hard;
-      points[key] = clamp(points[key], lo, hi);
-    }
-    const sum = CATEGORY_KEYS.reduce((s, k) => s + points[k], 0);
-    for (const key of CATEGORY_KEYS) points[key] = safeDiv(points[key] * 100, sum, 100 / 6);
-  }
-
-  const shares = {} as Shares;
   let acc = 0;
-  for (const key of CATEGORY_KEYS) { shares[key] = points[key] / 100; acc += shares[key]; }
-  // Absorb float drift into media (the largest category).
-  shares.media += 1 - acc;
-  return shares;
+  for (const key of CATEGORY_KEYS) {
+    out[key] = Math.max(0, amounts[key]) / total;
+    acc += out[key];
+  }
+  out.media += 1 - acc;   // absorb float drift into the adjustable line
+  return out;
 }
 
 // ── Rounding ────────────────────────────────────────────────────────────────────
@@ -327,31 +277,48 @@ export function rebalanceShares(
 ): Shares {
   if (locked.includes(key)) return shares;
   const others = CATEGORY_KEYS.filter((k) => k !== key);
-  const unlockedOthers = others.filter((k) => !locked.includes(k));
-  if (unlockedOthers.length === 0) return shares;
+  const unlocked = others.filter((k) => !locked.includes(k));
+  if (unlocked.length === 0) return shares;
 
   const lockedSum = others.filter((k) => locked.includes(k)).reduce((s, k) => s + shares[k], 0);
-  const maxNext = 1 - lockedSum - MIN_SHARE * unlockedOthers.length;
+  const maxNext = 1 - lockedSum - MIN_SHARE * unlocked.length;
   const next = clamp(nextShare, MIN_SHARE, Math.max(MIN_SHARE, maxNext));
-
-  const pool = 1 - lockedSum - next;
-  const prevPool = unlockedOthers.reduce((s, k) => s + shares[k], 0);
+  const pool = Math.max(0, 1 - lockedSum - next);
+  const prevPool = unlocked.reduce((s, k) => s + shares[k], 0);
 
   const out = { ...shares, [key]: next };
-  if (prevPool <= 0) {
-    for (const k of unlockedOthers) out[k] = pool / unlockedOthers.length;
-  } else {
-    for (const k of unlockedOthers) out[k] = Math.max(MIN_SHARE, pool * safeDiv(shares[k], prevPool, 1 / unlockedOthers.length));
+  // Proportional first pass, with the per-category floor applied.
+  for (const k of unlocked) {
+    const share = prevPool > 0 ? pool * (shares[k] / prevPool) : pool / unlocked.length;
+    out[k] = Math.max(MIN_SHARE, share);
   }
-  // Absorb clamping drift into the largest unlocked "other" so the sum is exact.
-  const sum = CATEGORY_KEYS.reduce((s, k) => s + out[k], 0);
-  const sink = unlockedOthers.reduce((a, b) => (out[a] >= out[b] ? a : b));
-  out[sink] = Math.max(MIN_SHARE, out[sink] + (1 - sum));
+
+  /*
+   * Applying the floor can overshoot the pool, which used to leave the set
+   * summing to slightly more than 1. Reclaim the excess from whichever
+   * categories still have headroom above the floor, largest first, and only
+   * fall back to trimming the dragged category if the floors make the target
+   * unreachable. The result sums to exactly 1 by construction.
+   */
+  let drift = unlocked.reduce((s, k) => s + out[k], 0) - pool;
+  if (drift > 0) {
+    for (const k of [...unlocked].sort((a, b) => out[b] - out[a])) {
+      if (drift <= 1e-12) break;
+      const take = Math.min(drift, out[k] - MIN_SHARE);
+      out[k] -= take;
+      drift -= take;
+    }
+    if (drift > 1e-12) out[key] = Math.max(MIN_SHARE, out[key] - drift);
+  } else if (drift < 0) {
+    const sink = unlocked.reduce((a, b) => (out[a] >= out[b] ? a : b));
+    out[sink] -= drift;
+  }
+
   return out;
 }
 
 /**
- * Integer percentages for display that always total exactly 100; independent
+ * Integer percentages for display that always total exactly 100. Independent
  * rounding of six shares routinely produces 99 or 101, which reads as a bug.
  */
 export function displayPercents(shares: Shares): Record<CategoryKey, number> {
@@ -377,7 +344,11 @@ export function displayPercents(shares: Shares): Record<CategoryKey, number> {
   return out;
 }
 
-/** Below / balanced / above the recommendation for this user. */
+/**
+ * Where an adjusted allocation sits relative to the protected minimum. Media is
+ * the only freely adjustable line, so it is judged against the recommendation
+ * instead.
+ */
 export function shareStatus(current: number, recommended: number): "below" | "balanced" | "above" {
   const delta = (current - recommended) * 100;
   if (delta < -ASSUMPTIONS.balancedBandPoints) return "below";
@@ -385,16 +356,16 @@ export function shareStatus(current: number, recommended: number): "below" | "ba
   return "balanced";
 }
 
-/** Suggested display range for a category, centred on the adaptive recommendation. */
-export function suggestedRange(key: CategoryKey, recommended: number): [number, number] {
-  const [lo, hi] = ALLOCATION_RANGES[key].base;
-  const half = (hi - lo) / 2;
-  const [hardLo, hardHi] = ALLOCATION_RANGES[key].hard;
-  const centre = recommended * 100;
-  return [
-    Math.round(clamp(centre - half, hardLo, hardHi)),
-    Math.round(clamp(centre + half, hardLo, hardHi)),
-  ];
+/**
+ * The protected-allocation rule: X_i >= P_i for every protected category.
+ * Media may go to zero, but the calculator then has to recalculate what that
+ * media can still reach.
+ */
+export function protectedFloorShare(
+  key: CategoryKey, requirements: Requirements, total: number,
+): number {
+  if (key === "media" || total <= 0) return 0;
+  return clamp(safeDiv(requirements.floors[key], total, 0), 0, 1);
 }
 
 // ── Goal-first media estimate ───────────────────────────────────────────────────
@@ -476,50 +447,187 @@ export function breakEven(
   };
 }
 
-// ── Scenario construction ───────────────────────────────────────────────────────
+// ── Feasibility ─────────────────────────────────────────────────────────────────
+// Budget-first asks two questions. The requirements model answers the first
+// ("what does this campaign actually cost?"); this answers the second ("can the
+// available budget do that job, and if not, what can it do?").
+//
+//   P             = S_min + B_min + D_min + G_min + T_min
+//   M_available   = max(0, A - P - R)
+//   Funding gap   = I_required - A
+//   F_budget      = min(100, A / I_required x 100)
 
-function channelsSupportedBy(mediaAmount: number, durationDays: number): number {
-  const months = Math.max(0.5, clamp(durationDays, 7, 730) / 30);
-  // [ASSUMPTION] a channel needs a minimum monthly spend to learn at all.
-  return Math.max(1, Math.floor(safeDiv(mediaAmount, ASSUMPTIONS.minChannelSpendPerMonth * months, 1)));
+/** The requirements for the scope the user actually selected, at Growth scope. */
+export function selectedScopeRequirements(answers: CalculatorAnswers): Requirements {
+  const assessments = componentAssessments(answers);
+  const goalMedia = answers.financial.mode === "goal"
+    ? estimateMediaSpend(answers, clamp(num(answers.financial.goalCount) ?? 0, 0, ASSUMPTIONS.maxGoal))
+    : null;
+  return buildRequirements(answers, assessments, "growth", { goalMedia });
 }
 
-export function buildScenario(answers: CalculatorAnswers, key: ScenarioKey): ScenarioPlan {
-  const sMeta = scenarioMeta(key);
-  const shares = recommendedShares(answers, key);
-  const fin = answers.financial;
+export function feasibility(answers: CalculatorAnswers): FeasibilityResult {
+  const requirements = selectedScopeRequirements(answers);
+  const budget = answers.financial.mode === "budget"
+    ? clamp(num(answers.financial.budgetTotal) ?? 0, 0, ASSUMPTIONS.maxBudget)
+    : 0;
+  const applies = answers.financial.mode === "budget" && budget > 0;
 
-  let total = 0;
+  const P = requirements.protectedTotal;
+  const R = requirements.reserve;
+  const mediaAvailable = Math.max(0, budget - P - R);
+  const fundingGap = requirements.total - budget;
+  const selectedChannels = Math.max(1, answers.scope.channels.length);
+  const funded = affordableChannels(answers.scope.channels, answers.scope.durationDays, mediaAvailable);
+
+  const score = requirements.total > 0
+    ? clamp(Math.round(safeDiv(budget, requirements.total, 0) * 100), 0, 100)
+    : 0;
+  const scoreLabel = (FEASIBILITY_SCORE_BANDS.find((b) => score >= b.min)
+    ?? FEASIBILITY_SCORE_BANDS[FEASIBILITY_SCORE_BANDS.length - 1]).label;
+
+  // The detailed rules decide the status; the score is a separate read.
+  const allChannelFloors = requirements.channelMediaFloors.reduce((t, f) => t + f.amount, 0);
+  let status: FeasibilityResult["status"] = "supported";
+  if (applies) {
+    if (budget < P) status = "foundation-only";
+    else if (budget < P + requirements.singleChannelFloor) status = "preparation";
+    else if (budget < P + allChannelFloors) status = "pilot";
+    else status = "supported";
+  }
+
+  return {
+    status, applies, budget, score, scoreLabel, requirements,
+    mediaAvailable, fundingGap,
+    supportedChannels: funded.length,
+    selectedChannels,
+  };
+}
+
+// ── Scenario construction ───────────────────────────────────────────────────────
+// A scenario is a SCOPE, and its total is that scope's real requirement. The
+// budget no longer decides the plan; it decides which scope is affordable.
+
+export function buildScenario(
+  answers: CalculatorAnswers,
+  key: ScenarioKey,
+  /** Feasibility, when the caller already has it. Re-derived otherwise. */
+  fit?: FeasibilityResult,
+): ScenarioPlan {
+  const sMeta = scenarioMeta(key);
+  const fin = answers.financial;
+  const assessments = componentAssessments(answers);
+  const selectedChannels = answers.scope.channels;
+
+  let requirements: Requirements;
+  let total: number;
   let estimatedResults: number | null = null;
+  let plannedChannels: ChannelKey[] = selectedChannels.length > 0 ? selectedChannels : ["google-search"];
 
   if (fin.mode === "budget") {
     const budget = clamp(num(fin.budgetTotal) ?? 0, 0, ASSUMPTIONS.maxBudget);
-    total = roundTotal(budget * sMeta.budgetFactor);
-    // Budget mode collects no unit costs, so results are not estimated here.
+    const scopeFit = fit ?? feasibility(answers);
+    const constrained = scopeFit.applies && scopeFit.status !== "supported";
+
+    if (constrained && key === "essential") {
+      /*
+       * The focused pilot is a genuine reduction in scope, not a smaller number:
+       * cost the protected requirements first, then fund only the channels the
+       * remainder can actually carry. Two passes, because the protected total
+       * itself depends on the channel count through creative adaptations and
+       * management complexity.
+       */
+      let channels = plannedChannels;
+      for (let pass = 0; pass < 2; pass++) {
+        const draft = buildRequirements(answers, assessments, key, { channels });
+        const available = Math.max(0, budget - draft.protectedTotal - draft.reserve);
+        const affordable = affordableChannels(plannedChannels, answers.scope.durationDays, available);
+        channels = affordable.length > 0 ? affordable : plannedChannels.slice(0, 1);
+      }
+      plannedChannels = channels;
+      requirements = buildRequirements(answers, assessments, key, { channels });
+      // Spend the whole budget: withholding a fraction of an insufficient budget
+      // helps nobody, and promising more than the budget would be dishonest.
+      total = roundTotal(budget);
+    } else if (constrained) {
+      // Show what the selected scope genuinely costs, not a budget multiple.
+      requirements = buildRequirements(answers, assessments, key);
+      total = roundTotal(requirements.total);
+    } else {
+      // The budget covers the requirement, so any surplus buys more reach.
+      requirements = buildRequirements(answers, assessments, key);
+      total = roundTotal(Math.max(requirements.total, budget * sMeta.budgetFactor));
+    }
   } else {
     const goal = clamp(num(fin.goalCount) ?? 0, 0, ASSUMPTIONS.maxGoal);
     const scenarioGoal = Math.round(goal * sMeta.goalFactor);
-    const media = estimateMediaSpend(answers, scenarioGoal);
-    if (media !== null && media > 0) {
-      total = roundTotal(safeDiv(media, shares.media, media * 2.5));
-      estimatedResults = scenarioGoal;
+    const goalMedia = estimateMediaSpend(answers, scenarioGoal);
+    requirements = buildRequirements(answers, assessments, key, { goalMedia });
+    total = roundTotal(requirements.total);
+    if (goalMedia !== null && goalMedia > 0) estimatedResults = scenarioGoal;
+  }
+
+  /*
+   * The reserve sits OUTSIDE the six allocation categories, so the presentation
+   * can hold to I = P + M + R. Since R = r_R x (P + M), the reserve inside any
+   * total is total x r_R / (1 + r_R), which keeps the three displayed figures
+   * adding up exactly whatever the total turns out to be.
+   */
+  const allocatable = roundTotal(Math.max(0, total / (1 + RESERVE.rate)));
+  // Defined as the remainder rather than recomputed, so P + M + R equals the
+  // total exactly no matter how the allocation rounding lands.
+  const reserveAmount = Math.max(0, total - allocatable);
+
+  // Amounts start at the protected minimums. Anything left over flows to media,
+  // the line that buys more reach.
+  const base: Record<CategoryKey, number> = {
+    strategy:   requirements.strategy,
+    creative:   requirements.creative,
+    digital:    requirements.digital,
+    media:      requirements.media,
+    management: requirements.management,
+    testing:    requirements.testing,
+  };
+  const baseTotal = CATEGORY_KEYS.reduce((t, k) => t + base[k], 0);
+  const surplus = allocatable - baseTotal;
+  if (surplus > 0) {
+    base.media += surplus;
+  } else if (surplus < 0 && baseTotal > 0) {
+    // Budget below the requirement: media absorbs the shortfall first, because
+    // the protected lines are the work the campaign depends on. Only once media
+    // is exhausted do the protected lines scale, and the feasibility panel then
+    // says plainly that the foundation itself is underfunded.
+    const shortfall = -surplus;
+    if (base.media >= shortfall) {
+      base.media -= shortfall;
+    } else {
+      const remaining = shortfall - base.media;
+      base.media = 0;
+      const protectedTotal = baseTotal - requirements.media;
+      const scale = protectedTotal > 0 ? Math.max(0, (protectedTotal - remaining) / protectedTotal) : 0;
+      for (const k of CATEGORY_KEYS) if (k !== "media") base[k] *= scale;
     }
   }
 
-  const amounts = allocationAmounts(total, shares);
-  const mediaSpend = amounts.media;
-  const supportedChannels = channelsSupportedBy(mediaSpend, answers.scope.durationDays);
-  const selected = Math.max(1, answers.scope.channels.length);
-  const recommendedChannels = Math.max(1, Math.min(selected, sMeta.channelCap, supportedChannels));
+  const shares = sharesFromAmounts(base);
+  const amounts = allocationAmounts(allocatable, shares);
+  const supported = affordableChannels(selectedChannels, answers.scope.durationDays, amounts.media);
+  // Never claim a channel the media line cannot actually fund.
+  if (supported.length === 0) plannedChannels = [];
+  else if (plannedChannels.length > supported.length) plannedChannels = supported;
+  const recommendedChannels = Math.min(plannedChannels.length, sMeta.channelCap);
 
   return {
     key,
     total,
+    reserveAmount,
     shares,
     amounts,
-    mediaSpend,
+    requirements,
+    plannedChannels,
+    mediaSpend: amounts.media,
     recommendedChannels,
-    supportedChannels,
+    supportedChannels: supported.length,
     estimatedResults,
     breakEven: breakEven(total, answers, estimatedResults),
   };
@@ -788,18 +896,23 @@ export function readinessNarrative(result: ReadinessResult): string {
 
 export function calculate(answers: CalculatorAnswers): CalculationResult {
   const readiness = readinessScore(answers);
+  const fit = feasibility(answers);
+  const budgetConstrained = fit.applies && fit.status !== "supported";
+
   const scenarios = {
-    essential: buildScenario(answers, "essential"),
-    growth:    buildScenario(answers, "growth"),
-    expansion: buildScenario(answers, "expansion"),
+    essential: buildScenario(answers, "essential", fit),
+    growth:    buildScenario(answers, "growth", fit),
+    expansion: buildScenario(answers, "expansion", fit),
   };
 
   // [ASSUMPTION] Growth is the default recommendation; Essential wins for small
-  // stated budgets, where splitting further would spread the plan too thin.
+  // stated budgets, where splitting further would spread the plan too thin, and
+  // always wins when the budget cannot fund the selected scope.
   let recommendedScenario: ScenarioKey = "growth";
   if (answers.financial.mode === "budget") {
     const budget = num(answers.financial.budgetTotal) ?? 0;
-    if (budget > 0 && budget < ASSUMPTIONS.essentialBudgetCutoff) recommendedScenario = "essential";
+    if (budgetConstrained) recommendedScenario = "essential";
+    else if (budget > 0 && budget < ASSUMPTIONS.essentialBudgetCutoff) recommendedScenario = "essential";
   }
 
   // Contradictions are judged against the recommendation itself. While one is
@@ -807,7 +920,84 @@ export function calculate(answers: CalculatorAnswers): CalculationResult {
   // assumption we can already see is wrong would cost the tool its credibility.
   const contradictions = balanceNotes(answers, scenarios[recommendedScenario]).filter((n) => n.critical);
 
-  return { readiness, scenarios, recommendedScenario, insights: categoryInsights(answers), contradictions };
+  return {
+    readiness, feasibility: fit, scenarios, recommendedScenario,
+    insights: categoryInsights(answers), contradictions, budgetConstrained,
+  };
+}
+
+// ── Feasibility copy ────────────────────────────────────────────────────────────
+
+/** Headline and explanation for the budget-and-scope status. */
+export function feasibilityNarrative(answers: CalculatorAnswers, fit: FeasibilityResult): {
+  headline: string;
+  detail:   string;
+} {
+  const months = Math.round(campaignMonths(answers.scope.durationDays));
+  const duration = months >= 2 ? `${months} months` : `${answers.scope.durationDays} days`;
+  const channels = fit.selectedChannels;
+  const req = fit.requirements;
+
+  if (!fit.applies) {
+    return {
+      headline: "Scope and budget are sized from your goal.",
+      detail: `In goal-first mode the investment is derived from what you want to achieve. This scope prices at about ${formatMoney(req.total)}: ${formatMoney(req.protectedTotal)} of protected campaign investment plus ${formatMoney(req.media)} of media.`,
+    };
+  }
+
+  if (fit.status === "supported") {
+    return {
+      headline: "Scope supported.",
+      detail: `The available investment can support the protected campaign requirements (${formatMoney(req.protectedTotal)}) and the selected media mix across ${channels} channel${channels === 1 ? "" : "s"} over ${duration}.`,
+    };
+  }
+  if (fit.status === "pilot") {
+    return {
+      headline: "Focused pilot.",
+      detail: `Your budget can support a reduced channel mix, but not every channel originally selected. After the ${formatMoney(req.protectedTotal)} of protected campaign requirements, about ${formatMoney(fit.mediaAvailable)} remains for media, which funds ${fit.supportedChannels} of your ${channels} selected channel${channels === 1 ? "" : "s"} over ${duration}.`,
+    };
+  }
+  if (fit.status === "preparation") {
+    return {
+      headline: "Campaign preparation.",
+      detail: `The campaign foundation can be developed, but the remaining budget does not support responsible media activation. The protected requirements come to ${formatMoney(req.protectedTotal)}, and the cheapest single channel needs about ${formatMoney(req.singleChannelFloor)} of media over ${duration}.`,
+    };
+  }
+  return {
+    headline: "Foundation phase only.",
+    detail: `Your available investment does not currently fund all essential campaign requirements and media activation. The protected campaign investment alone is about ${formatMoney(req.protectedTotal)}, against a stated budget of ${formatMoney(fit.budget)}. Delivering the full selected scope is closer to ${formatMoney(req.total)}.`,
+  };
+}
+
+export interface FeasibilityPath {
+  id:    string;
+  title: string;
+  text:  string;
+}
+
+/** The three practical ways forward when the budget cannot fund the scope. */
+export function feasibilityPaths(answers: CalculatorAnswers, fit: FeasibilityResult): FeasibilityPath[] {
+  if (!fit.applies || fit.status === "supported") return [];
+  const req = fit.requirements;
+  const cheapest = req.channelMediaFloors.slice().sort((a, b) => a.amount - b.amount)[0];
+
+  return [
+    {
+      id: "pilot",
+      title: "Focused pilot",
+      text: `Use the available ${formatMoney(fit.budget)} to prepare one campaign destination, one primary creative format, basic measurement, and one advertising channel${cheapest ? ` (${channelLabel(cheapest.channel)} needs about ${formatMoney(cheapest.amount)} of media over the campaign)` : ""}.`,
+    },
+    {
+      id: "foundation",
+      title: "Build the foundation first",
+      text: `Allocate this phase to positioning, messaging, essential creative, and campaign infrastructure. The protected campaign investment is about ${formatMoney(req.protectedTotal)}. Activate paid media in a future phase.`,
+    },
+    {
+      id: "increase",
+      title: "Increase the investment",
+      text: `Maintain the ${fit.selectedChannels}-channel scope by increasing the available budget to about ${formatMoney(req.total)} once the required campaign components are defined.`,
+    },
+  ];
 }
 
 // ── Shareable text summary ──────────────────────────────────────────────────────

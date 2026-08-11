@@ -40,6 +40,8 @@ interface AllocationDonutProps {
   /** Display percentages (largest-remainder rounded so they total 100). */
   pcts:    Record<CategoryKey, number>;
   total:   number;
+  /** Idle centre label; becomes "Campaign allocation" when a reserve is held out. */
+  totalLabel?: string;
   /** Category currently highlighted (hover, focus, or pinned selection). */
   active:  CategoryKey | null;
   /** Category pinned by click/tap; stays highlighted until toggled off. */
@@ -58,7 +60,7 @@ const LABEL_R = R + STROKE / 2 + 8;   // leader line end
 const LABEL_TEXT_R = LABEL_R + 12;    // label anchor
 
 export default function AllocationDonut({
-  shares, amounts, pcts, total, active, pinned, onHover, onTogglePin,
+  shares, amounts, pcts, total, totalLabel = "Total investment", active, pinned, onHover, onTogglePin,
 }: AllocationDonutProps) {
   const reducedMotion = useReducedMotion();
   const dark = useDarkMode();
@@ -170,7 +172,7 @@ export default function AllocationDonut({
         ) : (
           <>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Total investment
+              {totalLabel}
             </p>
             <p className="mt-1 text-2xl font-bold tabular-nums sm:text-3xl">{formatMoney(total)}</p>
           </>

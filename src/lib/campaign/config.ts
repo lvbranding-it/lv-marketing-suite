@@ -79,10 +79,10 @@ export const CATEGORIES: CategoryMeta[] = [
     covers: "Campaign setup, monitoring, bid and budget adjustments, reporting, and coordination across channels.",
   },
   {
-    key: "testing", label: "Testing & contingency", short: "Testing",
+    key: "testing", label: "Testing and optimization", short: "Testing",
     colorLight: "#eda100", colorDark: "#c98500",
     why: "A reserve for learning. First assumptions are rarely the best ones. This is the budget that lets the campaign improve mid-flight.",
-    covers: "Creative and audience A/B tests, landing-page experiments, and a buffer for costs that arrive mid-campaign.",
+    covers: "Creative variations, audience and channel testing, landing-page experiments, controlled optimization, and measurement analysis.",
   },
 ];
 
@@ -134,8 +134,10 @@ export const READINESS_GROUPS: { key: ReadinessGroupKey; label: string; blurb: s
 export const READINESS_ITEMS: ReadinessItemMeta[] = [
   // Campaign foundation
   { key: "positioning",    group: "foundation",  label: "Clear audience and positioning",    affects: "strategy", points: 3.0, clause: "audience and positioning still need to be defined" },
-  { key: "objectiveOffer", group: "foundation",  label: "Defined campaign objective and offer", affects: "strategy", points: 2.0, clause: "the campaign objective and offer still need to be defined" },
+  { key: "objectiveOffer", group: "foundation",  label: "Defined campaign objective and desired audience response", affects: "strategy", points: 2.0, clause: "the campaign objective and desired response still need to be defined" },
   { key: "message",        group: "foundation",  label: "Campaign message",                  affects: "strategy", points: 2.0, clause: "the campaign message still needs development" },
+  { key: "channelStrategy", group: "foundation", label: "Channel strategy",                  affects: "strategy", points: 1.4, clause: "the channel strategy still needs to be defined" },
+  { key: "campaignPlan",   group: "foundation",  label: "Campaign plan",                     affects: "strategy", points: 1.6, clause: "the campaign plan still needs to be built" },
   { key: "visualIdentity", group: "foundation",  label: "Brand identity and visual direction", affects: "creative", points: 2.0, clause: "visual direction still needs work" },
   // Creative assets
   { key: "photography",    group: "creative",    label: "Photography",                       affects: "creative", points: 1.6, clause: "photography still needs to be produced" },
@@ -202,6 +204,167 @@ export const CHANNELS_REQUIRING_IMAGERY: ChannelKey[] =
 /** Channels that can host a lead form natively, without a landing page. */
 export const CHANNELS_WITH_NATIVE_FORMS: ChannelKey[] =
   ["meta-facebook", "instagram", "linkedin", "tiktok"];
+
+// ── Feasibility ─────────────────────────────────────────────────────────────────
+// Readiness asks whether the materials exist. Feasibility asks whether the money,
+// time, channels, and reach actually line up. They are different questions, and a
+// budget can be allocated intelligently while still being far too small.
+//
+// EVERY NUMBER BELOW IS A PLANNING ASSUMPTION. They are deliberately conservative
+// floors, not quotes, and LV Branding should replace them with real production
+// ranges before launch.
+
+/**
+ * Cost to bring one component to campaign-ready, and the share of that cost a
+ * review implies. Reviewing an existing asset is not a fixed fraction of building
+ * one, so `review` is per component rather than one global factor. [ASSUMPTION]
+ */
+export interface ComponentCostMeta { base: number; review: number }
+
+export const COMPONENT_COSTS: Record<ReadinessKey, ComponentCostMeta> = {
+  // Strategy and planning
+  positioning:     { base: 2_500, review: 0.40 },
+  objectiveOffer:  { base:   900, review: 0.30 },
+  message:         { base: 1_500, review: 0.40 },
+  channelStrategy: { base: 1_100, review: 0.35 },
+  campaignPlan:    { base: 1_400, review: 0.30 },
+  successMetrics:  { base:   600, review: 0.30 },
+  // Branding and creative
+  visualIdentity:  { base: 3_500, review: 0.25 },
+  photography:     { base: 1_800, review: 0.45 },
+  video:           { base: 3_500, review: 0.45 },
+  graphics:        { base: 1_200, review: 0.40 },
+  adCopy:          { base:   800, review: 0.50 },
+  // Digital experience
+  landingPage:     { base: 3_000, review: 0.40 },
+  leadForm:        { base:   900, review: 0.35 },
+  checkoutFlow:    { base: 4_000, review: 0.35 },
+  eventPage:       { base: 1_800, review: 0.35 },
+  tracking:        { base: 1_200, review: 0.40 },
+  analytics:       { base:   800, review: 0.35 },
+  pixels:          { base:   600, review: 0.35 },
+};
+
+/** "Not sure" is priced as a small review plus a discovery reserve. */
+export const READINESS_COST_FACTORS = {
+  ready:  0,
+  create: 1,
+  unsureBase: 0.25,
+  /** Added on top of the unsure base to fund finding out. */
+  discoveryReserve: 0.15,
+} as const;
+
+/**
+ * Strategy scales with how complicated the campaign is to plan:
+ * F_scope = 1 + F_channels + F_market + F_duration + F_audience. [ASSUMPTION]
+ */
+export const SCOPE_FACTORS = {
+  perExtraChannel: 0.06,
+  maxChannels:     0.30,
+  market: { local: 0, regional: 0.05, national: 0.12, international: 0.20 } as Record<MarketReach, number>,
+  per30Days:       0.02,
+  maxDuration:     0.15,
+  audience: {
+    unknown: 0, "under-10k": 0, "10k-100k": 0.03, "100k-1m": 0.08, "over-1m": 0.15,
+  } as Record<AudienceBand, number>,
+} as const;
+
+/** Practical monthly media minimum per channel. Platforms differ. [ASSUMPTION] */
+export const CHANNEL_MEDIA_MINIMUM: Record<ChannelKey, number> = {
+  "google-search":  700,
+  "google-display": 500,
+  youtube:          900,
+  "meta-facebook":  600,
+  instagram:        600,
+  linkedin:       1_200,
+  tiktok:           700,
+  programmatic:   1_500,
+  email:            300,
+  other:            600,
+};
+
+/**
+ * Adapting one concept into a channel's formats. The concept itself is charged
+ * once, not re-invented per channel. [ASSUMPTION]
+ */
+export const CHANNEL_ADAPTATION_COST: Record<ChannelKey, number> = {
+  "google-search":  250,
+  "google-display": 550,
+  youtube:          900,
+  "meta-facebook":  500,
+  instagram:        500,
+  linkedin:         450,
+  tiktok:           750,
+  programmatic:     600,
+  email:            350,
+  other:            450,
+};
+
+export const CREATIVE = {
+  /** The campaign concept, charged once when any creative work is outstanding. */
+  conceptCost: 1_800,
+  /** Each additional creative variation beyond the first. */
+  perVariationCost: 320,
+} as const;
+
+/** G_min = max(G_base, r_G × M_required) + G_complexity. [ASSUMPTION] */
+export const MANAGEMENT = {
+  base:         1_200,
+  rate:          0.18,
+  perChannel:      250,
+  perVariation:    120,
+  perDay:            6,
+  reporting:       400,
+} as const;
+
+/** T_min = max(T_base, r_T × (B_min + D_min + M_required)). [ASSUMPTION] */
+export const TESTING = {
+  base:  800,
+  rate: 0.08,
+} as const;
+
+/** R = r_R × (S + B + D + M + G). Set `rate: 0` to remove the reserve. */
+export const RESERVE = {
+  rate: 0.05,
+} as const;
+
+/**
+ * Feasibility statuses come from the detailed budget rules, not from the score.
+ * The score is a separate 0-100 read on how close the budget is to the
+ * requirement, and its thresholds are configurable.
+ */
+export type FeasibilityStatus = "foundation-only" | "preparation" | "pilot" | "supported";
+
+export const FEASIBILITY_BANDS: {
+  status: FeasibilityStatus; label: string; short: string;
+}[] = [
+  { status: "supported",       label: "Scope supported",     short: "The available investment can support the protected campaign requirements and the selected media mix." },
+  { status: "pilot",           label: "Focused pilot",       short: "Your budget can support a reduced channel mix, but not every channel originally selected." },
+  { status: "preparation",     label: "Campaign preparation", short: "The campaign foundation can be developed, but the remaining budget does not support responsible media activation." },
+  { status: "foundation-only", label: "Foundation phase only", short: "Your available investment does not currently fund all essential campaign requirements and media activation." },
+];
+
+export const feasibilityBand = (status: FeasibilityStatus) =>
+  FEASIBILITY_BANDS.find((b) => b.status === status) as (typeof FEASIBILITY_BANDS)[number];
+
+/** F_budget = min(100, A / I_required × 100). Thresholds are configurable. */
+export const FEASIBILITY_SCORE_BANDS: { min: number; label: string }[] = [
+  { min: 100, label: "Scope supported" },
+  { min:  80, label: "Workable with adjustments" },
+  { min:  50, label: "Focused pilot" },
+  { min:   0, label: "Foundation or scope revision required" },
+];
+
+/** Ways to reduce cost responsibly, offered instead of cutting a protected line. */
+export const SCOPE_LEVERS: string[] = [
+  "Use existing assets",
+  "Remove video",
+  "Reduce creative variations",
+  "Remove channels",
+  "Shorten the campaign",
+  "Simplify the destination",
+  "Separate foundation and activation into phases",
+];
 
 // ── Campaign destination ────────────────────────────────────────────────────────
 
@@ -308,6 +471,8 @@ export interface ScenarioMeta {
   /** Goal-first: share of the stated goal this scenario reaches for. */
   goalFactor:   number;
   channelCap:   number;
+  /** Creative variations this scenario plans for. Drives cost and management. */
+  creativeVariations: number;
   biases:       Partial<Record<CategoryKey, number>>;
 }
 
@@ -316,21 +481,21 @@ export const SCENARIOS: ScenarioMeta[] = [
     key: "essential", label: "Essential", tagline: "A focused start",
     description: "A focused campaign with the minimum viable strategic and creative foundation: fewer channels, a lean creative set, and a smaller testing reserve.",
     limitations: "Best for validating a campaign or working within a tight budget. Reach is deliberately limited, and there is less room to test alternatives if the first approach underperforms.",
-    budgetFactor: 0.8, goalFactor: 0.7, channelCap: 2,
+    budgetFactor: 0.8, goalFactor: 0.7, channelCap: 2, creativeVariations: 2,
     biases: { testing: -1.5, creative: -2, management: -1 },
   },
   {
     key: "growth", label: "Growth", tagline: "The balanced plan",
     description: "A balanced investment with stronger creative coverage, meaningful testing, and room for ongoing optimization across a focused channel mix.",
     limitations: "Designed for sustained campaigns. It assumes you can commit to the full duration and act on what testing reveals.",
-    budgetFactor: 1.0, goalFactor: 1.0, channelCap: 4,
+    budgetFactor: 1.0, goalFactor: 1.0, channelCap: 4, creativeVariations: 4,
     biases: {},
   },
   {
     key: "expansion", label: "Expansion", tagline: "Broader reach",
     description: "A broader campaign with more reach, additional creative variations, deeper testing, and greater scaling potential where the channel mix justifies it.",
     limitations: "The larger footprint needs active management and a genuine appetite for iteration; scale amplifies whatever is working and whatever isn't.",
-    budgetFactor: 1.25, goalFactor: 1.35, channelCap: 8,
+    budgetFactor: 1.25, goalFactor: 1.35, channelCap: 8, creativeVariations: 7,
     biases: { testing: 1.5, creative: 1.5, management: 1 },
   },
 ];

@@ -5,11 +5,12 @@
 import { AlertCircle, ArrowRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  CATEGORIES, DESTINATIONS, READINESS_BANDS, formatMoney, objectiveMeta,
-  scenarioMeta,
+  CATEGORIES, DESTINATIONS, READINESS_BANDS, feasibilityBand, formatMoney,
+  objectiveMeta, scenarioMeta, type FeasibilityStatus,
 } from "@/lib/campaign/config";
 import {
-  allocationAmounts, balanceNotes, displayPercents, readinessNarrative,
+  allocationAmounts, balanceNotes, displayPercents, feasibilityNarrative,
+  readinessNarrative,
 } from "@/lib/campaign/engine";
 import type {
   BalanceNote, CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
@@ -60,6 +61,89 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
         Only the components this campaign actually needs are scored. This isn't a judgment of the
         business; it's what keeps media spend from outrunning the message.
+      </p>
+    </section>
+  );
+}
+
+// ── Budget and scope fit ────────────────────────────────────────────────────────
+
+/**
+ * Deliberately separate from Campaign readiness. Readiness measures whether the
+ * materials exist; this measures whether the money, time, channels, and reach
+ * line up. A campaign can score well on one and badly on the other.
+ */
+export function FeasibilityCard({
+  answers, result,
+}: { answers: CalculatorAnswers; result: CalculationResult }) {
+  const fit = result.feasibility;
+  if (!fit.applies) return null;
+
+  const band = feasibilityBand(fit.status);
+  const order: FeasibilityStatus[] = ["foundation-only", "preparation", "pilot", "supported"];
+  const activeIndex = order.indexOf(fit.status);
+  const detail = feasibilityNarrative(answers, fit).detail;
+
+  return (
+    <section aria-labelledby="fit-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id="fit-h" className="text-sm font-semibold">Budget and scope fit</h3>
+        <p className="text-sm font-bold tabular-nums">
+          {fit.score}<span className="text-muted-foreground">/100</span>
+          <span className="ml-2 text-xs font-semibold text-primary">{band.label}</span>
+        </p>
+      </div>
+
+      {/* Four discrete states, labelled in text as well as position. */}
+      <div className="mt-3 flex gap-1" role="img" aria-label={`Budget and scope fit: ${band.label}`}>
+        {order.map((status, i) => (
+          <span
+            key={status}
+            className={cn(
+              "h-2 flex-1 rounded-full",
+              i <= activeIndex ? "bg-primary" : "bg-muted",
+            )}
+          />
+        ))}
+      </div>
+      <div aria-hidden="true" className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-muted-foreground/70">
+        <span>Foundation</span><span>Preparation</span><span>Pilot</span><span>Supported</span>
+      </div>
+
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+
+      <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3">
+        <div>
+          {/* Deliberately explicit: this counts channels fundable AFTER the
+              essentials are paid for, which is why it can read 0 while the
+              pilot still plans around one channel on a reduced scope. */}
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Channels fundable after the protected investment
+          </dt>
+          <dd className="text-sm font-bold tabular-nums">
+            {fit.supportedChannels} <span className="text-xs font-normal text-muted-foreground">of {fit.selectedChannels} selected</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected scope requires</dt>
+          <dd className="text-sm font-bold tabular-nums">{formatMoney(fit.requirements.total)}</dd>
+        </div>
+      </dl>
+      {fit.fundingGap > 0 ? (
+        <p className="mt-3 text-xs font-medium">
+          Funding gap: <span className="tabular-nums">{formatMoney(fit.fundingGap)}</span>
+          <span className="ml-1 font-normal text-muted-foreground">
+            Your available budget is below the estimated investment required for the complete scope.
+          </span>
+        </p>
+      ) : (
+        <p className="mt-3 text-xs font-medium">
+          Your available budget can support the estimated campaign requirements.
+        </p>
+      )}
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        Readiness measures whether the campaign materials exist. This measures whether the money,
+        time, channels, and reach align. Production figures are conservative planning floors, not quotes.
       </p>
     </section>
   );

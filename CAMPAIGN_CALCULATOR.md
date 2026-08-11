@@ -23,7 +23,8 @@ src/components/campaign-calc/
 src/lib/campaign/
   types.ts                              All shared types (percentages are decimals)
   config.ts                             EVERY business assumption lives here
-  engine.ts                             Pure calculation functions (no React/DOM)
+  requirements.ts                       The bottom-up cost model (S/B/D/M/G/T/R)
+  engine.ts                             Scenarios, feasibility, readiness, copy
   validate.ts                           Step validation (pure; shared with persist)
   persist.ts                            localStorage + schema migration (key :v2)
   engine.test.ts                        Engine tests
@@ -36,49 +37,60 @@ link exists in `AppShell.tsx` under the standalone-tools group.
 
 ## How calculations work
 
-Base formula: `Total = Strategy + Creative + Digital + Media + Management + Testing`.
+The calculator prices the campaign **bottom up** and only then allocates. It does
+not divide whatever number the user typed.
 
-1. **Recommended shares** (`recommendedShares`) start from the midpoints of the
-   planning ranges in `config.ts → ALLOCATION_RANGES`, then adjust in percentage
-   points for: missing readiness items (each item's `points` goes to its `affects`
-   category), channel count, duration, time sensitivity, business stage, and overall
-   readiness. Values clamp to `hard` bounds and normalise to 100%.
-2. **Budget-first**: scenario total = stated budget × the scenario's `budgetFactor`
-   (0.8 / 1.0 / 1.25), rounded for planning.
-3. **Goal-first**: media spend is derived from the goal (`estimateMediaSpend`):
-   - lead-step objectives: `leads = goal ÷ conversion`, `media = leads × CPL`
-   - awareness: `impressions = reach × frequency`, `media = impressions ÷ 1,000 × CPM`
-     (a CPM prices impressions, not unique people; frequency defaults to 3 and is
-     an editable planning assumption)
-   - otherwise: `media = goal × cost-per-result`
-   Then `total = media ÷ media share` for that scenario, so distribution never
-   silently eats the foundation.
-4. **Dollar amounts** (`allocationAmounts`) use largest-remainder rounding at a
-   $10/$50 step and always sum exactly to the total. Displayed percentages use
-   `displayPercents` (largest remainder) so they always total exactly 100.
-5. **Break-even**: `gross profit per unit = avg value × margin`,
-   `break-even units = total ÷ gross profit per unit`. Projected revenue and
-   projected gross profit are computed and labelled separately; nothing labels
-   revenue as profit. Shown only when the needed inputs exist.
-6. **Manual rebalancing** (`rebalanceShares`) redistributes changes proportionally
-   across unlocked categories; locked categories never move; every result sums to 1.
-7. **Realism checks** (`balanceNotes`) flag contradictory answers: a reach goal
-   larger than the stated audience size, a local market paired with an audience
-   over 1 million, and very large scale compressed into 30 days, alongside the
-   structural checks (media-heavy allocations, missing tracking or landing page,
-   more channels than the media budget supports, thin testing reserves). The first
-   two are marked `critical` and suppress the recommendation (see below).
-8. **Explanations**: `scenarioRationale` explains each scenario's total in one
-   sentence ("Why this amount?"), `recommendationSummary` ties the recommendation
-   back to the user's answers, `planLevers` names what would change the number
-   (reach, frequency, channel mix, existing assets) so a large total reads as a
-   planning decision rather than a price, and `readinessNarrative` separates
-   confirmed requirements from possible needs.
+```
+I_required = S_min + B_min + D_min + M_required + G_min + T_min + R
+P          = S_min + B_min + D_min + G_min + T_min        (protected)
+I_required = P + M_required + R
+```
 
-The business profile asks who the campaign speaks to (businesses, consumers, both,
-or donors/members/communities) rather than mixing business models with industries;
-the industry list carries the categories (professional services, ecommerce and
-retail, events, home services, hospitality, healthcare, nonprofit, other).
+Paid media buys distribution. The protected campaign investment creates, operates,
+measures, and improves what is being distributed. `src/lib/campaign/requirements.ts`
+implements the model; `engine.ts` consumes it.
+
+**1. Readiness cost.** `C_j = BaseCost_j x ReadinessFactor_j x ScopeFactor_j`.
+Factors: ready 0, needs-review a **per-component** rate (0.25 to 0.50, because
+reviewing an asset is not a fixed fraction of building one), not-sure 0.25 plus a
+0.15 discovery reserve, to-create 1. Unanswered is priced as to-create. Components
+that don't apply are excluded.
+
+**2. Strategy.** `S_min = Σ(StrategyCost_j x ReadinessFactor_j) x F_scope`, where
+`F_scope = 1 + F_channels + F_market + F_duration + F_audience`.
+
+**3. Creative.** `B_min = C_concept + components + C_formats + C_variations`. The
+concept is charged **once**; each channel adds an adaptation cost, not a new
+concept. Variations beyond the first are priced per variation.
+
+**4. Digital experience.** `D_min` = destination + conversion + analytics +
+platform tracking, limited to the components the chosen destination makes relevant.
+
+**5. Paid media.** `M_required = max(M_goal, Σ_c M_min,c)` with per-channel monthly
+minimums (LinkedIn and programmatic cost more than email). Goal-first computes
+`M_goal` per objective; awareness uses `reach x frequency / 1,000 x CPM`.
+
+**6. Management.** `G_min = max(G_base, r_G x M_required) + G_complexity`, where
+complexity = channels, variations, duration, and reporting.
+
+**7. Testing and optimization.** `T_min = max(T_base, r_T x (B_min + D_min + M_required))`,
+protected so it is never silently absorbed into media.
+
+**8. Reserve.** `R = r_R x (S + B + D + M + G)`, displayed separately as Campaign
+Reserve. In a plan it is carried as the exact remainder `total - allocatable`, so
+**P + M + R equals the total exactly** whatever the rounding does.
+
+Amounts start at the protected minimums; surplus flows to media. When the budget
+falls short, **media absorbs the shortfall first** and the protected lines are the
+last thing scaled, because they are the work the campaign depends on.
+
+### Protected allocation rule
+
+`X_i >= P_i` for every protected category (strategy, creative, digital,
+management, testing). Sliders enforce the floor, show the protected minimum in
+dollars, and explain that reducing it responsibly means changing scope. Media is
+freely adjustable down to zero, and reducing it recalculates the fundable channels.
+`SCOPE_LEVERS` in config lists the offered alternatives.
 
 ## Where assumptions are configured
 
@@ -95,6 +107,15 @@ planning assumption, notably:
 - `SCENARIOS`: budget/goal factors, channel caps, allocation biases, and copy
 - `ASSUMPTIONS`: the $600/month minimum channel spend, input guardrails, the
   Essential-vs-Growth recommendation cutoff, and the "balanced" band width
+- `COMPONENT_COSTS`: base build cost and per-component review rate for all 18
+  components
+- `SCOPE_FACTORS`, `CHANNEL_MEDIA_MINIMUM`, `CHANNEL_ADAPTATION_COST`, `CREATIVE`,
+  `MANAGEMENT`, `TESTING`, `RESERVE`: every coefficient in the requirements model
+- `FEASIBILITY_BANDS` / `FEASIBILITY_SCORE_BANDS` / `SCOPE_LEVERS`: statuses,
+  score thresholds, and the scope changes offered instead of cutting protected work.
+  **All of these are planning floors, not quotes. They now drive the headline
+  numbers, so they are the most important set for LV Branding to replace with real
+  ranges before launch.**
 
 ## How readiness affects recommendations
 
@@ -126,6 +147,42 @@ therefore moves the plan only in proportion to how much this campaign needs vide
 
 The campaign **destination** ("Where should people go…") is asked at the top of the
 readiness step because it decides which destination components apply at all.
+
+## Feasibility: can the budget do the job?
+
+Allocation and feasibility are separate questions. `feasibility()` compares the
+stated budget `A` against the bottom-up requirement.
+
+```
+M_available = max(0, A - P - R)
+Funding gap = I_required - A
+F_budget    = min(100, A / I_required x 100)
+```
+
+Status comes from the detailed budget rules, not from the score:
+
+| Status | Condition |
+|---|---|
+| Foundation phase only | `A < P` |
+| Campaign preparation | `P <= A < P + M_min,1` |
+| Focused pilot | `P + M_min,1 <= A < P + Σ M_min,c` |
+| Scope supported | `A >= P + Σ M_min,c` |
+
+The score is a separate 0-100 read with its own configurable bands
+(`FEASIBILITY_SCORE_BANDS`), shown alongside the status.
+
+**When constrained**, the results screen changes materially: a status panel appears
+above the scenarios with three concrete paths (focused pilot, build the foundation
+first, increase the investment); Essential is relabelled **Focused Pilot**, badged
+*Best fit for current budget*, spends the whole budget, and is costed against only
+the channels the budget can actually carry; Growth and Expansion are priced at what
+the selected scope really costs, each badged *Requires $X more*. A plan whose media
+line cannot fund even one channel reports **no media activation** rather than
+claiming a channel.
+
+The **Budget and scope fit** card sits beside Campaign readiness because they answer
+different questions: readiness asks whether the materials exist, feasibility asks
+whether the money, time, channels, and reach line up.
 
 ## Contradictions and the recommendation
 
@@ -202,8 +259,11 @@ There is no repo-wide linter configured, so no lint step exists.
   infrastructure in the repo, so interface tests are not automated.
 - Single currency (USD). `config.ts → CURRENCIES` is structured for more.
 - Default unit economics are deliberately generic, not per-industry. **The awareness
-  defaults ($15 CPM, frequency 3) and the essential/recommended relevance tiering are
-  the assumptions most worth LV Branding's review before launch.**
+  defaults ($15 CPM, frequency 3), the essential/recommended relevance tiering, and
+  the `PRODUCTION_COSTS` floors are the assumptions most worth LV Branding's review
+  before launch.**
+- Feasibility applies to budget-first mode only; goal-first sizes the investment to
+  the goal, so there is no stated budget to test the scope against.
 - The donut's hover and keyboard focus both drive the centre label; when a mouse
   rests on the chart while focus moves, hover wins (info is always available in
   the controls and table regardless).

@@ -3,14 +3,16 @@
 // comes from the engine; this file never computes an allocation itself.
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CATEGORIES, formatMoney, scenarioMeta } from "@/lib/campaign/config";
 import {
-  allocationAmounts, displayPercents, planLevers, recommendationSummary,
-  scenarioRationale, shareStatus, suggestedRange,
+  allocationAmounts, displayPercents, feasibilityNarrative, feasibilityPaths,
+  planLevers, protectedFloorShare, recommendationSummary, scenarioRationale,
+  shareStatus,
 } from "@/lib/campaign/engine";
+import { SCOPE_LEVERS } from "@/lib/campaign/config";
 import type {
   CalculationResult, CalculatorAnswers, CategoryKey, ScenarioKey, Shares,
 } from "@/lib/campaign/types";
@@ -48,13 +50,26 @@ export default function ResultsDashboard({
 
   const active = hovered ?? pinned;
   const plan = result.scenarios[selected];
-  const amounts = useMemo(() => allocationAmounts(plan.total, currentShares), [plan.total, currentShares]);
+  // The six categories are allocated from the total MINUS the reserve, so the
+  // displayed identity P + M + R = I holds exactly.
+  const allocatable = plan.total - plan.reserveAmount;
+  const amounts = useMemo(() => allocationAmounts(allocatable, currentShares), [allocatable, currentShares]);
   const pcts = useMemo(() => displayPercents(currentShares), [currentShares]);
   const summary = useMemo(() => recommendationSummary(answers, result), [answers, result]);
+  const protectedAmount = useMemo(
+    () => (["strategy", "creative", "digital", "management", "testing"] as CategoryKey[])
+      .reduce((t, k) => t + amounts[k], 0),
+    [amounts],
+  );
   const levers = useMemo(() => planLevers(answers, result), [answers, result]);
   // While a contradiction is open we show the scenarios for comparison but stop
   // short of endorsing one.
   const hasContradiction = result.contradictions.length > 0;
+
+  const isConstrained = result.budgetConstrained;
+  const showFeasibility = result.feasibility.applies;
+  const fitCopy = useMemo(() => feasibilityNarrative(answers, result.feasibility), [answers, result.feasibility]);
+  const paths = useMemo(() => feasibilityPaths(answers, result.feasibility), [answers, result.feasibility]);
 
   const copy = async () => {
     const ok = await onCopySummary();
@@ -82,6 +97,36 @@ export default function ResultsDashboard({
         </div>
       )}
 
+      {/* Allocation and feasibility are different questions. When the stated
+          budget can't fund the scope, say so before showing any allocation. */}
+      {showFeasibility && (
+        <div className={cn(
+          "rounded-xl border px-4 py-3.5",
+          isConstrained ? "border-primary/40 bg-accent/40" : "border-border bg-muted/40",
+        )}>
+          <div className="flex items-start gap-2">
+            {isConstrained
+              ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+              : <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{fitCopy.headline}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{fitCopy.detail}</p>
+
+              {paths.length > 0 && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {paths.map((path) => (
+                    <div key={path.id} className="rounded-lg border border-border bg-background p-3">
+                      <p className="text-xs font-semibold">{path.title}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{path.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Scenario selector (doubles as the scenario comparison) ── */}
       <div role="radiogroup" aria-label="Investment scenario" className="grid gap-2 sm:grid-cols-3">
         {(["essential", "growth", "expansion"] as ScenarioKey[]).map((key) => {
@@ -90,6 +135,13 @@ export default function ResultsDashboard({
           const isSelected = key === selected;
           const isRecommended = key === result.recommendedScenario;
           const isWhyOpen = whyOpen === key;
+          // Under a constrained budget the affordable plan is a reduced-scope
+          // pilot, and the larger ones are priced at what the scope really costs.
+          const isPilot = isConstrained && key === "essential";
+          const label = isPilot ? "Focused Pilot" : meta.label;
+          const extraNeeded = isConstrained && !isPilot
+            ? Math.max(0, scenario.total - result.feasibility.budget)
+            : 0;
           return (
             /* The card is a div so the "Why this amount?" toggle isn't nested
                inside the radio button (interactive-in-interactive is invalid). */
@@ -107,12 +159,16 @@ export default function ResultsDashboard({
                 onClick={() => onSelect(key)}
                 className="flex-1 rounded-t-xl p-4 pb-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className={cn("text-sm font-bold", isSelected && "text-primary")}>{meta.label}</p>
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <p className={cn("text-sm font-bold", isSelected && "text-primary")}>{label}</p>
                   {isRecommended && (
                     hasContradiction ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-primary/50 px-2 py-0.5 text-[10px] font-semibold text-primary">
                         <AlertTriangle size={9} aria-hidden="true" /> Review assumptions
+                      </span>
+                    ) : isPilot ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                        <Star size={9} aria-hidden="true" /> Best fit for current budget
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
@@ -120,9 +176,23 @@ export default function ResultsDashboard({
                       </span>
                     )
                   )}
+                  {extraNeeded > 0 && (
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      Requires {formatMoney(extraNeeded)} more
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(scenario.total)}</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{meta.tagline} · plans around {scenario.recommendedChannels} channel{scenario.recommendedChannels === 1 ? "" : "s"}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {scenario.recommendedChannels === 0
+                    ? "Foundation phase · no media activation"
+                    : `${isPilot ? "Reduced scope" : meta.tagline} · plans around ${scenario.recommendedChannels} channel${scenario.recommendedChannels === 1 ? "" : "s"}`}
+                </p>
+                {isPilot && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-primary">
+                    This is a reduced-scope plan, not the complete {result.feasibility.selectedChannels}-channel campaign originally selected.
+                  </p>
+                )}
               </button>
               <button
                 type="button"
@@ -157,6 +227,41 @@ export default function ResultsDashboard({
         <span className="text-muted-foreground/80">{scenarioMeta(selected).limitations}</span>
       </p>
 
+      {/* The central distinction: media buys distribution; the protected
+          investment creates, operates, measures, and improves what is distributed. */}
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Protected campaign investment</p>
+          <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(protectedAmount)}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Creates and operates the campaign: strategy, creative, digital experience, management,
+            and testing.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Media distribution</p>
+          <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(amounts.media)}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Paid to advertising platforms to distribute the campaign.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign reserve</p>
+          <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(plan.reserveAmount)}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Reserved for approved changes, unexpected production requirements, or opportunities
+            identified while the campaign is active.
+          </p>
+        </div>
+      </div>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        {formatMoney(protectedAmount)} protected + {formatMoney(amounts.media)} media +{" "}
+        {formatMoney(plan.reserveAmount)} reserve = {formatMoney(plan.total)} total. The media budget
+        buys distribution; the protected campaign investment funds the strategy, creative production,
+        digital infrastructure, management, and optimization required to make that distribution
+        purposeful and accountable.
+      </p>
+
       {/* ── Donut + controls ── */}
       <div className="grid items-start gap-6 rounded-xl border border-border bg-card p-4 sm:p-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <div className="space-y-4">
@@ -164,7 +269,8 @@ export default function ResultsDashboard({
             shares={currentShares}
             amounts={amounts}
             pcts={pcts}
-            total={plan.total}
+            total={allocatable}
+            totalLabel={plan.reserveAmount > 0 ? "Campaign allocation" : "Total investment"}
             active={active}
             pinned={pinned}
             onHover={setHovered}
@@ -194,8 +300,15 @@ export default function ResultsDashboard({
                       <td className="py-1.5 text-right tabular-nums">{pcts[cat.key]}%</td>
                     </tr>
                   ))}
+                  {plan.reserveAmount > 0 && (
+                    <tr className="border-b border-border/50">
+                      <th scope="row" className="py-1.5 pr-2 text-left font-medium">Campaign reserve</th>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoney(plan.reserveAmount)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-muted-foreground">held separately</td>
+                    </tr>
+                  )}
                   <tr>
-                    <th scope="row" className="py-1.5 pr-2 text-left font-bold">Total</th>
+                    <th scope="row" className="py-1.5 pr-2 text-left font-bold">Total investment</th>
                     <td className="py-1.5 pr-2 text-right font-bold tabular-nums">{formatMoney(plan.total)}</td>
                     <td className="py-1.5 text-right font-bold tabular-nums">100%</td>
                   </tr>
@@ -225,7 +338,12 @@ export default function ResultsDashboard({
             const share = currentShares[cat.key];
             const pct = pcts[cat.key];
             const rec = plan.shares[cat.key];
-            const [rangeLo, rangeHi] = suggestedRange(cat.key, rec);
+            // The protected-allocation rule: X_i >= P_i. Media is the one line
+            // that may be reduced freely, because reach is recalculated with it.
+            const floorShare = protectedFloorShare(cat.key, plan.requirements, plan.total);
+            const floorPct = Math.ceil(floorShare * 100);
+            const floorAmount = plan.requirements.floors[cat.key];
+            const atFloor = cat.key !== "media" && pct <= floorPct;
             const status = shareStatus(share, rec);
             const isLocked = locked.includes(cat.key);
             const isActive = active === cat.key;
@@ -263,7 +381,7 @@ export default function ResultsDashboard({
                 <div className="mt-1 flex items-center gap-3 pl-5">
                   <input
                     type="range"
-                    min={1} max={80} step={1}
+                    min={cat.key === "media" ? 0 : Math.max(1, floorPct)} max={80} step={1}
                     value={pct}
                     disabled={isLocked}
                     aria-label={`${cat.label} share of the budget`}
@@ -280,15 +398,32 @@ export default function ResultsDashboard({
                   <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
                 </div>
                 <p className="pl-5 text-[10px] text-muted-foreground/80">
-                  Suggested for you: {rangeLo}–{rangeHi}%
+                  {cat.key === "media"
+                    ? "Adjustable. Reducing media reduces reach, channels, or duration."
+                    : `Protected minimum: ${formatMoney(floorAmount)}`}
                 </p>
+                {atFloor && (
+                  <p className="mt-1 pl-5 text-[10px] leading-relaxed text-primary">
+                    This category supports an essential campaign requirement. To reduce it
+                    responsibly, adjust the campaign scope rather than removing work the campaign
+                    depends on.
+                  </p>
+                )}
               </div>
             );
           })}
           <p className="pl-2 pt-1 text-[11px] leading-relaxed text-muted-foreground">
             Raising one category rebalances the unlocked ones proportionally, so the plan always
-            totals 100%. Lock anything you've decided on first.
+            totals 100%. Protected categories cannot go below the work the campaign depends on.
           </p>
+          <details className="mt-1 pl-2">
+            <summary className="cursor-pointer select-none text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
+              Ways to reduce the investment responsibly
+            </summary>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+              {SCOPE_LEVERS.map((lever) => <li key={lever}>{lever}</li>)}
+            </ul>
+          </details>
         </div>
       </div>
 

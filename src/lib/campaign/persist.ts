@@ -17,7 +17,8 @@ const STORAGE_KEY = "lv-campaign-calculator:v2";
 const LEGACY_KEYS = ["lv-campaign-calculator:v1"];
 
 export const EMPTY_READINESS: Record<ReadinessKey, ReadinessState | null> = {
-  positioning: null, objectiveOffer: null, message: null, visualIdentity: null,
+  positioning: null, objectiveOffer: null, message: null,
+  channelStrategy: null, campaignPlan: null, visualIdentity: null,
   photography: null, video: null, graphics: null, adCopy: null,
   landingPage: null, leadForm: null, checkoutFlow: null, eventPage: null,
   tracking: null, analytics: null, pixels: null, successMetrics: null,
