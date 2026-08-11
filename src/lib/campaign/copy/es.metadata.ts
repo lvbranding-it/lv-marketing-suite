@@ -15,7 +15,7 @@ export const esCategories: CalcCopy["categories"] = {
     label: "Estrategia y planeación",
     short: "Estrategia",
     why: "Posicionamiento, definición de audiencia y el plan de campaña. Esto es lo que hace que cada dólar posterior apunte en la misma dirección.",
-    covers: "Estrategia de campaña, investigación de audiencia, arquitectura de mensajes, planeación de canales y planeación de medición.",
+    covers: "Estrategia de campaña, investigación de audiencia, arquitectura de mensajes, planeación de canales y planificación de los recursos de medición.",
   },
   creative: {
     label: "Marca y creatividad",
@@ -26,13 +26,13 @@ export const esCategories: CalcCopy["categories"] = {
   digital: {
     label: "Experiencia digital",
     short: "Digital",
-    why: "Donde aterrizan los clics. Una campaña que paga por tráfico hacia una página que no convierte pierde dinero en silencio.",
-    covers: "Páginas de destino, mejoras al formulario o al proceso de compra, seguimiento de conversiones y configuración de analítica.",
+    why: "Donde aterrizan los clics. Una campaña que paga por tráfico hacia una página que no convierte y no está lista para ese tráfico pierde dinero en silencio.",
+    covers: "Páginas de destino (Landing pages), mejoras al formulario o al proceso de compra, seguimiento de conversiones y configuración de analítica.",
   },
   media: {
     label: "Medios pagados",
     short: "Medios",
-    why: "El presupuesto de distribución: lo que cobran las plataformas por poner tu mensaje frente a la audiencia que elegiste.",
+    why: "El presupuesto de distribución publicitaria: lo que cobran las plataformas o medios por poner tu mensaje frente a la audiencia que elegiste.",
     covers: "Inversión publicitaria en los canales que elegiste, incluyendo presupuesto de pruebas de audiencia dentro de cada plataforma.",
   },
   management: {
@@ -45,37 +45,37 @@ export const esCategories: CalcCopy["categories"] = {
     label: "Pruebas y optimización",
     short: "Pruebas",
     why: "Una reserva para aprender. Las primeras suposiciones rara vez son las mejores. Este es el presupuesto que permite mejorar la campaña sobre la marcha.",
-    covers: "Variaciones creativas, pruebas de audiencia y canal, experimentos en la página de destino, optimización controlada y análisis de medición.",
+    covers: "Variaciones creativas, pruebas de audiencia y canal, experimentos en la página de destino, optimización controlada y análisis de medición",
   },
 };
 
 export const esObjectives: CalcCopy["objectives"] = {
   awareness: {
-    label: "Reconocimiento de marca",
-    hint: "Que más gente sepa quién eres",
+    label: "Lograr presencia y reconocimiento de marca",
+    hint: "Que la gente que no conoce tu oferta, la vea y se identifique con ella y/o que más gente sepa acerca de tu marca o producto",
     unitNoun: "personas alcanzadas",
     unitSingular: "persona alcanzada",
   },
   leads: {
-    label: "Generación de clientes potenciales",
+    label: "Generar clientes potenciales",
     hint: "Conseguir contactos calificados",
     unitNoun: "clientes potenciales",
     unitSingular: "cliente potencial",
   },
   sales: {
     label: "Ventas en línea",
-    hint: "Vender directamente por internet",
+    hint: "Vender directa por internet",
     unitNoun: "ventas",
     unitSingular: "venta",
   },
   visits: {
-    label: "Visitas a tienda",
+    label: "Visitas a tu tienda en línea",
     hint: "Llevar gente a tu local",
     unitNoun: "visitas",
     unitSingular: "visita",
   },
   event: {
-    label: "Asistencia a un evento",
+    label: "Asistencia a tu evento",
     hint: "Llenar un evento o actividad",
     unitNoun: "registros",
     unitSingular: "registro",
@@ -98,14 +98,14 @@ export const esScenarios: CalcCopy["scenarios"] = {
   essential: {
     label: "Esencial",
     tagline: "Un inicio enfocado",
-    description: "Una campaña enfocada con la estrategia y la creatividad justas para hacer bien el trabajo: menos canales, un set creativo austero y una reserva de pruebas más pequeña.",
+    description: "Una campaña enfocada con la estrategia y la creatividad desarrolladas para hacer bien el trabajo: menos canales, un set creativo austero y una reserva de pruebas más pequeña.",
     limitations: "Una buena manera de comprobar que algo funciona, o de hacer rendir un presupuesto ajustado. El alcance es limitado a propósito, y queda menos margen para intentar un segundo enfoque si el primero no rinde.",
   },
   growth: {
     label: "Crecimiento",
     tagline: "El plan equilibrado",
     description: "Un plan equilibrado con creatividad más sólida, pruebas reales y margen para seguir mejorando en un conjunto acotado de canales.",
-    limitations: "Está pensado para campañas que corren un buen tiempo. Asume que puedes comprometerte con toda la duración y actuar según lo que digan las pruebas.",
+    limitations: "Este recurso está pensado para campañas que corren un buen tiempo. Asume que puedes comprometerte con toda la duración y actuar según lo que digan las pruebas.",
   },
   expansion: {
     label: "Expansión",
@@ -129,30 +129,30 @@ export const esChannels: CalcCopy["channels"] = {
 };
 
 export const esDestinations: CalcCopy["destinations"] = {
-  "landing-page":       "Visitar una página de destino",
+  "landing-page":       "Visitar una página establecida (Landing Page)",
   "lead-form":          "Llenar un formulario de contacto",
-  "buy-online":         "Comprar en línea",
-  "physical-location":  "Visitar un local físico",
-  "event-registration": "Registrarse a un evento",
-  "call-message":       "Llamar o escribir al negocio",
-  none:                 "Ninguna acción directa; es una campaña de reconocimiento",
+  "buy-online":         "Comprar en tu tienda en línea",
+  "physical-location":  "Visitar tu local o establecimiento físico",
+  "event-registration": "Registrarse a tu evento",
+  "call-message":       "Llamar o escribir a tu negocio",
+  none:                 "Por ahora, ninguna acción directa; es una campaña de reconocimiento de marca",
 };
 
 export const esReadinessGroups: CalcCopy["readinessGroups"] = {
-  foundation:  { label: "Base de la campaña",       blurb: "La estrategia sobre la que se construye todo lo demás." },
+  foundation:  { label: "Estado base de la campaña",       blurb: "La estrategia sobre la que se construye todo lo demás." },
   creative:    { label: "Piezas creativas",         blurb: "Lo que necesitan mostrar los canales que elegiste." },
   destination: { label: "Destino de la campaña",    blurb: "A dónde envía la campaña a las personas." },
-  measurement: { label: "Medición y optimización",  blurb: "Cómo sabrás si funcionó." },
+  measurement: { label: "Medición y optimización",  blurb: "Esta herramienta es fundamental, es la que podrás usar para medir y determinar que tu campaña funcionó." },
 };
 
 export const esReadinessItems: CalcCopy["readinessItems"] = {
-  positioning:    { label: "Audiencia y posicionamiento claros",        hint: "Sabes a quién le hablas y por qué te elegirían" },
+  positioning:    { label: "Tienes una audiencia y posicionamiento claros",        hint: "Ya sabes a quién le hablas y por qué elegirían tu marca en vez de otra" },
   objectiveOffer: { label: "Objetivo de campaña y respuesta esperada",   hint: "Qué quieres lograr y qué debe hacer la gente" },
-  message:        { label: "Mensaje de campaña",                        hint: "La idea central que llevará la campaña" },
-  channelStrategy:{ label: "Estrategia de canales",                     hint: "En qué plataformas competir y por qué" },
+  message:        { label: "Mensaje de campaña",                        hint: "Cual es la idea central que llevará la campaña" },
+  channelStrategy:{ label: "Estrategia de canales",                     hint: "En qué plataformas debes competir y por qué" },
   campaignPlan:   { label: "Plan de campaña",                           hint: "Calendario, fases y responsables" },
   visualIdentity: { label: "Identidad de marca y dirección visual",     hint: "Logotipo, colores, tipografías y estilo" },
-  photography:    { label: "Fotografía",                                hint: "Imágenes propias listas para usar" },
+  photography:    { label: "Fotografía",                                hint: "Ya tienes imágenes propias listas para usar" },
   video:          { label: "Video",                                     hint: "Piezas en video para los canales que lo requieren" },
   graphics:       { label: "Gráficos de campaña",                       hint: "Piezas para anuncios en cada formato" },
   adCopy:         { label: "Textos publicitarios",                      hint: "Titulares y descripciones de los anuncios" },
@@ -214,7 +214,7 @@ export const esFeasibilityBands: CalcCopy["feasibilityBands"] = {
   },
   "preparation-only": {
     label: "Empieza por la preparación",
-    short: "Esta inversión queda por debajo de lo que una campaña necesita para correr con responsabilidad, y saberlo ahora es genuinamente útil. Puede financiar un sprint enfocado de estrategia y configuración, que es un primer paso sólido más que una campaña completa.",
+    short: "Esta inversión queda por debajo de lo que una campaña necesita para correr con responsabilidad, y saberlo ahora es genuinamente útil. Puede financiar un arranque enfocado de estrategia y configuración, que es un primer paso sólido más que una campaña completa.",
   },
 };
 
@@ -226,7 +226,7 @@ export const esFeasibilityScoreLabels = [
 ];
 
 export const esAudienceBands: CalcCopy["audienceBands"] = {
-  unknown:     "No estoy seguro",
+  unknown:     "Aún no estoy seguro",
   "under-10k": "Menos de 10,000",
   "10k-100k":  "10,000 a 100,000",
   "100k-1m":   "100,000 a 1 millón",
@@ -241,9 +241,9 @@ export const esAudienceFocus: CalcCopy["audienceFocus"] = [
 ];
 
 export const esStages: CalcCopy["stages"] = [
-  { key: "new",         label: "Nuevo o por lanzar", hint: "Construyendo audiencia desde cero" },
+  { key: "new",         label: "Nueva o por lanzar", hint: "Construyendo audiencia desde cero" },
   { key: "growing",     label: "En crecimiento",     hint: "Con algo de tracción, listo para más" },
-  { key: "established", label: "Establecido",        hint: "Marca conocida, defendiendo o expandiendo" },
+  { key: "established", label: "Establecida",        hint: "Marca conocida, queremos expandirnos" },
 ];
 
 export const esReaches: CalcCopy["reaches"] = [
@@ -287,7 +287,7 @@ export const esLists: CalcCopy["lists"] = {
     "Simplificar el destino",
     "Separar la base y la activación en fases",
   ],
-  preparationTitle: "Sprint de estrategia y configuración",
+  preparationTitle: "Fase de estrategia y configuración",
   preparationInclusions: [
     "Definición del objetivo de campaña y la audiencia",
     "Recomendación de un solo canal",

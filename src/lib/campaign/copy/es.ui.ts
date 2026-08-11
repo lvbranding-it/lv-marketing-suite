@@ -7,43 +7,43 @@
 import type { CalcCopy } from "./types";
 
 export const esMeta: CalcCopy["meta"] = {
-  pageTitle:       "Calculadora de Inversión en Campañas | LV Branding",
-  pageDescription: "Calcula cómo distribuir la inversión de tu campaña entre estrategia, marca, producción creativa, experiencia digital, medios pagados, gestión y pruebas.",
-  productName:     "Calculadora de Inversión en Campañas",
-  tagline:         "Una herramienta gratuita de LV Branding",
-  slogan:          "PRIMERO LA ESTRATEGIA. SIEMPRE.",
+  pageTitle:       "Calculadora de inversión para campañas publicitarias",
+  pageDescription: "Con esta herramienta exclusiva puedes calcular cómo distribuir la inversión de tu campaña entre estrategia, marca, producción creativa, experiencia digital, medios pagados, gestión y pruebas.",
+  productName:     "Calculadora de inversión para campañas publicitarias",
+  tagline:         "Desarrollada para ti por LV Branding",
+  slogan:          "La Estrategia es lo primero. Siempre",
   site:            "www.lvbranding.com",
 };
 
 export const esIntro: CalcCopy["intro"] = {
-  heading:  "Conoce lo que tu campaña realmente requiere.",
-  body:     "Arma un plan de inversión práctico entre estrategia, marca, producción creativa, medios pagados y gestión de campaña, según tus objetivos, tu mercado y lo que ya tienes listo.",
-  emphasis: "Los medios amplifican lo que ya existe. Una campaña sólida tiene que financiar tanto el mensaje como su distribución.",
-  cta:      "Calcular mi inversión",
-  reassurance: "Seis pasos cortos · unos 3 minutos · sin cuenta, y el resultado completo es tuyo",
-  resumeLead: "Tienes un plan en progreso.",
-  resumeLink: "continuar donde lo dejaste",
+  heading:  "Descubre y analiza como desarrollar una campaña con todo lo necesario para lograr un retorno de inversión óptimo.",
+  body:     "Arma un plan de inversión práctico entre estrategia, marca, producción creativa, medios pagados y gestión de campaña, de acuerdo con tus objetivos, tu mercado y que toma en cuenta los activos de marca con los que ya cuentas.",
+  emphasis: "Los medios amplifican lo que ya existe. Una campaña sólida toma en cuenta que tiene que financiar tanto el mensaje como su distribución.",
+  cta:      "Calcula mi inversión publicitaria",
+  reassurance: "Seis sencillos pasos · 3 minutos · sin tener que registrar una cuenta, y además el resultado completamente tuyo",
+  resumeLead: "Notamos que tienes un plan en progreso",
+  resumeLink: "Continúa con tu plan desde donde lo dejaste",
 };
 
 export const esNav: CalcCopy["nav"] = {
   back:       "Atrás",
   next:       "Siguiente",
   seeResults: "Ver mi plan",
-  startOver:  "Empezar de nuevo",
-  startOverConfirmTitle: "¿Empezar de nuevo?",
-  startOverConfirmBody:  "Esto borra tus respuestas y el plan que armaste. No se puede deshacer.",
-  startOverConfirm: "Sí, empezar de nuevo",
-  cancel: "Cancelar",
+  startOver:  "Quiero empezar de nuevo",
+  startOverConfirmTitle: "¿Quieres empezar de nuevo?",
+  startOverConfirmBody:  "Si aceptas borrarás tus respuestas y el plan que armaste. Esta acción no se puede deshacer.",
+  startOverConfirm: "Sí, quiero empezar de nuevo",
+  cancel: "No, prefiero cancelar",
   stepOf: (current, total) => `Paso ${current} de ${total}`,
 };
 
 export const esSteps: CalcCopy["steps"] = {
   labels: ["Perfil", "Objetivo", "Alcance", "Destino", "Punto de partida", "Números", "Revisión"],
   titles: [
-    "Cuéntanos de tu negocio",
-    "¿Qué debe lograr esta campaña?",
-    "Define la campaña",
-    "¿Qué tienes listo para esta campaña?",
+    "Cuéntanos acerca de tu negocio",
+    "¿Qué objetivo debe lograr esta campaña?",
+    "¿Cómo se define tu campaña?",
+    "¿Qué activos de marca tienes listo para esta campaña?",
     "¿Cómo quieres planear tu inversión?",
     "Revisa tus respuestas",
   ],
@@ -51,38 +51,38 @@ export const esSteps: CalcCopy["steps"] = {
   buildPlan: "Armar mi plan de inversión",
 
   profile: {
-    heading: "Cuéntanos de tu negocio",
-    blurb:   "Esto ajusta las recomendaciones a tu mercado y a la etapa en la que estás.",
-    audienceFocus: "¿A quién le vendes o le comunicas principalmente?",
-    stage:   "¿En qué etapa está el negocio?",
-    reach:   "¿Hasta dónde llega tu mercado?",
+    heading: "Cuéntanos acerca de tu negocio",
+    blurb:   "Nuestro sistema ajusta las recomendaciones a tu mercado y a la etapa en la que estás, para que puedas ver con mayor precisión tus resultados.",
+    audienceFocus: "¿A quién quieres vender o con quién te comunicas principalmente?",
+    stage:   "¿En qué etapa de madurez está el negocio?",
+    reach:   "¿Qué tan amplia es tu presencia en el mercado?",
     industry: "Industria",
     industryPlaceholder: "Elige una industria",
     currency: "Moneda",
   },
 
   objective: {
-    heading: "¿Cuál es el resultado que esta campaña existe para producir?",
+    heading: "¿Cuál es el resultado que quieres obtener con esta campaña?",
     blurb:   "Elige el resultado principal. Todo lo demás se dimensiona a partir de esto.",
-    footer:  "Las campañas que intentan hacer de todo casi nunca miden nada. Elige el resultado principal; los beneficios secundarios igual ocurren, solo que no dirigen el plan.",
+    footer:  "Las campañas que intentan abarcar mucho usualmente logran poco o nada. Asegúrate de elegir bien el resultado principal; los beneficios secundarios igual ocurren, solo que son el resultado de un buen plan.",
   },
 
   scope: {
-    heading: "¿Qué tan grande es la campaña?",
-    blurb:   "La duración, los canales y el tamaño de la audiencia determinan cuánto trabajo y cuánta pauta necesita.",
+    heading: "¿Cuál es el alcance de tu campaña?",
+    blurb:   "La duración, los canales y el tamaño de la audiencia determinan cuánto tiempo de desarrollo y cuántas pautas necesitan cubrirse.",
     duration: "¿Cuánto va a durar?",
     customDuration: "Otra",
     days: "días",
     durationLabel: "Duración de la campaña",
-    alwaysOn: "Siempre activa",
-    alwaysOnHint: "Corre de forma continua, puede empezar cuando sea",
-    fixedDate: "Con fecha fija",
+    alwaysOn: "Quiero una campaña que esté siempre activa",
+    alwaysOnHint: "Corre de forma continua y puede empezar cuando sea",
+    fixedDate: "Mi campaña tiene un rango de tiempo fijo",
     fixedDateHint: "Fecha fija: evento, lanzamiento, temporada",
-    channels: "¿Qué canales de publicidad estás considerando?",
-    channelsHint: "Elige solo los que realmente vas a operar. Menos canales bien hechos rinden más que muchos a medias.",
+    channels: "¿Qué canales publicitarios estás considerando?",
+    channelsHint: "Elige solo los que realmente vas a operar y que se adaptan a un presupuesto realista. Menos canales bien alcanzados rinden más que muchos a medias.",
     channelsSelected: (n) => `${n} ${n === 1 ? "seleccionado" : "seleccionados"}. El plan te dirá cuántos respalda tu presupuesto de forma realista.`,
-    audience: "Tamaño estimado de la audiencia",
-    timing: "Temporalidad",
+    audience: "Tamaño estimado de la audiencia (A cuantas personas quieres que esté expuesta tu campaña)",
+    timing: "¿Qué tiempo esperas que dure tu campaña?",
     durationDays: "Duración en días",
     audienceHint: "Un estimado está bien. Si no sabes, elige “No estoy seguro”.",
     timeSensitive: "¿Tiene una fecha fija?",
@@ -90,16 +90,16 @@ export const esSteps: CalcCopy["steps"] = {
   },
 
   destination: {
-    heading: "¿A dónde debe ir la gente, o qué debe hacer, después de ver la campaña?",
-    blurb:   "Esto define qué piezas del destino importan de verdad para tu campaña.",
+    heading: "En términos de conversión. ¿Qué acción deseas que la gente ejerza después de ver la campaña?",
+    blurb:   "La respuesta a esta pregunta define qué lugar de aterrizaje medible y que piezas del destino importan de verdad para tu campaña.",
   },
 
   readiness: {
-    heading: "¿Qué tienes listo hoy?",
-    blurb:   "Sé honesto aquí; nadie tiene todo listo. Lo que falte se convierte en presupuesto, no en un regaño.",
+    heading: "Si tuvieras que lanzar tu campaña en este momento ¿Qué recursos de marca tienes listo hoy?",
+    blurb:   "Sé honesto aquí; ninguna campaña tiene todo listo antes del lanzamiento. Esta es una herramienta de planificación y de preparación para que tu campaña sea exitosa, para que tu inversión publicitaria regrese convertida en un extraordinario Retorno de Inversión (ROI)",
     relevanceNote: "Solo preguntamos por lo que esta campaña realmente necesita, según tu objetivo, tus canales y tu destino.",
     notApplicable: "No aplica para esta campaña",
-    intro: "No todas las campañas necesitan los mismos materiales. Según tu objetivo y los canales que elegiste, identificamos qué es esencial, recomendado u opcional para este plan. Dinos qué se puede usar con confianza hoy; si algo existe pero podría mejorar, elige \"Hay que revisarlo\".",
+    intro: "No todas las campañas necesitan los mismos materiales audiovisuales, o de contenido. Según tu objetivo y los canales que elegiste, identificamos qué es esencial, recomendado u opcional para este plan. Dinos qué se puede usar con confianza hoy; si algo existe pero podría mejorar, elige \"Hay que revisarlo\".",
     introEmphasis: "No necesitas todos los elementos de la lista.",
     answeredOf: (a, t) => `${a} de ${t} respondidos`,
     notRequiredFor: (n) => `No se requiere para este plan (${n})`,
@@ -108,10 +108,10 @@ export const esSteps: CalcCopy["steps"] = {
   },
 
   financial: {
-    heading: "¿Cómo quieres planear?",
-    blurb:   "Puedes partir de un presupuesto o de una meta. Lo que no sepas, lo llenamos con un supuesto que puedes editar.",
-    modeBudget: "Tengo un presupuesto",
-    modeGoal:   "Tengo una meta",
+    heading: "¿Cómo quieres planear tu campaña?",
+    blurb:   "Tu campaña la puedes planear partir de un presupuesto o de una meta. Lo que no sepas, lo llenaremos con una presunción que puedes editar cuando quieras.",
+    modeBudget: "Ya tengo tengo un presupuesto para esto",
+    modeGoal:   "Tengo una meta clara acerca de lo que quiero lograr en esta campaña",
     budgetTotal: "Inversión total disponible",
     goalCount:   "Resultados que buscas",
     avgValue:    "Valor promedio por cliente",
@@ -120,12 +120,12 @@ export const esSteps: CalcCopy["steps"] = {
     targetFrequency: "Frecuencia deseada",
     marginPct:  "Margen bruto",
     expectedRevenue: "Ingreso esperado",
-    assumptionBadge: "Supuesto de planeación",
+    assumptionBadge: "Supuesto de planificación",
     optional: "opcional",
     budgetHint: "Todo: estrategia, creatividad, medios y gestión, no solo la pauta.",
     marginHint: "Aproximadamente lo que queda de cada venta después de los costos directos.",
-    modeBudgetHint: "Parte de la inversión que tienes disponible y arma una distribución equilibrada.",
-    modeGoalHint: "Parte del objetivo de tu campaña y estima lo que podría requerir.",
+    modeBudgetHint: "Parte de la inversión que tienes disponible y lista para una distribución equilibrada.",
+    modeGoalHint: "Comienza con el objetivo de tu campaña y calcula lo que podrías requerir para lograrla.",
     breakEvenHeading: "Para el análisis de punto de equilibrio",
     breakEvenHint: "(opcional, habilita la vista de punto de equilibrio)",
   },
@@ -175,8 +175,8 @@ export const esErrors: CalcCopy["errors"] = {
 };
 
 export const esResults: CalcCopy["results"] = {
-  heading: "Tu plan de inversión en campaña",
-  blurb:   "Según tus objetivos y tu punto de partida, aquí hay tres formas de hacerlo. Son estimados de planeación para ayudarte a decidir, no una garantía de lo que hará una campaña.",
+  heading: "Tu plan de inversión para esta campaña",
+  blurb:   "Según tus objetivos y tu punto de partida, aquí hay tres formas de hacerla. Estos son estimados de planeación para ayudarte a decidir, en ningún caso es una garantía del resultado de esta o ninguna campaña sin el acompañamiento profesional.",
   recommended: "Recomendado",
   whyThisAmount: "¿Por qué este monto?",
   whySuggest: "Por qué lo sugerimos:",
@@ -200,22 +200,22 @@ export const esResults: CalcCopy["results"] = {
   share: "Porcentaje",
   category: "Categoría",
   currentPhaseAllocation: "Asignación de esta fase",
-  protectedBlurb:    "Este es el trabajo que hace que valga la pena correr una campaña: estrategia, creatividad, el lugar donde aterriza la gente, operarla y mejorarla.",
+  protectedBlurb:    "Estos son los elementos que hacen que valga la pena correr una campaña: estrategia, creatividad, la página de aterrizaje (Landing page), recursos indispensables para operarla y mejorarla.",
   belowMinimumBlurb: (leanRange) => `Esto es lo que financia la fase actual. Queda por debajo del mínimo austero de ${leanRange}, así que no la vamos a llamar inversión protegida de campaña.`,
-  mediaBlurb:        "Lo que le pagas a las plataformas por poner tu campaña frente a la gente.",
-  reserveBlurb:      "Reservado para cambios que autorices, imprevistos de producción u una oportunidad que valga la pena aprovechar mientras la campaña está al aire.",
+  mediaBlurb:        "El monto que inviertes en las plataformas o medios publicitarios para poner tu campaña frente a la gente.",
+  reserveBlurb:      "Reservado para cambios que autorices, imprevistos de producción o una oportunidad que valga la pena aprovechar mientras la campaña está al aire.",
   identity: ({ protectedAmount, media, reserve, total, funded }) =>
     `${protectedAmount} ${funded ? "protegidos" : "en esta fase"} + ${media} en medios + ${reserve} de reserva = ${total} en total. El presupuesto de medios compra distribución; la inversión protegida de campaña financia la estrategia, la producción creativa, la infraestructura digital, la gestión y la optimización necesarias para que esa distribución sea intencional y medible.`,
   preparationPhase:  "Fase de preparación",
-  focusedPilot:      "Piloto enfocado",
-  prepSprintTagline: "Sprint de estrategia y configuración · sin activación de medios",
+  focusedPilot:      "Enfocada en la fase piloto",
+  prepSprintTagline: "En la fase de estrategia y configuración · aún sin activación de medios",
   noMediaActivation: "Sin activación de medios con esta inversión",
   reducedScope:      (n) => `Alcance reducido · ${n} ${n === 1 ? "canal" : "canales"}`,
   scopeChannels:     (tagline, n) => `${tagline} · ${n} ${n === 1 ? "canal" : "canales"}`,
-  prepOnlyNote:      "Esto financia solo la preparación. No es una campaña completa y no incluye activación de medios.",
+  prepOnlyNote:      "Este monto financia solo la fase de preparación, esta base permite estar listo para una futura activación. No es una campaña completa y no incluye pauta publicitaria en ningún medio.",
   reducedScopeNote:  (selected) => `Este es un plan de alcance reducido, no la campaña completa de ${selected} ${selected === 1 ? "canal" : "canales"} que seleccionaste al principio.`,
   extraNeeded:       (amount) => `unos ${amount} más`,
-  mediaAdjustable:   "Ajustable. Reducir medios reduce alcance, canales o duración.",
+  mediaAdjustable:   "Ajustable. Al reducir los medios se reduce alcance, canales o duración.",
   floorDeferred:     (a) => `Mínimo austero de la categoría: ${a} (queda fuera de esta fase)`,
   floorPartial:      (a) => `Mínimo austero de la categoría: ${a} (financiado parcialmente en esta fase)`,
   floorPlain:        (a) => `Mínimo austero de la categoría: ${a}`,
@@ -229,7 +229,7 @@ export const esResults: CalcCopy["results"] = {
 };
 
 export const esCards: CalcCopy["cards"] = {
-  startingPoint:     "Tu punto de partida",
+  startingPoint:     "El punto de partida de tu campaña",
   budgetCanDo:       "Qué puede hacer tu inversión",
   phaseScope:        "Qué haríamos en esta fase",
   worthChecking:     "Algunas cosas que vale la pena revisar",
@@ -249,30 +249,30 @@ export const esProse: CalcCopy["prose"] = {
   readinessMeterNote:
     "Solo contamos las piezas que esta campaña en particular realmente necesita. No es una calificación de tu negocio, es simplemente desde dónde estás empezando, y evita que la pauta se adelante al mensaje.",
   startingPointFooter:
-    "Tu punto de partida es sobre lo que ya tienes. Esto es sobre hasta dónde puede llegar tu dinero de forma realista. Todas las cifras son estimados de planeación basados en referencias de mercado, no cotizaciones de LV Branding.",
+    "Tu punto de partida es sobre lo que ya tienes. Esto es sobre hasta dónde puede llegar tu dinero de forma realista. Todas las cifras son estimadas y de planeación basadas en referencias de mercado, en ningún caso es una cotización final de LV Branding.",
   feasibilityFooter:
-    "Todas las cifras son estimados de planeación basados en referencias de mercado, no cotizaciones de LV Branding, y con gusto las repasamos contigo.",
+    "Todas las cifras son estimados de planeación basados en referencias de mercado, no cotizaciones de LV Branding, con gusto podríamos revisar esto contigo.",
   allocationFooter:
-    "Los montos describen capacidad de planeación, no una cotización; lo que cuesten los entregables específicos depende del alcance y del mercado. Nada aquí te compromete (ni a ti ni a LV Branding) a un precio.",
+    "Los montos describen capacidad de planeación, no una cotización; lo que cuesten los entregables específicos depende del alcance y del mercado. Nada aquí te compromete (ni a ti ni a LV Branding) a un precio final, este sistema te da una importante herramienta de planificación de costos, ha sido desarrollada con el conocimiento y la experiencia de 28 años, sin embargo, es necesaria una revisión final en un caso real y específico.",
   breakEvenFooter:
-    "El ingreso no es utilidad: la utilidad bruta proyectada ya resta los costos directos con tu margen, pero no la inversión de campaña. Estas cifras salen de tus propios supuestos; son aritmética de planeación, no un pronóstico.",
+    "El ingreso no es utilidad: la utilidad bruta proyectada ya resta los costos directos con tu margen, pero no la inversión de campaña. Estas cifras salen de los supuestos contestados por ti; son aritmética de planeación, no un pronóstico.",
   scenariosFooter:
     "Los escenarios cambian el alcance: cobertura, número de canales, cobertura creativa y profundidad de pruebas. No son el mismo plan a tres precios.",
   assumptionsFooter:
-    "Los valores marcados como supuesto de planeación no los proporcionaste; se usó un punto de partida en su lugar. Son los primeros números que vale la pena reemplazar con los tuyos.",
+    "Los valores marcados como supuesto de planeación no los proporcionaste al principio; estos se usaron como punto de partida en su lugar. Son los primeros números que vale la pena reemplazar con los tuyos.",
   nothingWorthChecking:
     "No hay nada que resalte como problema. El equilibrio entre base, alcance y pruebas se ve proporcionado a lo que nos contaste.",
   preparationCaveat:
-    "Para que quede claro: pautar anuncios y entregar una campaña completa no son parte de esta fase.",
+    "Una importante aclaratoria: pautar anuncios y entregar una campaña completa no son parte de esta fase.",
   quotedSeparately: "Se cotiza por separado",
   deferredFromPhase: "Queda fuera de esta fase",
   waysForward: "Caminos posibles",
   disclaimer:
-    "Este reporte contiene estimados de planeación basados en la información y los supuestos que se ingresaron. Los costos publicitarios reales y el desempeño de una campaña varían según industria, mercado, audiencia, plataforma, competencia, calidad creativa y ejecución. Los resultados no están garantizados. Las cifras de mercado son referencias de planeación, no cotizaciones ni precios garantizados, y nada aquí te compromete ni compromete a LV Branding a un precio. Esta herramienta es solo para fines de planeación y no constituye asesoría financiera.",
+    "Este reporte contiene estimados de planeación basados en la información y los supuestos que se ingresaron. Los costos publicitarios reales y el desempeño de una campaña varían según industria, mercado, audiencia, plataforma, competencia, calidad creativa y ejecución. Los resultados no están garantizados. Las cifras de mercado son referencias de planeación, no cotizaciones ni precios garantizados, y nada aquí te compromete ni compromete a LV Branding a un precio. Esta herramienta es solo para fines de planeación, cálculo y análisis y en ningún caso constituye una asesoría financiera.",
   disclaimerPrepared:
-    "Preparado con la Calculadora de Inversión en Campañas de LV Branding. Con gusto repasamos contigo cualquier parte.",
+    "Preparado con la Calculadora de Inversión en Campañas de LV Branding. Estamos listos para repasar, revisar y planificar contigo cualquier parte.",
   privacy:
-    "Tus respuestas se guardan en este navegador para que puedas volver a ellas, y ahí se quedan. Nada nos llega a menos que decidas enviarnos tu plan con el formulario de arriba.",
+    "Tus respuestas se guardan en este navegador para que puedas volver a ellas, y ahí se quedan. Este sistema no almacena ninguna información a menos que decidas enviarnos tu plan con el formulario de arriba.",
   howEstimatesWork: "Cómo funcionan estos estimados",
   howEstimatesBody: [
     "Las asignaciones parten de rangos de planeación configurables (por ejemplo, los medios pagados suelen quedar entre 30% y 55% del presupuesto de campaña) y se adaptan a tus respuestas: las bases que faltan mueven presupuesto hacia estrategia, creatividad y experiencia digital; una base completa libera más hacia medios. Los tres escenarios cambian el alcance (cobertura, número de canales, cobertura creativa y profundidad de pruebas) en lugar de multiplicar un solo número.",
@@ -283,7 +283,7 @@ export const esProse: CalcCopy["prose"] = {
 
 export const esReport: CalcCopy["report"] = {
   planningEstimate: "Estimado de planeación",
-  notAQuote:        "No es una cotización",
+  notAQuote:        "Esto NO es una cotización",
   pageOf:           (page, total) => `Página ${page} de ${total}`,
   channelsLine:     (channels) => `Canales: ${channels}`,
   contradictionsTitle: "Vale la pena resolver esto antes de confiar en el plan.",

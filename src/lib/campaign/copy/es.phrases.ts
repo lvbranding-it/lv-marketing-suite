@@ -64,7 +64,7 @@ export const esPhrases: CalcCopy["phrases"] = {
 export const esCta: CalcCopy["cta"] = {
   byStatus: {
     "preparation-only": {
-      heading: "¿Te ayudamos a que esta primera fase cuente?",
+      heading: "¿Quieres que te ayudemos a que esta primera fase de planificación se convierta en una campaña exitosa?",
       body: "Saber el número real antes de gastarlo es la parte difícil, y ya lo tienes. Con gusto vemos contigo qué cubriría una fase de preparación enfocada y qué deja listo para lo que sigue.",
       action: "Hablemos de la primera fase",
     },
@@ -74,7 +74,7 @@ export const esCta: CalcCopy["cta"] = {
       action: "Planeemos ambas fases",
     },
     "focused-pilot": {
-      heading: "¿Una segunda opinión antes de invertir?",
+      heading: "¿Tienes preguntas para nosotros antes de invertir?",
       body: "Un piloto enfocado se ve viable aquí. Con gusto revisamos contigo la elección de canal, la creatividad que necesita y el reparto de medios antes de arrancar.",
       action: "Revisemos este piloto",
     },
