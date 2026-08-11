@@ -273,9 +273,12 @@ export function BreakEvenCard({ plan }: { plan: ScenarioPlan }) {
     <section aria-labelledby="breakeven-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <h3 id="breakeven-h" className="text-sm font-semibold">{t.cards.breakEven}</h3>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        At roughly {formatMoney(be.grossProfitPerUnit)} gross profit per {be.unitNoun.replace(/s$/, "")},
-        this scenario breaks even at about{" "}
-        <strong className="text-foreground">{be.breakEvenUnits.toLocaleString()} {be.unitNoun}</strong>.
+        {t.results.breakEvenLead(
+          formatMoney(be.grossProfitPerUnit),
+          be.unitNoun.replace(/s$/, ""),
+          be.breakEvenUnits.toLocaleString(t.locale),
+          be.unitNoun,
+        )}
       </p>
 
       {/* Simple comparison bars; values are stated in text, colour is not the only channel. */}
@@ -321,9 +324,7 @@ export function BreakEvenCard({ plan }: { plan: ScenarioPlan }) {
         </div>
       </dl>
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        Revenue is not profit: projected gross profit already subtracts direct costs at your stated
-        margin, but not the campaign investment itself. These figures follow from your own
-        assumptions; they are planning arithmetic, not a forecast.
+        {t.prose.breakEvenFooter}
       </p>
     </section>
   );

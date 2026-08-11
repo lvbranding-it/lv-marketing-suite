@@ -49,7 +49,7 @@ export default function ReviewCta({ answers, result, plan, currentShares }: Revi
   const [emailed, setEmailed] = useState(true);
   const hp = useRef("");
 
-  const summary = planSummaryLines(answers, result, plan);
+  const summary = planSummaryLines(answers, result, plan, lang);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -29,7 +29,7 @@ import {
 import { PREPARATION_PHASE, RESERVE } from "./config";
 import { narrativesFor, type Lang } from "./copy";
 import { copyFor } from "./copy/resolve";
-import { readinessClause } from "./localized";
+import { channelLabelOf, destinationLabelOf, readinessClause } from "./localized";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
   CategoryInsight, CategoryKey, ChannelKey, ComponentAssessment,
@@ -65,13 +65,9 @@ export function stateScore(state: ReadinessState | null): number {
   return state ? readinessStateMeta(state).score : 0;
 }
 
-function channelNames(keys: ChannelKey[], selected: ChannelKey[]): string {
-  const hits = keys.filter((k) => selected.includes(k))
-    .map((k) => CHANNELS.find((c) => c.key === k)?.label ?? k);
-  if (hits.length === 0) return "";
-  if (hits.length === 1) return hits[0];
-  if (hits.length === 2) return `${hits[0]} and ${hits[1]}`;
-  return `${hits.slice(0, -1).join(", ")}, and ${hits[hits.length - 1]}`;
+function channelNames(keys: ChannelKey[], selected: ChannelKey[], lang: Lang = "en"): string {
+  const hits = keys.filter((k) => selected.includes(k)).map((k) => channelLabelOf(k, lang));
+  return narrativesFor(lang).reasons.joinChannels(hits);
 }
 
 /**
@@ -80,7 +76,8 @@ function channelNames(keys: ChannelKey[], selected: ChannelKey[]): string {
  * apply come back as `not-required` and are excluded from the score entirely.
  * All the thresholds behind this live in config.ts. [ASSUMPTION]
  */
-export function componentAssessments(answers: CalculatorAnswers): ComponentAssessment[] {
+export function componentAssessments(answers: CalculatorAnswers, lang: Lang = "en"): ComponentAssessment[] {
+  const r = narrativesFor(lang).reasons;
   const channels = answers.scope.channels;
   const destination = answers.destination;
   const isAwareness = answers.objective === "awareness";
@@ -94,28 +91,28 @@ export function componentAssessments(answers: CalculatorAnswers): ComponentAsses
     objectiveOffer: { relevance: "essential" },
     message:        { relevance: "essential" },
     channelStrategy: channels.length > 1
-      ? { relevance: "essential", reason: `Running ${channels.length} channels together needs a plan for how they work as one campaign.` }
-      : { relevance: "recommended", reason: "A single channel still benefits from a deliberate plan, but the coordination burden is small." },
+      ? { relevance: "essential", reason: r.channelStrategyMulti(channels.length) }
+      : { relevance: "recommended", reason: r.channelStrategySingle },
     campaignPlan:   { relevance: "essential" },
     visualIdentity: visualChannels
-      ? { relevance: "essential", reason: "Your channel mix is visual, so the campaign needs a consistent look." }
-      : { relevance: "recommended", reason: "Your channels are mostly text-based, so visual direction matters less here." },
+      ? { relevance: "essential", reason: r.visualIdentityVisual }
+      : { relevance: "recommended", reason: r.visualIdentityText },
 
     // ── Creative assets: driven by the channels selected ──
     video: has(CHANNELS_REQUIRING_VIDEO)
-      ? { relevance: "essential", reason: `You selected ${channelNames(CHANNELS_REQUIRING_VIDEO, channels)}, making video an important creative requirement for this channel mix.` }
+      ? { relevance: "essential", reason: r.videoRequired(channelNames(CHANNELS_REQUIRING_VIDEO, channels, lang)) }
       : has(CHANNELS_FAVOURING_VIDEO)
-        ? { relevance: "recommended", reason: `Video typically outperforms static creative on ${channelNames(CHANNELS_FAVOURING_VIDEO, channels)}.` }
+        ? { relevance: "recommended", reason: r.videoFavoured(channelNames(CHANNELS_FAVOURING_VIDEO, channels, lang)) }
         : has(CHANNELS_SUPPORTING_VIDEO)
-          ? { relevance: "optional", reason: "Your channels can carry video, but none of them depend on it." }
-          : { relevance: "not-required", reason: "None of your selected channels can run video." },
+          ? { relevance: "optional", reason: r.videoOptional }
+          : { relevance: "not-required", reason: r.videoNotRequired },
     photography: has(CHANNELS_REQUIRING_IMAGERY)
-      ? { relevance: "recommended", reason: `${channelNames(CHANNELS_REQUIRING_IMAGERY, channels)} run on imagery.` }
+      ? { relevance: "recommended", reason: r.photographyImagery(channelNames(CHANNELS_REQUIRING_IMAGERY, channels, lang)) }
       : { relevance: "optional" },
     graphics: has(CHANNELS_REQUIRING_IMAGERY)
-      ? { relevance: "essential", reason: `${channelNames(CHANNELS_REQUIRING_IMAGERY, channels)} need sized ad creative.` }
-      : { relevance: "optional", reason: "Your selected channels are primarily text-based." },
-    adCopy: { relevance: "essential", reason: "Every channel needs written copy." },
+      ? { relevance: "essential", reason: r.graphicsImagery(channelNames(CHANNELS_REQUIRING_IMAGERY, channels, lang)) }
+      : { relevance: "optional", reason: r.graphicsTextBased },
+    adCopy: { relevance: "essential", reason: r.adCopyAlways },
 
     // ── Campaign destination: driven by what people should do next ──
     landingPage:  { relevance: "not-required" },
@@ -127,10 +124,10 @@ export function componentAssessments(answers: CalculatorAnswers): ComponentAsses
     analytics:      { relevance: "essential" },
     successMetrics: { relevance: "essential" },
     tracking: destination && destination !== "none"
-      ? { relevance: "essential", reason: "Your campaign drives a specific action, so it needs conversion tracking to be evaluated." }
-      : { relevance: "recommended", reason: "There is no direct conversion to measure, though tracking still shows what the campaign influenced." },
+      ? { relevance: "essential", reason: r.trackingAction }
+      : { relevance: "recommended", reason: r.trackingAwareness },
     pixels: destination && destination !== "none"
-      ? { relevance: "essential", reason: "Platform tracking is what lets each channel optimize toward your goal." }
+      ? { relevance: "essential", reason: r.pixelsAction }
       : { relevance: "recommended" },
   };
 
@@ -142,13 +139,13 @@ export function componentAssessments(answers: CalculatorAnswers): ComponentAsses
     if (destination === "lead-form" && channels.length > 0 && channels.every((c) => CHANNELS_WITH_NATIVE_FORMS.includes(c))) {
       out.landingPage = {
         relevance: "optional",
-        reason: `${channelNames(CHANNELS_WITH_NATIVE_FORMS, channels)} can host the form natively, so a landing page is optional.`,
+        reason: r.nativeForms(channelNames(CHANNELS_WITH_NATIVE_FORMS, channels, lang)),
       };
     }
-    const destLabel = DESTINATIONS.find((d) => d.key === destination)?.label.toLowerCase();
+    const destLabel = destinationLabelOf(destination, lang)?.toLowerCase();
     for (const key of ["landingPage", "leadForm", "checkoutFlow", "eventPage"] as ReadinessKey[]) {
       if (out[key].relevance !== "not-required" && !out[key].reason && destLabel) {
-        out[key] = { ...out[key], reason: `You chose "${destLabel}" as the campaign destination.` };
+        out[key] = { ...out[key], reason: r.destinationChosen(destLabel) };
       }
     }
   }
@@ -170,8 +167,8 @@ export function componentAssessments(answers: CalculatorAnswers): ComponentAsses
  * most, and "exists but needs review" earns partial credit. An all-or-nothing
  * checklist would penalise a Search campaign for having no video.
  */
-export function readinessScore(answers: CalculatorAnswers): ReadinessResult {
-  const assessments = componentAssessments(answers);
+export function readinessScore(answers: CalculatorAnswers, lang: Lang = "en"): ReadinessResult {
+  const assessments = componentAssessments(answers, lang);
 
   let weighted = 0;
   let totalWeight = 0;
@@ -464,8 +461,8 @@ export function breakEven(
 //   gap_full = max(0, I_full - A)
 
 /** Prices one scope for the answers as given. The two scopes never derive from each other. */
-export function scopeRequirements(answers: CalculatorAnswers, scope: ScopeKind): Requirements {
-  const assessments = componentAssessments(answers);
+export function scopeRequirements(answers: CalculatorAnswers, scope: ScopeKind, lang: Lang = "en"): Requirements {
+  const assessments = componentAssessments(answers, lang);
   const goalMedia = answers.financial.mode === "goal"
     ? estimateMediaSpend(answers, clamp(num(answers.financial.goalCount) ?? 0, 0, ASSUMPTIONS.maxGoal))
     : null;
@@ -478,8 +475,8 @@ const gapRange = (required: Range, available: number): Range => ({
 });
 
 export function feasibility(answers: CalculatorAnswers, lang: Lang = "en"): FeasibilityResult {
-  const minimumViable = scopeRequirements(answers, "lean");
-  const completeScope = scopeRequirements(answers, "full");
+  const minimumViable = scopeRequirements(answers, "lean", lang);
+  const completeScope = scopeRequirements(answers, "full", lang);
   const available = answers.financial.mode === "budget"
     ? clamp(num(answers.financial.budgetTotal) ?? 0, 0, ASSUMPTIONS.maxBudget)
     : 0;
@@ -532,11 +529,12 @@ export function buildScenario(
   key: ScenarioKey,
   /** Feasibility, when the caller already has it. Re-derived otherwise. */
   fit?: FeasibilityResult,
+  lang: Lang = "en",
 ): ScenarioPlan {
   const sMeta = scenarioMeta(key);
   const fin = answers.financial;
-  const assessments = componentAssessments(answers);
-  const scopeFit = fit ?? feasibility(answers);
+  const assessments = componentAssessments(answers, lang);
+  const scopeFit = fit ?? feasibility(answers, lang);
 
   let requirements: Requirements;
   let total: number;

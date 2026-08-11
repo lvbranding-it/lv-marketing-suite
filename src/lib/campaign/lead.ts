@@ -11,10 +11,12 @@
 // campaign context is mapped onto them deliberately and the per-form labels in
 // the edge function's FORM_CONFIGS rename them for the emails and CRM note.
 
+import { formatMoney, formatRange } from "./config";
+import { copyFor } from "./copy/resolve";
 import {
-  AUDIENCE_BANDS, CHANNELS, DESTINATIONS, FEASIBILITY_BANDS, READINESS_BANDS,
-  formatMoney, formatRange, objectiveMeta, readinessItemMeta,
-} from "./config";
+  audienceBand, channelLabelOf, destinationLabelOf, feasibilityBandOf,
+  objective as localObjective, readinessBand as localReadinessBand, readinessItem,
+} from "./localized";
 import type {
   CalculationResult, CalculatorAnswers, ScenarioPlan,
 } from "./types";
@@ -97,11 +99,6 @@ export interface LeadContact {
 /** One labelled line of the plan brief, shared by the emails and the CRM note. */
 export interface PlanLine { label: string; value: string }
 
-const labelsFor = <T extends string>(
-  keys: T[],
-  source: { key: T; label: string }[],
-): string[] => keys.map((k) => source.find((s) => s.key === k)?.label ?? k);
-
 /**
  * The plan brief. This is what makes the lead qualified: status, the money, the
  * gap, and which components are missing, in the order a rep would want them.
@@ -110,64 +107,59 @@ export function planSummaryLines(
   answers: CalculatorAnswers,
   result: CalculationResult,
   plan: ScenarioPlan,
+  lang: Lang = "en",
 ): PlanLine[] {
+  // The visitor is shown this block verbatim ("see exactly what we receive"), so
+  // it is written in their language. The CRM note carries the Español tag, which
+  // is how a rep knows which language the lead came in.
+  const t = copyFor(lang);
+  const b = t.brief;
+  const range = (r: Parameters<typeof formatRange>[0]) => formatRange(r, "USD", lang);
   const { feasibility, readiness } = result;
-  const band = FEASIBILITY_BANDS.find((b) => b.status === feasibility.status);
-  const readinessBand = READINESS_BANDS.find((b) => b.band === readiness.band);
+  const band = feasibilityBandOf(feasibility.status, lang);
+  const readinessBand = localReadinessBand(readiness.band, lang);
   const lines: PlanLine[] = [];
 
   lines.push({
-    label: "Plan status",
-    value: `${band?.label ?? feasibility.status} (feasibility ${feasibility.score}/100)`,
+    label: b.planStatus,
+    value: `${band?.label ?? feasibility.status} (${t.phrases.feasibilityScore(feasibility.score, "").trim().replace(/·\s*$/, "").trim()})`,
   });
 
   if (feasibility.applies && feasibility.available > 0) {
-    lines.push({ label: "Available investment", value: formatMoney(feasibility.available) });
+    lines.push({ label: b.available, value: formatMoney(feasibility.available) });
   }
-  lines.push({
-    label: "Lean minimum",
-    value: formatRange(feasibility.minimumViable.total),
-  });
-  lines.push({
-    label: "Complete scope",
-    value: formatRange(feasibility.completeScope.total),
-  });
+  lines.push({ label: b.leanMinimum, value: range(feasibility.minimumViable.total) });
+  lines.push({ label: b.completeScope, value: range(feasibility.completeScope.total) });
 
   if (feasibility.applies && feasibility.minimumFundingGap.max > 0) {
-    lines.push({
-      label: "Gap to the lean minimum",
-      value: formatRange(feasibility.minimumFundingGap),
-    });
+    lines.push({ label: b.gapMinimum, value: range(feasibility.minimumFundingGap) });
   }
   if (feasibility.applies && feasibility.completeScopeFundingGap.max > 0) {
-    lines.push({
-      label: "Gap to the complete scope",
-      value: formatRange(feasibility.completeScopeFundingGap),
-    });
+    lines.push({ label: b.gapComplete, value: range(feasibility.completeScopeFundingGap) });
   }
 
   lines.push({
-    label: "Plan shown",
+    label: b.planShown,
     value:
-      `${formatMoney(plan.total)} total` +
-      (plan.isPreparationPhase ? " (preparation phase, no media activation)" : "") +
-      (plan.mediaSpend > 0 ? ` · ${formatMoney(plan.mediaSpend)} media` : ""),
+      formatMoney(plan.total) +
+      (plan.isPreparationPhase ? ` (${b.noMediaActivation})` : "") +
+      (plan.mediaSpend > 0 ? ` · ${b.mediaSuffix(formatMoney(plan.mediaSpend))}` : ""),
   });
 
   lines.push({
-    label: "Starting point",
+    label: b.startingPoint,
     value:
-      `${readiness.score}/100 (${readinessBand?.label ?? readiness.band}) · ` +
-      `${readiness.essentialReady} of ${readiness.essentialTotal} essentials ready`,
+      `${t.phrases.readinessScore(readiness.score, readinessBand?.label ?? readiness.band)} · ` +
+      t.phrases.essentialsReady(readiness.essentialReady, readiness.essentialTotal),
   });
 
-  const missing = readiness.gaps.essential.map((k) => readinessItemMeta(k).label);
+  const missing = readiness.gaps.essential.map((k) => readinessItem(k, lang).label);
   if (missing.length > 0) {
-    lines.push({ label: "Essentials not ready", value: missing.join(", ") });
+    lines.push({ label: b.essentialsNotReady, value: missing.join(", ") });
   }
-  const recommended = readiness.gaps.recommended.map((k) => readinessItemMeta(k).label);
+  const recommended = readiness.gaps.recommended.map((k) => readinessItem(k, lang).label);
   if (recommended.length > 0) {
-    lines.push({ label: "Also missing", value: recommended.join(", ") });
+    lines.push({ label: b.alsoMissing, value: recommended.join(", ") });
   }
 
   // Stated against the lean scope's protected minimum, which is not the same
@@ -175,16 +167,14 @@ export function planSummaryLines(
   // read as contradicting each other.
   if (feasibility.applies && feasibility.selectedChannels > feasibility.supportedChannels) {
     lines.push({
-      label: "Channels vs. funding",
-      value:
-        `${feasibility.selectedChannels} selected, ${feasibility.supportedChannels} supported ` +
-        `once the lean minimum scope is paid for`,
+      label: b.channelsVsFunding,
+      value: b.channelsVsFundingValue(feasibility.selectedChannels, feasibility.supportedChannels),
     });
   }
 
   if (result.contradictions.length > 0) {
     lines.push({
-      label: "Flagged in the answers",
+      label: b.flagged,
       value: result.contradictions.map((c) => c.text).join(" · "),
     });
   }
@@ -223,25 +213,24 @@ export function buildLeadBody(
   lang: Lang = "en",
 ): CampaignLeadBody {
   const { profile, scope, financial } = answers;
-  const objective = answers.objective ? objectiveMeta(answers.objective).label : null;
-  const destination = answers.destination
-    ? DESTINATIONS.find((d) => d.key === answers.destination)?.label ?? null
-    : null;
-  const audience = AUDIENCE_BANDS.find((b) => b.key === scope.audience);
+  const t = copyFor(lang);
+  const objective = answers.objective ? localObjective(answers.objective, lang).label : null;
+  const destination = destinationLabelOf(answers.destination, lang);
+  const audience = audienceBand(scope.audience, lang);
 
   const budgetText =
     financial.mode === "budget" && financial.budgetTotal
       ? formatMoney(financial.budgetTotal)
       : financial.mode === "goal" && financial.goalCount
-        ? `Goal-first: ${financial.goalCount.toLocaleString()} results`
+        ? t.phrases.goalFirst(financial.goalCount)
         : null;
 
   // `message` carries what a rep reads first, so it leads with the objective
   // rather than repeating the structured lines below it.
   const message = [
-    objective ? `Objective: ${objective}` : null,
-    `Market: ${profile.reach ?? "not stated"} · ${profile.stage ?? "stage not stated"} · speaks to ${profile.audienceFocus ?? "not stated"}`,
-    scope.timeSensitive ? "Fixed date or launch window." : "Always-on, no fixed date.",
+    objective ? `${t.report.figures.objective}: ${objective}` : null,
+    `${t.report.figures.marketReach}: ${profile.reach ?? "-"} · ${profile.stage ?? "-"} · ${profile.audienceFocus ?? "-"}`,
+    scope.timeSensitive ? t.phrases.fixedDate : t.phrases.alwaysOn,
   ].filter(Boolean).join("\n");
 
   return {
@@ -250,18 +239,18 @@ export function buildLeadBody(
     // CRM tag, both of which already exist server-side.
     lang,
     event_type:      intentMeta(intent).label,
-    services:        labelsFor(scope.channels, CHANNELS),
+    services:        scope.channels.map((c) => channelLabelOf(c, lang)),
     industry:        profile.industry || null,
-    event_timeframe: `${scope.durationDays} days`,
+    event_timeframe: t.phrases.dayCount(scope.durationDays),
     venue:           destination,
-    attendees:       audience && audience.key !== "unknown" ? audience.label : null,
+    attendees:       audience.key !== "unknown" ? audience.label : null,
     budget:          budgetText,
     contact_name:    contact.name.trim(),
     contact_email:   contact.email.trim(),
     contact_phone:   contact.phone.trim() || null,
     company:         null,
     message,
-    plan_summary:    planSummaryLines(answers, result, plan),
+    plan_summary:    planSummaryLines(answers, result, plan, lang),
     hp:              contact.hp,
   };
 }

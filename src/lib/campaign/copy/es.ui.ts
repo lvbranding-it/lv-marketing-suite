@@ -39,6 +39,16 @@ export const esNav: CalcCopy["nav"] = {
 
 export const esSteps: CalcCopy["steps"] = {
   labels: ["Perfil", "Objetivo", "Alcance", "Destino", "Punto de partida", "Números", "Revisión"],
+  titles: [
+    "Cuéntanos de tu negocio",
+    "¿Qué debe lograr esta campaña?",
+    "Define la campaña",
+    "¿Qué tienes listo para esta campaña?",
+    "¿Cómo quieres planear tu inversión?",
+    "Revisa tus respuestas",
+  ],
+  optional: "(opcional)",
+  buildPlan: "Armar mi plan de inversión",
 
   profile: {
     heading: "Cuéntanos de tu negocio",
@@ -54,16 +64,23 @@ export const esSteps: CalcCopy["steps"] = {
   objective: {
     heading: "¿Cuál es el resultado que esta campaña existe para producir?",
     blurb:   "Elige el resultado principal. Todo lo demás se dimensiona a partir de esto.",
+    footer:  "Las campañas que intentan hacer de todo casi nunca miden nada. Elige el resultado principal; los beneficios secundarios igual ocurren, solo que no dirigen el plan.",
   },
 
   scope: {
     heading: "¿Qué tan grande es la campaña?",
     blurb:   "La duración, los canales y el tamaño de la audiencia determinan cuánto trabajo y cuánta pauta necesita.",
     duration: "¿Cuánto va a durar?",
-    customDuration: "Otra duración",
+    customDuration: "Otra",
     days: "días",
+    durationLabel: "Duración de la campaña",
+    alwaysOn: "Siempre activa",
+    alwaysOnHint: "Corre de forma continua, puede empezar cuando sea",
+    fixedDate: "Con fecha fija",
+    fixedDateHint: "Fecha fija: evento, lanzamiento, temporada",
     channels: "¿Qué canales de publicidad estás considerando?",
     channelsHint: "Elige solo los que realmente vas a operar. Menos canales bien hechos rinden más que muchos a medias.",
+    channelsSelected: (n) => `${n} ${n === 1 ? "seleccionado" : "seleccionados"}. El plan te dirá cuántos respalda tu presupuesto de forma realista.`,
     audience: "Tamaño estimado de la audiencia",
     timing: "Temporalidad",
     durationDays: "Duración en días",
@@ -82,6 +99,12 @@ export const esSteps: CalcCopy["steps"] = {
     blurb:   "Sé honesto aquí; nadie tiene todo listo. Lo que falte se convierte en presupuesto, no en un regaño.",
     relevanceNote: "Solo preguntamos por lo que esta campaña realmente necesita, según tu objetivo, tus canales y tu destino.",
     notApplicable: "No aplica para esta campaña",
+    intro: "No todas las campañas necesitan los mismos materiales. Según tu objetivo y los canales que elegiste, identificamos qué es esencial, recomendado u opcional para este plan. Dinos qué se puede usar con confianza hoy; si algo existe pero podría mejorar, elige \"Hay que revisarlo\".",
+    introEmphasis: "No necesitas todos los elementos de la lista.",
+    answeredOf: (a, t) => `${a} de ${t} respondidos`,
+    notRequiredFor: (n) => `No se requiere para este plan (${n})`,
+    unansweredNote: "Todo lo que quede sin responder se planea como si aún estuviera por crear.",
+    markRestUnsure: 'Marcar el resto de esta sección como "No estoy seguro"',
   },
 
   financial: {
@@ -99,12 +122,37 @@ export const esSteps: CalcCopy["steps"] = {
     expectedRevenue: "Ingreso esperado",
     assumptionBadge: "Supuesto de planeación",
     optional: "opcional",
+    budgetHint: "Todo: estrategia, creatividad, medios y gestión, no solo la pauta.",
+    marginHint: "Aproximadamente lo que queda de cada venta después de los costos directos.",
+    modeBudgetHint: "Parte de la inversión que tienes disponible y arma una distribución equilibrada.",
+    modeGoalHint: "Parte del objetivo de tu campaña y estima lo que podría requerir.",
+    breakEvenHeading: "Para el análisis de punto de equilibrio",
+    breakEvenHint: "(opcional, habilita la vista de punto de equilibrio)",
   },
 
   review: {
     heading: "Revisa tus respuestas",
-    blurb:   "Si algo no se ve bien, edítalo antes de continuar.",
+    blurb:   "Una revisión rápida antes de armar el plan. Puedes volver a cualquier paso sin perder tus respuestas.",
     edit:    "Editar",
+    rowBusiness: "Negocio",
+    rowObjective: "Objetivo",
+    rowScope: "Alcance",
+    rowReadiness: "Lo que tienes",
+    rowFinancials: "Números",
+    scopeValue: (duration, channels, timeSensitive) =>
+      `${duration} · ${channels} ${channels === 1 ? "canal" : "canales"} · ${timeSensitive ? "con fecha fija" : "siempre activa"}`,
+    readinessValue: (destination, phrase, ready, total) =>
+      `${destination} · ${phrase} · ${ready} de ${total} ${total === 1 ? "pieza esencial lista" : "piezas esenciales listas"}`,
+    destinationMissing: "Destino sin seleccionar",
+    foundationNeedsWork: "La base de la campaña necesita desarrollo",
+    partiallyPrepared: "Parcialmente preparado",
+    budgetFirst: (amount) => `Desde el presupuesto · ${amount}`,
+    goalFirstLabel: "Desde la meta",
+    audienceReach: "de alcance de audiencia",
+    frequencyLabel: (n) => `Frecuencia ${n}`,
+    cpmLabel: (amount, assumed) => `CPM de ${amount}${assumed ? " (supuesto)" : ""}`,
+    estimatedImpressions: (n) => `${n} impresiones estimadas`,
+    assumption: "supuesto",
   },
 };
 
@@ -172,6 +220,12 @@ export const esResults: CalcCopy["results"] = {
   floorPartial:      (a) => `Mínimo austero de la categoría: ${a} (financiado parcialmente en esta fase)`,
   floorPlain:        (a) => `Mínimo austero de la categoría: ${a}`,
   floorProtected:    "Esta cubre trabajo del que depende la campaña. Para bajarla, cambiaríamos el alcance en lugar de quitar el trabajo.",
+  bestFitBadge:      "La mejor opción para tu presupuesto",
+  tableCaption:      "Distribución del escenario seleccionado por categoría",
+  rebalanceNote:     "Subir una categoría redistribuye proporcionalmente las que no están fijadas, así que el plan siempre suma 100%. Las categorías protegidas no pueden bajar del trabajo del que depende la campaña.",
+  scopeLeversTitle:  "Formas responsables de reducirlo",
+  breakEvenLead:     (profit, unitSingular, units, unitNoun) =>
+    `Con unos ${profit} de utilidad bruta por ${unitSingular}, este escenario llega al punto de equilibrio alrededor de ${units} ${unitNoun}.`,
 };
 
 export const esCards: CalcCopy["cards"] = {

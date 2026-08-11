@@ -346,25 +346,19 @@ function CalculatorBody({ lang }: { lang: Lang }) {
         {phase === "steps" && (
           <div className="mx-auto max-w-3xl space-y-5">
             <StepProgress steps={t.steps.labels.slice(0, STEP_LABELS.length)} current={step} maxVisited={maxVisited} onJump={jumpTo} />
-            <section aria-label={`Step ${step + 1}: ${STEP_LABELS[step]}`} className="rounded-xl border border-border bg-card p-4 sm:p-6">
-              <h2 className="mb-5 text-base font-bold">
-                {[
-                  "Tell us about the business",
-                  "What should this campaign achieve?",
-                  "Shape the campaign",
-                  "What is ready for this campaign?",
-                  "How would you like to plan your investment?",
-                  "Review your answers",
-                ][step]}
-              </h2>
+            <section
+              aria-label={`${t.nav.stepOf(step + 1, STEP_LABELS.length)}: ${t.steps.labels[step]}`}
+              className="rounded-xl border border-border bg-card p-4 sm:p-6"
+            >
+              <h2 className="mb-5 text-base font-bold">{t.steps.titles[step]}</h2>
               {stepView}
             </section>
             <div className="flex items-center justify-between gap-3 pb-8">
               <Button variant="outline" className="gap-1.5" onClick={goBack}>
-                <ArrowLeft size={15} aria-hidden="true" /> Back
+                <ArrowLeft size={15} aria-hidden="true" /> {t.nav.back}
               </Button>
               <Button className="gap-1.5" onClick={goNext}>
-                {step === STEP_LABELS.length - 1 ? "Build My Investment Plan" : "Continue"}
+                {step === STEP_LABELS.length - 1 ? t.steps.buildPlan : t.nav.next}
                 <ArrowRight size={15} aria-hidden="true" />
               </Button>
             </div>

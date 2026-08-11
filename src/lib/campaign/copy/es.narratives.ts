@@ -237,6 +237,27 @@ export const esNarratives: Narratives = {
       "Llegar a una audiencia de este tamaño en 30 días concentra todo el presupuesto de medios en una ventana muy corta. Un vuelo más largo suele comprar el mismo alcance a un ritmo más sano, y con espacio para aprender.",
   },
 
+  reasons: {
+    channelStrategyMulti:  (n) => `Operar ${canales(n)} juntos necesita un plan de cómo funcionan como una sola campaña.`,
+    channelStrategySingle: "Un solo canal también se beneficia de un plan deliberado, pero la carga de coordinación es pequeña.",
+    visualIdentityVisual:  "Tu mezcla de canales es visual, así que la campaña necesita una imagen consistente.",
+    visualIdentityText:    "Tus canales son principalmente de texto, así que la dirección visual importa menos aquí.",
+    videoRequired:         (c) => `Seleccionaste ${c}, lo que hace del video un requerimiento creativo importante para esta mezcla de canales.`,
+    videoFavoured:         (c) => `El video suele rendir más que la creatividad estática en ${c}.`,
+    videoOptional:         "Tus canales admiten video, pero ninguno depende de él.",
+    videoNotRequired:      "Ninguno de los canales que seleccionaste puede correr video.",
+    photographyImagery:    (c) => `${c} funcionan con imágenes.`,
+    graphicsImagery:       (c) => `${c} necesitan piezas publicitarias en los tamaños correctos.`,
+    graphicsTextBased:     "Los canales que seleccionaste son principalmente de texto.",
+    adCopyAlways:          "Todos los canales necesitan textos escritos.",
+    trackingAction:        "Tu campaña impulsa una acción específica, así que necesita seguimiento de conversiones para poder evaluarse.",
+    trackingAwareness:     "No hay una conversión directa que medir, aunque el seguimiento igual muestra en qué influyó la campaña.",
+    pixelsAction:          "El seguimiento de las plataformas es lo que permite a cada canal optimizar hacia tu objetivo.",
+    nativeForms:           (c) => `${c} pueden alojar el formulario de forma nativa, así que la página de destino es opcional.`,
+    destinationChosen:     (d) => `Elegiste "${d}" como destino de la campaña.`,
+    joinChannels: (hits) => lista(hits, "y"),
+  },
+
   summary: {
     title:         "Plan de Inversión en Campaña de LV Branding",
     objective:     "Objetivo",

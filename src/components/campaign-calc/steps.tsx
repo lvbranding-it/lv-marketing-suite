@@ -29,6 +29,7 @@ import {
   destinations as localDestinations, durationPresets as localDurations, industries as localIndustries,
   objectives as localObjectives, reaches as localReaches, readinessGroups as localGroups,
   readinessItem, readinessStates as localStates, relevanceLabel, stages as localStages,
+  destinationLabelOf, readinessBands as localReadinessBands,
 } from "@/lib/campaign/localized";
 import {
   Field, NumberField, OptionCards, ToggleChips,
@@ -118,8 +119,7 @@ export function ObjectiveStep({ answers, onChange, errors }: StepProps) {
         error={errors.objective}
       />
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Campaigns that try to do everything usually measure nothing. Pick the primary outcome;
-        secondary benefits still happen, they just don't drive the plan.
+        {t.steps.objective.footer}
       </p>
     </div>
   );
@@ -139,9 +139,9 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
     <div className="space-y-6">
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Campaign duration
+          {t.steps.scope.durationLabel}
         </p>
-        <div role="radiogroup" aria-label="Campaign duration" className="flex flex-wrap gap-2">
+        <div role="radiogroup" aria-label={t.steps.scope.durationLabel} className="flex flex-wrap gap-2">
           {localDurations(lang).map((d) => {
             const active = isPreset && s.durationDays === d.days;
             return (
@@ -168,7 +168,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
               s.customDuration ? "border-primary bg-accent font-medium text-accent-foreground" : "border-border text-muted-foreground hover:border-muted-foreground/40"
             }`}
           >
-            Custom
+            {t.steps.scope.customDuration}
           </button>
         </div>
         {s.customDuration && (
@@ -208,7 +208,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
             },
           }))
         }
-        hint={s.channels.length > 0 ? `${s.channels.length} selected. The plan will tell you how many your budget realistically supports.` : undefined}
+        hint={s.channels.length > 0 ? t.steps.scope.channelsSelected(s.channels.length) : undefined}
         error={errors.channels}
       />
 
@@ -225,8 +225,8 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
           legend={t.steps.scope.timing}
           columns={2}
           options={[
-            { value: "always-on", label: "Always-on", hint: "Runs continuously, can start anytime" },
-            { value: "time-sensitive", label: "Time-sensitive", hint: "Fixed date: event, launch, season" },
+            { value: "always-on", label: t.steps.scope.alwaysOn, hint: t.steps.scope.alwaysOnHint },
+            { value: "time-sensitive", label: t.steps.scope.fixedDate, hint: t.steps.scope.fixedDateHint },
           ]}
           value={s.timeSensitive ? "time-sensitive" : "always-on"}
           onChange={(v) => set({ timeSensitive: v === "time-sensitive" })}
@@ -309,7 +309,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
       return { ...prev, readiness };
     });
 
-  const assessments = componentAssessments(answers);
+  const assessments = componentAssessments(answers, lang);
   const byKey = new Map(assessments.map((a) => [a.key, a]));
   const applicable = assessments.filter((a) => a.relevance !== "not-required");
   const notRequired = assessments.filter((a) => a.relevance === "not-required");
@@ -329,11 +329,8 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
   return (
     <div className="space-y-6">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Campaigns do not all require the same materials. Based on your objective and selected
-        channels, we've identified what is essential, recommended, or optional for this plan.
-        Tell us what can be used confidently today; if something exists but may need improvement,
-        select "Needs review."{" "}
-        <strong className="text-foreground">You do not need every item listed below.</strong>
+        {t.steps.readiness.intro}{" "}
+        <strong className="text-foreground">{t.steps.readiness.introEmphasis}</strong>
       </p>
 
       {/* The destination decides which destination components matter, so it is
@@ -380,7 +377,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
                     "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
                     complete ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground",
                   )}>
-                    {answered} of {rows.length} answered
+                    {t.steps.readiness.answeredOf(answered, rows.length)}
                   </span>
                 </button>
 
@@ -401,7 +398,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
                         onClick={() => markGroupUnsure(rows.map((a) => a.key))}
                         className="text-[11px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                       >
-                        Mark the rest of this section as "Not sure"
+                        {t.steps.readiness.markRestUnsure}
                       </button>
                     )}
                   </div>
@@ -413,7 +410,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
           {notRequired.length > 0 && (
             <details className="rounded-lg border border-border bg-muted/30 px-3 py-2">
               <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-                Not required for this plan ({notRequired.length})
+                {t.steps.readiness.notRequiredFor(notRequired.length)}
               </summary>
               <ul className="mt-2 space-y-1">
                 {notRequired.map((a) => (
@@ -430,7 +427,7 @@ export function ReadinessStep({ answers, onChange, errors }: StepProps) {
           )}
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Anything left unanswered is planned as though it still needs to be created.
+            {t.steps.readiness.unansweredNote}
           </p>
         </>
       )}
@@ -524,8 +521,8 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
         legend={t.steps.financial.heading}
         columns={2}
         options={[
-          { value: "budget", label: "I have a budget and want to allocate it", hint: "Start with your available investment and build a balanced allocation." },
-          { value: "goal", label: "I have a goal and want to estimate the investment", hint: "Start with your campaign objective and estimate what it may require." },
+          { value: "budget", label: t.steps.financial.modeBudget, hint: t.steps.financial.modeBudgetHint },
+          { value: "goal", label: t.steps.financial.modeGoal, hint: t.steps.financial.modeGoalHint },
         ]}
         value={fin.mode}
         onChange={(mode) => setFin({ mode: mode as FinancialMode })}
@@ -538,7 +535,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
             prefix="$" placeholder="25,000"
             value={raw.budgetTotal} onChange={bindMoney("budgetTotal")}
             error={errors.budgetTotal}
-            hint="Everything: strategy, creative, media, and management, not just ad spend."
+            hint={t.steps.financial.budgetHint}
           />
           <NumberField
             label={t.steps.financial.expectedRevenue}
@@ -605,7 +602,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
 
       <div className="rounded-lg border border-border bg-muted/40 p-4">
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          For break-even analysis <span className="font-normal normal-case tracking-normal">(optional, unlocks the break-even view)</span>
+          {t.steps.financial.breakEvenHeading} <span className="font-normal normal-case tracking-normal">{t.steps.financial.breakEvenHint}</span>
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
@@ -619,7 +616,7 @@ export function FinancialStep({ answers, onChange, errors }: StepProps) {
             suffix="%" placeholder="50" optional
             value={raw.marginPct} onChange={bindPercent("marginPct")}
             error={errors.marginPct}
-            hint="Roughly what's left of each sale after direct costs."
+            hint={t.steps.financial.marginHint}
           />
         </div>
       </div>
@@ -634,16 +631,18 @@ interface ReviewStepProps extends StepProps {
 }
 
 export function ReviewStep({ answers, onJump }: ReviewStepProps) {
+  const t = useCalcCopy();
+  const lang = useCalcLang();
   const fin = answers.financial;
   const obj = answers.objective ? objectiveMeta(answers.objective) : null;
-  const duration = DURATION_PRESETS.find((d) => d.days === answers.scope.durationDays && !answers.scope.customDuration)?.label
-    ?? `${answers.scope.durationDays} days`;
+  const duration = localDurations(lang).find((d) => d.days === answers.scope.durationDays && !answers.scope.customDuration)?.label
+    ?? t.phrases.dayCount(answers.scope.durationDays);
 
-  const ready = readinessScore(answers);
-  const readinessBand = READINESS_BANDS.find((b) => b.band === ready.band);
+  const ready = readinessScore(answers, lang);
+  const readinessBand = localReadinessBands(lang).find((b) => b.band === ready.band);
   const readinessPhrase = ready.essentialReady === 0
-    ? "Campaign foundation requires development"
-    : readinessBand?.label ?? "Partially prepared";
+    ? t.steps.review.foundationNeedsWork
+    : readinessBand?.label ?? t.steps.review.partiallyPrepared;
 
   /**
    * Awareness spend hinges on frequency, so the review spells the whole chain
@@ -651,16 +650,16 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
    */
   const financialValue = (() => {
     if (fin.mode === "budget") {
-      return `Budget-first · ${fin.budgetTotal !== null ? formatMoney(fin.budgetTotal) : "–"}`;
+      return t.steps.review.budgetFirst(fin.budgetTotal !== null ? formatMoney(fin.budgetTotal) : "–");
     }
     const goal = fin.goalCount;
-    const parts = ["Goal-first"];
+    const parts = [t.steps.review.goalFirstLabel];
     if (obj?.perThousand) {
-      parts.push(`${goal !== null ? goal.toLocaleString() : "–"} audience reach`);
-      if (fin.targetFrequency !== null) parts.push(`Frequency ${fin.targetFrequency}`);
-      if (fin.costPerResult !== null) parts.push(`${formatMoney(fin.costPerResult)} CPM${fin.assumedCostPerResult ? " (assumption)" : ""}`);
+      parts.push(`${goal !== null ? goal.toLocaleString(t.locale) : "–"} ${t.steps.review.audienceReach}`);
+      if (fin.targetFrequency !== null) parts.push(t.steps.review.frequencyLabel(fin.targetFrequency));
+      if (fin.costPerResult !== null) parts.push(t.steps.review.cpmLabel(formatMoney(fin.costPerResult), fin.assumedCostPerResult));
       if (goal !== null && fin.targetFrequency !== null) {
-        parts.push(`${Math.round(goal * fin.targetFrequency).toLocaleString()} estimated impressions`);
+        parts.push(t.steps.review.estimatedImpressions(Math.round(goal * fin.targetFrequency).toLocaleString(t.locale)));
       }
       return parts.join(" · ");
     }
@@ -676,7 +675,7 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
 
   const rows: { step: number; label: string; value: string }[] = [
     {
-      step: 0, label: "Business",
+      step: 0, label: t.steps.review.rowBusiness,
       value: [
         AUDIENCE_FOCUS_OPTIONS.find((o) => o.key === answers.profile.audienceFocus)?.label ?? "Audience not selected",
         BUSINESS_STAGES.find((s) => s.key === answers.profile.stage)?.label,
@@ -684,22 +683,25 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
         answers.profile.industry,
       ].filter(Boolean).join(" · "),
     },
-    { step: 1, label: "Objective", value: obj?.label ?? "–" },
+    { step: 1, label: t.steps.review.rowObjective, value: obj?.label ?? "–" },
     {
-      step: 2, label: "Scope",
-      value: `${duration} · ${answers.scope.channels.length} channel${answers.scope.channels.length === 1 ? "" : "s"} · ${answers.scope.timeSensitive ? "time-sensitive" : "always-on"}`,
+      step: 2, label: t.steps.review.rowScope,
+      value: t.steps.review.scopeValue(duration, answers.scope.channels.length, answers.scope.timeSensitive),
     },
     {
-      step: 3, label: "What you have",
-      value: `${DESTINATIONS.find((d) => d.key === answers.destination)?.label ?? "Destination not selected"} · ${readinessPhrase} · ${ready.essentialReady} of ${ready.essentialTotal} essential component${ready.essentialTotal === 1 ? "" : "s"} ready`,
+      step: 3, label: t.steps.review.rowReadiness,
+      value: t.steps.review.readinessValue(
+        destinationLabelOf(answers.destination, lang) ?? t.steps.review.destinationMissing,
+        readinessPhrase, ready.essentialReady, ready.essentialTotal,
+      ),
     },
-    { step: 4, label: "Financials", value: financialValue },
+    { step: 4, label: t.steps.review.rowFinancials, value: financialValue },
   ];
 
   return (
     <div className="space-y-3">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        A quick check before we build the plan. Jump back to any step without losing your answers.
+        {t.steps.review.blurb}
       </p>
       <dl className="divide-y divide-border rounded-lg border border-border">
         {rows.map((row) => (

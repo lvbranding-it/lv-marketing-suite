@@ -232,6 +232,32 @@ export const enNarratives: Narratives = {
       "Reaching an audience this large inside 30 days concentrates the entire media budget into a very short window. A longer flight usually buys the same reach at a healthier pace, with room to learn.",
   },
 
+  reasons: {
+    channelStrategyMulti:  (n) => `Running ${n} channels together needs a plan for how they work as one campaign.`,
+    channelStrategySingle: "A single channel still benefits from a deliberate plan, but the coordination burden is small.",
+    visualIdentityVisual:  "Your channel mix is visual, so the campaign needs a consistent look.",
+    visualIdentityText:    "Your channels are mostly text-based, so visual direction matters less here.",
+    videoRequired:         (c) => `You selected ${c}, making video an important creative requirement for this channel mix.`,
+    videoFavoured:         (c) => `Video typically outperforms static creative on ${c}.`,
+    videoOptional:         "Your channels can carry video, but none of them depend on it.",
+    videoNotRequired:      "None of your selected channels can run video.",
+    photographyImagery:    (c) => `${c} run on imagery.`,
+    graphicsImagery:       (c) => `${c} need sized ad creative.`,
+    graphicsTextBased:     "Your selected channels are primarily text-based.",
+    adCopyAlways:          "Every channel needs written copy.",
+    trackingAction:        "Your campaign drives a specific action, so it needs conversion tracking to be evaluated.",
+    trackingAwareness:     "There is no direct conversion to measure, though tracking still shows what the campaign influenced.",
+    pixelsAction:          "Platform tracking is what lets each channel optimize toward your goal.",
+    nativeForms:           (c) => `${c} can host the form natively, so a landing page is optional.`,
+    destinationChosen:     (d) => `You chose "${d}" as the campaign destination.`,
+    joinChannels: (hits) => {
+      if (hits.length === 0) return "";
+      if (hits.length === 1) return hits[0];
+      if (hits.length === 2) return `${hits[0]} and ${hits[1]}`;
+      return `${hits.slice(0, -1).join(", ")}, and ${hits[hits.length - 1]}`;
+    },
+  },
+
   summary: {
     title:         "CAMPAIGN INVESTMENT PLAN (planning estimate)",
     objective:     "Objective",

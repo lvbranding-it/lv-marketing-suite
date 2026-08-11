@@ -61,17 +61,27 @@ export interface CalcCopy {
   };
 
   steps: {
+    /** Progress-chip labels. */
     labels: string[];
+    /** The heading on each step card, one per step. */
+    titles: string[];
+    /** Marks a field as not required. Rendered by shared.tsx. */
+    optional: string;
+    buildPlan: string;
     profile: {
       heading: string; blurb: string;
       audienceFocus: string; stage: string; reach: string;
       industry: string; industryPlaceholder: string; currency: string;
     };
-    objective: { heading: string; blurb: string };
+    objective: { heading: string; blurb: string; footer: string };
     scope: {
       heading: string; blurb: string;
       duration: string; customDuration: string; days: string;
+      durationLabel: string;
+      alwaysOn: string; alwaysOnHint: string;
+      fixedDate: string; fixedDateHint: string;
       channels: string; channelsHint: string;
+      channelsSelected: (n: number) => string;
       audience: string; audienceHint: string; timing: string; durationDays: string;
       timeSensitive: string; timeSensitiveHint: string;
     };
@@ -80,6 +90,12 @@ export interface CalcCopy {
       heading: string; blurb: string;
       relevanceNote: string;
       notApplicable: string;
+      intro: string;
+      introEmphasis: string;
+      answeredOf: (answered: number, total: number) => string;
+      notRequiredFor: (n: number) => string;
+      unansweredNote: string;
+      markRestUnsure: string;
     };
     financial: {
       heading: string; blurb: string;
@@ -89,8 +105,29 @@ export interface CalcCopy {
       targetFrequency: string; marginPct: string; expectedRevenue: string;
       assumptionBadge: string;
       optional: string;
+      budgetHint: string;
+      marginHint: string;
+      modeBudgetHint: string;
+      modeGoalHint: string;
+      breakEvenHeading: string;
+      breakEvenHint: string;
     };
-    review: { heading: string; blurb: string; edit: string };
+    review: { heading: string; blurb: string; edit: string;
+      rowBusiness: string; rowObjective: string; rowScope: string;
+      rowReadiness: string; rowFinancials: string;
+      scopeValue: (duration: string, channels: number, timeSensitive: boolean) => string;
+      readinessValue: (destination: string, phrase: string, ready: number, total: number) => string;
+      destinationMissing: string;
+      foundationNeedsWork: string;
+      partiallyPrepared: string;
+      budgetFirst: (amount: string) => string;
+      goalFirstLabel: string;
+      audienceReach: string;
+      frequencyLabel: (n: number) => string;
+      cpmLabel: (amount: string, assumed: boolean) => string;
+      estimatedImpressions: (n: string) => string;
+      assumption: string;
+    };
   };
 
   /** Validation messages, keyed by the code `validateStep` returns. */
@@ -137,6 +174,11 @@ export interface CalcCopy {
     floorPartial:      (amount: string) => string;
     floorPlain:        (amount: string) => string;
     floorProtected:    string;
+    bestFitBadge:      string;
+    tableCaption:      string;
+    rebalanceNote:     string;
+    scopeLeversTitle:  string;
+    breakEvenLead:     (profit: string, unitSingular: string, units: string, unitNoun: string) => string;
     currentPhaseAllocation: string;
     protectedBlurb:      string;
     belowMinimumBlurb:   (leanRange: string) => string;

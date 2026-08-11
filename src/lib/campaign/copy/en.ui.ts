@@ -38,6 +38,16 @@ export const enNav: CalcCopy["nav"] = {
 
 export const enSteps: CalcCopy["steps"] = {
   labels: ["Profile", "Objective", "Scope", "Destination", "What you have", "Investment", "Review"],
+  titles: [
+    "Tell us about the business",
+    "What should this campaign achieve?",
+    "Shape the campaign",
+    "What is ready for this campaign?",
+    "How would you like to plan your investment?",
+    "Review your answers",
+  ],
+  optional: "(optional)",
+  buildPlan: "Build My Investment Plan",
 
   profile: {
     heading: "Tell us about your business",
@@ -53,16 +63,23 @@ export const enSteps: CalcCopy["steps"] = {
   objective: {
     heading: "What is the one outcome this campaign exists to produce?",
     blurb:   "Pick the primary outcome. Everything else is sized from this.",
+    footer:  "Campaigns that try to do everything usually measure nothing. Pick the primary outcome; secondary benefits still happen, they just don't drive the plan.",
   },
 
   scope: {
     heading: "How big is the campaign?",
     blurb:   "Duration, channels, and audience size decide how much work and how much media it needs.",
     duration: "How long will it run?",
-    customDuration: "Custom duration",
+    customDuration: "Custom",
     days: "days",
+    durationLabel: "Campaign duration",
+    alwaysOn: "Always-on",
+    alwaysOnHint: "Runs continuously, can start anytime",
+    fixedDate: "Time-sensitive",
+    fixedDateHint: "Fixed date: event, launch, season",
     channels: "Which advertising channels are you considering?",
     channelsHint: "Pick only the ones you will actually run. Fewer channels done properly beat many done thinly.",
+    channelsSelected: (n) => `${n} selected. The plan will tell you how many your budget realistically supports.`,
     audience: "Estimated audience size",
     timing: "Timing",
     durationDays: "Duration in days",
@@ -81,6 +98,12 @@ export const enSteps: CalcCopy["steps"] = {
     blurb:   "Be honest here; nobody has everything ready. What is missing becomes budget, not a telling-off.",
     relevanceNote: "We only ask about what this campaign actually needs, based on your objective, channels, and destination.",
     notApplicable: "Not required for this campaign",
+    intro: "Campaigns do not all require the same materials. Based on your objective and selected channels, we've identified what is essential, recommended, or optional for this plan. Tell us what can be used confidently today; if something exists but may need improvement, select \"Needs review.\"",
+    introEmphasis: "You do not need every item listed below.",
+    answeredOf: (a, t) => `${a} of ${t} answered`,
+    notRequiredFor: (n) => `Not required for this plan (${n})`,
+    unansweredNote: "Anything left unanswered is planned as though it still needs to be created.",
+    markRestUnsure: 'Mark the rest of this section as "Not sure"',
   },
 
   financial: {
@@ -98,12 +121,37 @@ export const enSteps: CalcCopy["steps"] = {
     expectedRevenue: "Expected revenue from the campaign",
     assumptionBadge: "Planning assumption",
     optional: "optional",
+    budgetHint: "Everything: strategy, creative, media, and management, not just ad spend.",
+    marginHint: "Roughly what's left of each sale after direct costs.",
+    modeBudgetHint: "Start with your available investment and build a balanced allocation.",
+    modeGoalHint: "Start with your campaign objective and estimate what it may require.",
+    breakEvenHeading: "For break-even analysis",
+    breakEvenHint: "(optional, unlocks the break-even view)",
   },
 
   review: {
     heading: "Review your answers",
-    blurb:   "If anything looks wrong, edit it before continuing.",
+    blurb:   "A quick check before we build the plan. Jump back to any step without losing your answers.",
     edit:    "Edit",
+    rowBusiness: "Business",
+    rowObjective: "Objective",
+    rowScope: "Scope",
+    rowReadiness: "What you have",
+    rowFinancials: "Financials",
+    scopeValue: (duration, channels, timeSensitive) =>
+      `${duration} · ${channels} channel${channels === 1 ? "" : "s"} · ${timeSensitive ? "time-sensitive" : "always-on"}`,
+    readinessValue: (destination, phrase, ready, total) =>
+      `${destination} · ${phrase} · ${ready} of ${total} essential component${total === 1 ? "" : "s"} ready`,
+    destinationMissing: "Destination not selected",
+    foundationNeedsWork: "Campaign foundation requires development",
+    partiallyPrepared: "Partially prepared",
+    budgetFirst: (amount) => `Budget-first · ${amount}`,
+    goalFirstLabel: "Goal-first",
+    audienceReach: "audience reach",
+    frequencyLabel: (n) => `Frequency ${n}`,
+    cpmLabel: (amount, assumed) => `${amount} CPM${assumed ? " (assumption)" : ""}`,
+    estimatedImpressions: (n) => `${n} estimated impressions`,
+    assumption: "assumption",
   },
 };
 
@@ -171,6 +219,12 @@ export const enResults: CalcCopy["results"] = {
   floorPartial:      (a) => `Lean category minimum: ${a} (partially funded this phase)`,
   floorPlain:        (a) => `Lean category minimum: ${a}`,
   floorProtected:    "This one covers work the campaign depends on. To bring it down, we would change the scope rather than remove the work itself.",
+  bestFitBadge:      "Best fit for current budget",
+  tableCaption:      "Allocation of the selected scenario by category",
+  rebalanceNote:     "Raising one category rebalances the unlocked ones proportionally, so the plan always totals 100%. Protected categories cannot go below the work the campaign depends on.",
+  scopeLeversTitle:  "Ways we would reduce this responsibly",
+  breakEvenLead:     (profit, unitSingular, units, unitNoun) =>
+    `At roughly ${profit} gross profit per ${unitSingular}, this scenario breaks even at about ${units} ${unitNoun}.`,
 };
 
 export const enCards: CalcCopy["cards"] = {

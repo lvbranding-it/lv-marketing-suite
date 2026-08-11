@@ -3,6 +3,7 @@
 // src/lib/campaign. Everything here is keyboard- and touch-first.
 
 import { useId } from "react";
+import { useCalcCopy } from "./lang";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -20,11 +21,12 @@ interface FieldProps {
 }
 
 export function Field({ label, hint, error, optional, htmlFor, children }: FieldProps) {
+  const t = useCalcCopy();
   return (
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor} className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
-        {optional && <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/70">(optional)</span>}
+        {optional && <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/70">{t.steps.optional}</span>}
       </Label>
       {children}
       {hint && !error && <p className="text-[11px] leading-relaxed text-muted-foreground">{hint}</p>}

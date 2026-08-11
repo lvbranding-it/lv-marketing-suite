@@ -19,6 +19,7 @@ import type {
 import { useCalcCopy, useCalcLang } from "./lang";
 import {
   categories as localCategories, scenario as localScenario, scenarios as localScenarios,
+  scopeLevers,
 } from "@/lib/campaign/localized";
 import AllocationDonut from "./AllocationDonut";
 import { StatusBadge } from "./shared";
@@ -184,7 +185,7 @@ export default function ResultsDashboard({
                       </span>
                     ) : isAffordablePlan ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                        <Star size={9} aria-hidden="true" /> Best fit for current budget
+                        <Star size={9} aria-hidden="true" /> {t.results.bestFitBadge}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
@@ -314,7 +315,7 @@ export default function ResultsDashboard({
             </summary>
             <div className="overflow-x-auto px-3 pb-3">
               <table className="w-full text-xs">
-                <caption className="sr-only">Allocation of the selected scenario by category</caption>
+                <caption className="sr-only">{t.results.tableCaption}</caption>
                 <thead>
                   <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
                     <th scope="col" className="py-1.5 pr-2 font-semibold">{t.results.category}</th>
@@ -449,15 +450,14 @@ export default function ResultsDashboard({
             );
           })}
           <p className="pl-2 pt-1 text-[11px] leading-relaxed text-muted-foreground">
-            Raising one category rebalances the unlocked ones proportionally, so the plan always
-            totals 100%. Protected categories cannot go below the work the campaign depends on.
+            {t.results.rebalanceNote}
           </p>
           <details className="mt-1 pl-2">
             <summary className="cursor-pointer select-none text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-              Ways we would reduce this responsibly
+              {t.results.scopeLeversTitle}
             </summary>
             <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-              {SCOPE_LEVERS.map((lever) => <li key={lever}>{lever}</li>)}
+              {scopeLevers(lang).map((lever) => <li key={lever}>{lever}</li>)}
             </ul>
           </details>
         </div>

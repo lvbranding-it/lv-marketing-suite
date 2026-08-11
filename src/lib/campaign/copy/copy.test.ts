@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculate, balanceNotes } from "../engine";
+import { calculate, balanceNotes, componentAssessments } from "../engine";
+import { buildLeadBody, planSummaryLines } from "../lead";
 import { EMPTY_READINESS, emptyAnswers } from "../persist";
 import {
   CATEGORY_KEYS, CHANNELS, DESTINATIONS, FEASIBILITY_BANDS, READINESS_BANDS,
@@ -199,5 +200,56 @@ describe("locale formatting", () => {
     const d = new Date(2026, 7, 11);
     expect(formatLongDate(d, "en")).toBe("August 11, 2026");
     expect(formatLongDate(d, "es")).toMatch(/11 de agosto de 2026/);
+  });
+});
+
+// ── The lead brief the visitor is shown and we receive ─────────────────────────
+
+describe("plan brief follows the visitor's language", () => {
+  const contact = { name: "Maria Lopez", email: "maria@example.com", phone: "", hp: "" };
+
+  it("labels every line differently from English", () => {
+    const answers = underfunded();
+    const result = calculate(answers, "es");
+    const plan = result.scenarios[result.recommendedScenario];
+    const es = planSummaryLines(answers, result, plan, "es");
+    const en = planSummaryLines(answers, result, plan, "en");
+
+    expect(es.length).toBe(en.length);
+    for (let i = 0; i < es.length; i++) {
+      expect(es[i].label, `line ${i}`).not.toBe(en[i].label);
+    }
+  });
+
+  it("sends lang so the endpoint picks the Spanish auto-reply", () => {
+    const answers = underfunded();
+    const result = calculate(answers, "es");
+    const plan = result.scenarios[result.recommendedScenario];
+    expect(buildLeadBody(answers, result, plan, "quote", contact, "es").lang).toBe("es");
+    expect(buildLeadBody(answers, result, plan, "quote", contact).lang).toBe("en");
+  });
+
+  it("joins ranges with the Spanish word in a Spanish brief", () => {
+    const answers = underfunded();
+    const result = calculate(answers, "es");
+    const plan = result.scenarios[result.recommendedScenario];
+    const blob = planSummaryLines(answers, result, plan, "es").map((l) => l.value).join(" ");
+    expect(blob).not.toMatch(/\d\s+to\s+\$/);
+    expect(blob).toMatch(/\d\s+a\s+\$/);
+  });
+});
+
+// ── Component reasons ──────────────────────────────────────────────────────────
+
+describe("component reasons", () => {
+  it("are Spanish for every component that carries one", () => {
+    const answers = underfunded();
+    const es = componentAssessments(answers, "es").filter((a) => a.reason);
+    const en = componentAssessments(answers, "en").filter((a) => a.reason);
+    expect(es.length).toBeGreaterThan(3);
+    expect(es.length).toBe(en.length);
+    for (let i = 0; i < es.length; i++) {
+      expect(es[i].reason, es[i].key).not.toBe(en[i].reason);
+    }
   });
 });

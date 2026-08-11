@@ -33,6 +33,29 @@ export interface BalanceCopy {
   durationVsScale: string;
 }
 
+/** Why a component matters for THIS campaign. The engine decides; this words it. */
+export interface ReasonCopy {
+  channelStrategyMulti:  (channels: number) => string;
+  channelStrategySingle: string;
+  visualIdentityVisual:  string;
+  visualIdentityText:    string;
+  videoRequired:         (channels: string) => string;
+  videoFavoured:         (channels: string) => string;
+  videoOptional:         string;
+  videoNotRequired:      string;
+  photographyImagery:    (channels: string) => string;
+  graphicsImagery:       (channels: string) => string;
+  graphicsTextBased:     string;
+  adCopyAlways:          string;
+  trackingAction:        string;
+  trackingAwareness:     string;
+  pixelsAction:          string;
+  nativeForms:           (channels: string) => string;
+  destinationChosen:     (destination: string) => string;
+  /** Joins channel names: "A, B, and C" / "A, B y C". */
+  joinChannels:          (names: string[]) => string;
+}
+
 export interface Narratives {
   feasibility:           (a: CalculatorAnswers, fit: FeasibilityResult) => FeasibilityCopy;
   paths:                 (a: CalculatorAnswers, fit: FeasibilityResult) => PathCopy[];
@@ -41,6 +64,7 @@ export interface Narratives {
   planLevers:            (a: CalculatorAnswers, r: CalculationResult) => string;
   readiness:             (r: ReadinessResult) => string;
   balance:               BalanceCopy;
+  reasons:               ReasonCopy;
   /** Header lines for the clipboard summary. */
   summary: {
     title:        string;
