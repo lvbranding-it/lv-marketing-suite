@@ -510,12 +510,28 @@ describe("balanceNotes", () => {
 // ── Plain-language explanations ─────────────────────────────────────────────────
 
 describe("scenarioRationale / recommendationSummary", () => {
-  it("explains budget-first totals in terms of the stated budget", () => {
+  // The rationale is printed directly above the allocation table, so it has to
+  // describe the total that table sums to. Quoting a share of the stated budget
+  // instead ("80% of $25,000") contradicted an $8,700 plan on the same page.
+  it("states each scenario's actual total, not a share of the stated budget", () => {
     const a = budgetAnswers({ budgetTotal: 25_000 });
     const result = calculate(a);
-    expect(scenarioRationale(a, result.scenarios.growth)).toContain("$25,000");
-    expect(scenarioRationale(a, result.scenarios.essential)).toContain("80%");
-    expect(scenarioRationale(a, result.scenarios.expansion)).toContain("25%");
+    for (const key of ["essential", "growth", "expansion"] as const) {
+      const plan = result.scenarios[key];
+      expect(scenarioRationale(a, plan)).toContain(formatMoney(plan.total));
+    }
+  });
+
+  it("names the gap when a scenario costs more than the stated budget", () => {
+    const a = budgetAnswers({ budgetTotal: 25_000 });
+    const result = calculate(a);
+    const over = Object.values(result.scenarios).find((p) => p.total - 25_000 > 500);
+    if (over) {
+      const text = scenarioRationale(a, over);
+      expect(text).toContain(formatMoney(over.total - 25_000));
+      // Never let a scope that costs more read as an invitation to overspend.
+      expect(text).toMatch(/what the scope costs/);
+    }
   });
 
   it("explains awareness totals with reach, frequency, and CPM", () => {
@@ -624,7 +640,7 @@ describe("contradictions and explanation copy", () => {
     const text = planLevers(a, calculate(a));
     expect(text).toContain("Reducing the reach");
     expect(text).toContain("narrowing the channel mix");
-    expect(text).toMatch(/would change the recommendation\.$/);
+    expect(text).toMatch(/would change it, and any of those is a reasonable choice to make\.$/);
     // Drivers are simultaneous, so they read as a conjunction, not alternatives.
     expect(text).toContain("components still need to be created, and the number of channels");
   });

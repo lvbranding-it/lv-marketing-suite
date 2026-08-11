@@ -1,10 +1,10 @@
 /**
- * submit-av-lead — public endpoint (no JWT required)
+ * submit-av-lead: public endpoint (no JWT required)
  * Shared lead-capture backend for the LV Branding service landing forms (EN + ES):
  *   av-landing · web-solutions · ux-ui-design · creative-content ·
  *   photo-video · brand-strategy · digital-marketing
  *
- *   1. Inserts the lead into public.av_leads (service role — bypasses RLS)
+ *   1. Inserts the lead into public.av_leads (service role, bypasses RLS)
  *   2. Syncs the lead into the CRM (contacts pipeline) with a per-form tag
  *      (+ "Español" tag when the form language is Spanish)
  *   3. Emails the LV Branding team a notification (English) + the prospect a
@@ -38,6 +38,8 @@ interface FormConfig {
   replyContext:   string;
   replyContextEs: string;
   fields: { type: string; timeframe: string; date: string; venue: string; attendees: string };
+  /** Overrides the "Services" row label; the campaign calculator sends channels. */
+  servicesLabel?: string;
 }
 
 const FORM_CONFIGS: Record<string, FormConfig> = {
@@ -76,6 +78,15 @@ const FORM_CONFIGS: Record<string, FormConfig> = {
     replyContext: "digital marketing request", replyContextEs: "solicitud de marketing digital",
     fields: { type: "Goal", timeframe: "Timeline", date: "Start date", venue: "Website", attendees: "Company size" },
   },
+  // Sent from the public Campaign Investment Calculator. These leads arrive with a
+  // full plan attached, so they are pre-qualified: the brief in `plan_summary`
+  // carries the status, the money, the gap, and what is missing.
+  "campaign-calculator": {
+    label: "Campaign Calculator", labelEs: "Calculadora de Campaña", emoji: "🧮", tag: "Campaign Calculator Lead",
+    replyContext: "campaign investment plan", replyContextEs: "plan de inversión de campaña",
+    fields: { type: "Looking for", timeframe: "Campaign length", date: "Start date", venue: "Campaign destination", attendees: "Audience size" },
+    servicesLabel: "Channels",
+  },
 };
 
 const cors = {
@@ -106,7 +117,18 @@ interface LeadPayload {
   contact_phone?:   string | null;
   company?:         string | null;
   message?:         string | null;
+  /** Optional pre-computed brief (campaign calculator). Rendered verbatim. */
+  plan_summary?:    { label: string; value: string }[];
   hp?:              string;
+}
+
+/** Guards against a client sending an oversized or malformed brief. */
+function planLines(l: LeadPayload): { label: string; value: string }[] {
+  if (!Array.isArray(l.plan_summary)) return [];
+  return l.plan_summary
+    .filter((p) => p && typeof p.label === "string" && typeof p.value === "string")
+    .slice(0, 20)
+    .map((p) => ({ label: p.label.slice(0, 60), value: p.value.slice(0, 400) }));
 }
 
 function row(label: string, value?: string | null): string {
@@ -117,9 +139,16 @@ function row(label: string, value?: string | null): string {
   </tr>`;
 }
 
-// Team notification — always English
+// Team notification, always English
 function teamEmail(l: LeadPayload, cfg: FormConfig, id: string, isEs: boolean): string {
-  const services = (l.services ?? []).map(esc).join(" · ") || "—";
+  const services = (l.services ?? []).map(esc).join(" · ") || "-";
+  const plan = planLines(l);
+  const planBlock = plan.length === 0 ? "" : `
+        <div style="height:1px;background:#eee;margin:18px 0;"></div>
+        <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:${BRAND};text-transform:uppercase;letter-spacing:0.04em;">The plan they built</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+          ${plan.map((p) => row(esc(p.label), esc(p.value))).join("")}
+        </table>`;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px 0;">
@@ -128,11 +157,11 @@ function teamEmail(l: LeadPayload, cfg: FormConfig, id: string, isEs: boolean): 
       <tr><td style="background:#fff;border-radius:14px;padding:28px 32px;border:1px solid #e4e4e7;">
         <div style="background:#FFF1F2;border-left:4px solid ${BRAND};border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:24px;">
           <p style="margin:0;font-size:15px;font-weight:700;color:${BRAND};">${cfg.emoji} New ${cfg.label} Lead${isEs ? " 🇪🇸" : ""}</p>
-          <p style="margin:4px 0 0;font-size:13px;color:#9B1C2A;"><strong>${esc(l.contact_name)}</strong>${l.company ? ` · ${esc(l.company)}` : ""} wants to talk about a project.${isEs ? " (Spanish form — prefers Spanish)" : ""}</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#9B1C2A;"><strong>${esc(l.contact_name)}</strong>${l.company ? ` · ${esc(l.company)}` : ""} wants to talk about a project.${isEs ? " (Spanish form, prefers Spanish)" : ""}</p>
         </div>
         <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
           ${row(cfg.fields.type, esc(l.event_type))}
-          ${row("Services", services)}
+          ${row(cfg.servicesLabel ?? "Services", services)}
           ${row("Industry", esc(l.industry))}
           ${row(cfg.fields.timeframe, esc(l.event_timeframe))}
           ${row(cfg.fields.date, esc(l.event_date))}
@@ -148,6 +177,7 @@ function teamEmail(l: LeadPayload, cfg: FormConfig, id: string, isEs: boolean): 
           ${row("Company", esc(l.company))}
           ${row("Message", l.message ? esc(l.message).replace(/\n/g, "<br>") : null)}
         </table>
+        ${planBlock}
       </td></tr>
       <tr><td align="center" style="padding:20px 0 32px;font-size:11px;color:#9CA3AF;line-height:1.8;">LV Branding · ${esc(cfg.label)} lead · ${esc(id)}</td></tr>
     </table>
@@ -155,25 +185,37 @@ function teamEmail(l: LeadPayload, cfg: FormConfig, id: string, isEs: boolean): 
 </body></html>`;
 }
 
-// Prospect auto-reply — in the visitor's language
+// Prospect auto-reply, in the visitor's language
 function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
   const first = esc(l.contact_name.split(" ")[0] || l.contact_name);
   const homeUrl = isEs ? "https://es.lvbranding.com" : "https://www.lvbranding.com";
   const t = isEs
     ? {
-        h1:   `¡Gracias, ${first} — lo recibimos!`,
+        h1:   `¡Gracias, ${first}, lo recibimos!`,
         p1:   `Tu ${esc(cfg.replyContextEs)} llegó a nuestro equipo. Revisaremos los detalles y te contactaremos en un día hábil para agendar una llamada.`,
         p2:   `Mientras tanto, si algo es urgente, responde a este correo y nos llega directo.`,
+        planH: "Tu plan, para que lo tengas a la mano:",
         cta:  "Explora LV Branding →",
         foot: `LV Branding · ${esc(cfg.labelEs)} · Houston, TX`,
       }
     : {
-        h1:   `Thanks, ${first} — we've got it.`,
+        h1:   `Thanks, ${first}, we've got it.`,
         p1:   `Your ${esc(cfg.replyContext)} just landed with our team. We'll review the details and reach out within one business day to book a discovery call.`,
         p2:   `In the meantime, if anything's time-sensitive, just reply to this email and it comes straight to us.`,
+        planH: "Here's the plan you built, so you have it on hand:",
         cta:  "Explore LV Branding →",
         foot: `LV Branding · ${esc(cfg.label)} · Houston, TX`,
       };
+
+  // The prospect keeps their plan whatever happens next; sending it back is the
+  // point of the "just send me the plan" option, and it makes the copy true.
+  const plan = planLines(l);
+  const planBlock = plan.length === 0 ? "" : `
+        <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111827;">${t.planH}</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#FAFAFA;border:1px solid #e4e4e7;border-radius:10px;padding:4px 14px;margin:0 0 20px;">
+          ${plan.map((p) => row(esc(p.label), esc(p.value))).join("")}
+        </table>`;
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px 0;">
@@ -183,6 +225,7 @@ function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
         <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">${t.h1}</h1>
         <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.65;">${t.p1}</p>
         <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65;">${t.p2}</p>
+        ${planBlock}
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;"><tr>
           <td style="border-radius:10px;background:${BRAND};">
             <a href="${homeUrl}" target="_blank" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px;">${t.cta}</a>
@@ -203,10 +246,11 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
     const first = parts[0] || l.contact_name.trim();
     const last  = parts.slice(1).join(" ") || null;
 
+    const plan = planLines(l);
     const note = [
       `${cfg.label} lead (website form${isEs ? " · Spanish" : ""})`,
       l.event_type       ? `${cfg.fields.type}: ${l.event_type}` : null,
-      l.services?.length ? `Services: ${l.services.join(", ")}` : null,
+      l.services?.length ? `${cfg.servicesLabel ?? "Services"}: ${l.services.join(", ")}` : null,
       l.industry         ? `Industry: ${l.industry}` : null,
       l.event_timeframe  ? `${cfg.fields.timeframe}: ${l.event_timeframe}` : null,
       l.event_date       ? `${cfg.fields.date}: ${l.event_date}` : null,
@@ -214,6 +258,7 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
       l.attendees        ? `${cfg.fields.attendees}: ${l.attendees}` : null,
       l.budget           ? `Budget: ${l.budget}` : null,
       l.message          ? `Notes: ${l.message}` : null,
+      plan.length        ? `\nTHE PLAN THEY BUILT\n${plan.map((p) => `${p.label}: ${p.value}`).join("\n")}` : null,
     ].filter(Boolean).join("\n");
 
     const baseTags = isEs ? [cfg.tag, "Website", "Español"] : [cfg.tag, "Website"];
@@ -256,7 +301,7 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
 }
 
 async function sendMail(to: { email: string; name?: string }[], subject: string, html: string, replyTo?: string) {
-  if (!SENDGRID_API_KEY) { console.error("SENDGRID_API_KEY not set — skipping email"); return; }
+  if (!SENDGRID_API_KEY) { console.error("SENDGRID_API_KEY not set, skipping email"); return; }
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method:  "POST",
     headers: { Authorization: `Bearer ${SENDGRID_API_KEY}`, "Content-Type": "application/json" },
@@ -320,8 +365,8 @@ Deno.serve(async (req: Request) => {
   await syncToCrm(admin, l, cfg, inserted.id, isEs);
 
   const replySubject = isEs
-    ? `Recibimos tu ${cfg.replyContextEs} — LV Branding`
-    : `We received your ${cfg.replyContext} — LV Branding`;
+    ? `Recibimos tu ${cfg.replyContextEs} · LV Branding`
+    : `We received your ${cfg.replyContext} · LV Branding`;
 
   try {
     await Promise.allSettled([

@@ -31,7 +31,7 @@ export type CategoryKey =
 
 export type ScenarioKey = "essential" | "growth" | "expansion";
 
-// ── Campaign readiness ──────────────────────────────────────────────────────────
+// ── Your starting point (readiness) ─────────────────────────────────────────────
 // Readiness is not a checklist of things to own. Which components matter depends
 // on the objective, the channels, and where the campaign sends people, and
 // "we have it" is not the same as "it is ready to use".

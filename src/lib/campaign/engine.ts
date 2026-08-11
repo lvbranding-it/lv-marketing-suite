@@ -826,11 +826,22 @@ export function scenarioRationale(answers: CalculatorAnswers, plan: ScenarioPlan
   const fin = answers.financial;
 
   if (fin.mode === "budget") {
+    // Scenarios are priced from their scope, so the total does not always equal
+    // the stated budget. Describing it by budgetFactor alone contradicted the
+    // allocation table whenever the two diverged, so the sentence is built from
+    // plan.total and states the difference plainly.
     const budget = num(fin.budgetTotal) ?? 0;
-    const pct = Math.round(sMeta.budgetFactor * 100);
-    if (pct === 100) return `${sMeta.label} allocates your full stated budget of ${formatMoney(budget)}, rounded for planning.`;
-    if (pct < 100) return `${sMeta.label} plans around ${pct}% of your stated ${formatMoney(budget)} budget, holding the rest in reserve while the campaign proves itself.`;
-    return `${sMeta.label} models stretching about ${pct - 100}% beyond your stated budget, for when the campaign earns a bigger footprint.`;
+    const total = plan.total;
+    const delta = total - budget;
+    const withinRounding = Math.abs(delta) <= Math.max(50, budget * 0.02);
+
+    if (budget <= 0 || withinRounding) {
+      return `${sMeta.label} allocates ${formatMoney(total)}, rounded for planning.`;
+    }
+    if (delta > 0) {
+      return `${sMeta.label} prices this scope at ${formatMoney(total)}, about ${formatMoney(delta)} above the ${formatMoney(budget)} you stated. That is what the scope costs rather than a suggestion to spend more; the scenarios below show what a smaller one looks like.`;
+    }
+    return `${sMeta.label} prices this scope at ${formatMoney(total)}, leaving about ${formatMoney(-delta)} of your stated ${formatMoney(budget)} budget uncommitted while the campaign proves itself.`;
   }
 
   const obj = answers.objective ? objectiveMeta(answers.objective) : null;
@@ -858,10 +869,10 @@ export function recommendationSummary(answers: CalculatorAnswers, result: Calcul
   const essentialGaps = ready.gaps.essential.length;
 
   const foundation =
-    essentialGaps >= 5 ? "still needs most of the components it depends on"
-    : essentialGaps >= 2 ? "still needs several essential components developed"
-    : essentialGaps === 1 ? "is close to ready, with one essential component left"
-    : "has the components it needs in place";
+    essentialGaps >= 5 ? "still needs most of the pieces it depends on"
+    : essentialGaps >= 2 ? "still needs a few key pieces built"
+    : essentialGaps === 1 ? "is nearly there, with one piece left to sort out"
+    : "already has the pieces it needs";
 
   const scopeBits: string[] = [];
   scopeBits.push(`targets ${channels} advertising channel${channels === 1 ? "" : "s"}`);
@@ -873,8 +884,8 @@ export function recommendationSummary(answers: CalculatorAnswers, result: Calcul
   scopeBits.push(`runs over ${days >= 60 ? `${Math.round(days / 30)} months` : `${days} days`}`);
 
   const consequence = ready.score < 65
-    ? "For that reason, a meaningful portion of the investment is reserved for assets, digital infrastructure, testing, and campaign management before media is activated."
-    : "With the foundation largely in place, more of the investment can flow to paid media while keeping testing and active management funded.";
+    ? "So we have set aside a real share of the investment for assets, tracking, testing, and running the campaign, before any of it goes to ads. That order matters more than most people expect."
+    : "Because the groundwork is largely done, more of the investment can go toward reaching people, while still funding testing and someone to actively run it.";
 
   return `Your campaign ${foundation}, ${scopeBits.join(", ")}. ${consequence}`;
 }
@@ -901,9 +912,9 @@ export function planLevers(answers: CalculatorAnswers, result: CalculationResult
 
   // Drivers are all true at once ("and"); levers are alternatives ("or").
   const driverText = drivers.length > 0
-    ? `This scenario reflects ${joinList(drivers, "and")}.`
-    : "This scenario reflects the scope you described.";
-  return `${driverText} ${capitalize(joinList(levers, "or"))} would change the recommendation.`;
+    ? `The number comes from ${joinList(drivers, "and")}.`
+    : "The number comes from the scope you described.";
+  return `${driverText} ${capitalize(joinList(levers, "or"))} would change it, and any of those is a reasonable choice to make.`;
 }
 
 function joinList(items: string[], conjunction: "and" | "or" = "and"): string {
@@ -998,32 +1009,32 @@ export function feasibilityNarrative(answers: CalculatorAnswers, fit: Feasibilit
 
   if (!fit.applies) {
     return {
-      headline: "Scope and investment are sized from your goal.",
-      detail: `In goal-first mode the investment follows from what you want to achieve. The complete selected scope estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is protected campaign investment.`,
+      headline: "Here is what your goal would take.",
+      detail: `You told us the outcome you want, so we worked backwards from it. The full scope you selected estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is the protected campaign investment that makes the media worth buying.`,
     };
   }
 
   if (fit.status === "scope-supported") {
     return {
-      headline: "Selected scope supported.",
-      detail: `The available investment supports the estimated complete-scope requirements of ${formatRange(full.total)} across ${channels} channel${channels === 1 ? "" : "s"} over ${duration}, subject to professional review.`,
+      headline: "Good news: your investment covers the scope you selected.",
+      detail: `It supports the estimated ${formatRange(full.total)} for ${channels} channel${channels === 1 ? "" : "s"} over ${duration}. We would still walk through the details with you before anything goes live, because a plan on paper and a plan in market are not quite the same thing.`,
     };
   }
   if (fit.status === "focused-pilot") {
     return {
-      headline: "Focused pilot.",
-      detail: `A reduced one-channel campaign may be feasible. The lean professional minimum is ${formatRange(lean.total)}, against a complete selected scope of ${formatRange(full.total)}. The plan below lists what is included, reused, and deferred.`,
+      headline: "You can start with a focused, one-channel campaign.",
+      detail: `A lean professional campaign runs around ${formatRange(lean.total)}, while the full scope you selected is closer to ${formatRange(full.total)}. Starting focused is a perfectly good way in, and the plan below sets out exactly what it includes, what it reuses, and what waits for later.`,
     };
   }
   if (fit.status === "campaign-preparation") {
     return {
-      headline: "Campaign preparation.",
-      detail: `The minimum campaign foundation may be supported, but the remaining investment does not meet the minimum practical media requirement of ${formatRange(lean.media)} for a single channel over ${duration}.`,
+      headline: "You can build the foundation now and activate media next.",
+      detail: `Your investment can cover the groundwork, but what is left does not yet reach the ${formatRange(lean.media)} a single channel needs over ${duration} to run properly. Splitting the work into two phases is a sensible way to do this well rather than thinly.`,
     };
   }
   return {
-    headline: "Preparation phase only.",
-    detail: `The available investment of ${formatMoney(fit.available)} is below the lean professional minimum of ${formatRange(lean.total)} for responsible campaign activation. It can fund a defined strategy or preparation sprint. Media activation and complete campaign delivery are excluded from this phase. The complete selected scope estimates at ${formatRange(full.total)}.`,
+    headline: "Let's start with preparation.",
+    detail: `Your ${formatMoney(fit.available)} sits below the ${formatRange(lean.total)} a campaign needs to run responsibly, and knowing that now is genuinely useful. It can fund a focused strategy and setup sprint, which is a strong first step. To be clear about what that means: this phase does not include running ads or delivering a complete campaign. For reference, the full scope you selected estimates at ${formatRange(full.total)}.`,
   };
 }
 
@@ -1043,18 +1054,18 @@ export function feasibilityPaths(answers: CalculatorAnswers, fit: FeasibilityRes
   return [
     {
       id: "preparation",
-      title: "Strategy and setup sprint",
-      text: `Use the available ${formatMoney(fit.available)} to define the campaign objective and audience, recommend one channel, set the core message direction, and build a basic activation plan. Media activation is not included in this phase.`,
+      title: "Start with a strategy sprint",
+      text: `We would use the ${formatMoney(fit.available)} to define your objective and audience, recommend the one channel worth starting on, set the core message direction, and build a basic activation plan. Running ads is not part of this phase.`,
     },
     {
       id: "pilot",
-      title: "Reduce to a one-channel pilot",
-      text: `A lean professional campaign on one channel${cheapest ? ` (${channelLabel(cheapest.channel)}, about ${formatMoney(cheapest.amount)} of media)` : ""} using existing brand identity, website, and basic tracking estimates at ${formatRange(lean.total)}.`,
+      title: "Focus on one channel",
+      text: `If you can reuse your existing brand identity, website, and tracking, a lean campaign on a single channel${cheapest ? ` (${channelLabel(cheapest.channel)}, about ${formatMoney(cheapest.amount)} of media)` : ""} comes in around ${formatRange(lean.total)}. Fewer things done properly usually beats more things done thinly.`,
     },
     {
       id: "increase",
-      title: "Fund the selected scope",
-      text: `Delivering the ${fit.selectedChannels}-channel scope originally selected estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is protected campaign investment.`,
+      title: "Build up to the full scope",
+      text: `The ${fit.selectedChannels}-channel campaign you first described estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is the work that makes the media worth buying. Worth keeping in view as a target, even if it is not this phase.`,
     },
   ];
 }
@@ -1078,7 +1089,7 @@ export function buildTextSummary(
     lines.push(`${categoryMeta(key).label}: ${formatMoney(amounts[key])} (${pcts[key]}%)`);
   }
   lines.push("");
-  lines.push(`Campaign readiness: ${readiness.score}/100`);
+  lines.push(`Your starting point: ${readiness.score}/100`);
   if (plan.breakEven) {
     lines.push(`Break-even: about ${plan.breakEven.breakEvenUnits.toLocaleString()} ${plan.breakEven.unitNoun}`);
   }

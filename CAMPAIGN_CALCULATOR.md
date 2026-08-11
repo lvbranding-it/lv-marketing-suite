@@ -19,7 +19,9 @@ src/components/campaign-calc/
   ResultsDashboard.tsx                  Scenario selector, donut + allocation
                                         controls, table alternative, actions
   ResultsInsights.tsx                   Readiness, budget balance, break-even,
-                                        detail cards, disclaimer, CTA, print report
+                                        detail cards, disclaimer
+  ReviewCta.tsx                         Status-aware inline consultation form
+  PrintReport.tsx                       The printable / PDF report
 src/lib/campaign/
   types.ts                              All shared types (percentages are decimals)
   config.ts                             EVERY business assumption lives here
@@ -27,6 +29,7 @@ src/lib/campaign/
   engine.ts                             Scenarios, feasibility, readiness, copy
   validate.ts                           Step validation (pure; shared with persist)
   persist.ts                            localStorage + schema migration (key :v2)
+  lead.ts                               Lead payload + CTA copy (pure)
   engine.test.ts                        Engine tests
   persist.test.ts                       Migration and restore-validation tests
 ```
@@ -253,29 +256,126 @@ Essential is recommended for budget-first plans under the configured cutoff.
 - Readiness clauses and band summaries: `config.ts → READINESS_ITEMS / READINESS_BANDS`
 - Balance notes: `engine.ts → balanceNotes` (text lives with the trigger logic)
 - Disclaimer: `ResultsInsights.tsx → Disclaimer`
+- CTA headings, buttons, and the intent options: `lead.ts → CTA_COPY / LEAD_INTENTS`
+- Report title, subtitle, slogan, and footer: `PrintReport.tsx` (the exported constants)
+
+## The printed report (PDF)
+
+"Print" on the results screen produces the full plan, not a summary of it: the
+plan at a glance, feasibility with both funding gaps, the phase scope, the
+allocation table, per-category detail, every readiness component grouped and
+rated, break-even, the balance notes, all three scenarios, the assumptions used
+(flagging any that were planning defaults rather than the visitor's own), and
+the disclaimer. A printed plan is what gets forwarded to whoever was not in the
+room, so a gap in it reads as a gap in the thinking.
+
+**Branding.** Logo, title, `A free planning tool by LV Branding`, the date, and
+`Strategy first. Always.` head page one. `www.lvbranding.com` sits in a footer
+that repeats on every page.
+
+**Filename.** Browsers take the suggested PDF name from `document.title`, so
+`printReport()` swaps it for `reportFilename()`
+(`Campaign Investment Calculator - A free planning tool by LV Branding -
+YYYY-MM-DD`) and restores it on `afterprint`, with a timeout backstop. The
+stamp avoids characters that are not portable in filenames.
+
+**Pagination.** The shared `.print-only` rule pins content with
+`position: absolute; inset: 0`, which is fine for a one-page output but clips
+anything longer. Since this report runs to several pages, `printReport()` walks
+from the report up to `<body>` adding `.cc-print-hidden` to every sibling, and
+`body.cc-printing .cc-report` returns to normal flow so the browser paginates
+it. `visibility: hidden` alone does not work here: hidden elements still occupy
+layout and would push the report past page one.
+
+**Styling.** `.cc-report*` in `index.css`, deliberately its own namespace
+because `.printable-output*` belongs to the skills print output and is used by
+History and OutputDetail. The layout rules sit OUTSIDE `@media print` so the
+report can be rendered on screen for review by passing `preview` to the
+component (or adding `.cc-report-preview` in devtools), which is how it should
+be checked rather than by printing repeatedly.
+
+**One invariant.** The campaign reserve is held outside the six categories, so
+every view that renders category amounts must divide
+`plan.total - plan.reserveAmount`. Dividing `plan.total` spreads the reserve
+across all six and makes the same figure disagree with itself on one page. A
+test in `lead.test.ts` enforces this.
+
+## The consultation CTA and the CRM
+
+The CTA sits below a finished plan and submits in place, so the prospect never
+leaves the page and never re-answers a question the calculator already asked.
+
+**Status-aware.** The ask is keyed on `feasibility.status`, because the honest
+next step differs. Someone told their budget cannot run a campaign is asked about
+a first phase; someone whose scope is funded is asked to start. All four statuses
+must have an entry in `CTA_COPY` (a test enforces this).
+
+**Fields.** Name, email, optional phone, and one intent question. Everything else
+comes from the plan. The `<details>` block shows the visitor exactly which lines
+are transmitted, in their own numbers, before they submit.
+
+**Endpoint.** It reuses the existing public `submit-av-lead` edge function rather
+than adding a new one, under the form key `campaign-calculator`. That function
+already inserts to `av_leads`, upserts the CRM contact by email (appending to an
+existing record instead of duplicating it), notifies the team, and sends the
+prospect a branded auto-reply. CRM sync and email are best-effort there, so a
+failure in either never loses the lead.
+
+**Column mapping.** `av_leads` columns are generic (they were built for event
+forms), so campaign context is mapped onto them and `FORM_CONFIGS` relabels them
+per form:
+
+| Column | Carries | Shown as |
+|---|---|---|
+| `event_type` | the chosen intent | Looking for |
+| `services` | selected channels | Channels |
+| `event_timeframe` | campaign length | Campaign length |
+| `venue` | destination | Campaign destination |
+| `attendees` | audience band | Audience size |
+| `budget` | available budget, or the goal in goal-first mode | Budget |
+| `message` | objective, market, and timing | Message |
+
+**The brief.** `plan_summary` is an ordered `{label, value}[]` built by
+`planSummaryLines()`: status and feasibility score, the money, both funding gaps,
+what the plan shown actually funds, the starting-point score, and which components
+are not ready. It renders in the team email, in the prospect's auto-reply, and as
+a `THE PLAN THEY BUILT` block in `crm_notes`, so a rep can call without opening
+the calculator. The edge function clamps it to 20 lines and truncates each value,
+since it arrives from a public client.
+
+Two honesty rules hold here. Values are formatted human labels, never internal
+keys, and the brief must never imply media activation on a preparation-phase
+plan. Both are covered by tests in `lead.test.ts`.
+
+Leads are tagged `Campaign Calculator Lead` so this source can be segmented and
+measured separately from the service landing forms.
 
 ## Analytics
 
 The repository has no analytics abstraction, so no events are emitted (the spec
 called for events only "if analytics already exists"). If one is added later, the
 natural hook points are: intro CTA click, `goNext` per step, phase change to
-`results`, `onSelect`, `handleShareChange`, `window.print`, and the review CTA.
+`results`, `onSelect`, `handleShareChange`, `window.print`, and CTA submit.
 Never send the entered financial values.
 
 ## Persistence & privacy
 
 Answers, current step, and phase persist to `localStorage`
-(`lv-campaign-calculator:v1`) so a refresh doesn't lose progress. Chart
+(`lv-campaign-calculator:v2`) so a refresh doesn't lose progress. Chart
 customisations (adjusted shares, locks, selected scenario) are deliberately
-session-only. The calculator collects no names, emails, or any personally
-identifiable information; the free result is never gated. "Start over" clears
-storage behind a confirmation dialog. A future "save to Supabase" feature can
-serialise the same `CalculatorAnswers` shape.
+session-only. "Start over" clears storage behind a confirmation dialog.
+
+**The result is never gated.** The complete plan renders, prints, and copies
+without asking for anything. The only path that collects personal information is
+the CTA form at the bottom of the results, and only when the visitor submits it.
+Nothing entered in the CTA is written to `localStorage`, so a name or email never
+survives the session. The intro and the disclaimer both state this; if the
+submission path changes, that copy has to change with it.
 
 ## Running tests
 
 ```
-npm test               # vitest run, 36 engine tests
+npm test               # vitest run (engine, persistence, and lead payload)
 npx tsc --noEmit       # strict type check (also runs inside npm run build)
 npm run build          # tsc && vite build
 ```

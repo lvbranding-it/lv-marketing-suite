@@ -246,3 +246,286 @@
     white-space: pre-wrap;
   }
 }
+
+/* ── Campaign Investment Calculator report ────────────────────────────────────
+   Its own namespace, because `.printable-output` is shared with the skills
+   print output and this report needs a different structure.
+
+   The layout rules deliberately live OUTSIDE `@media print` so the report can
+   be rendered on screen for review by adding `.cc-report-preview` to the
+   container; `@media print` then only handles page setup, the visibility swap,
+   and pagination. */
+
+.cc-report {
+  font-family: "Fira Sans", system-ui, sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  color: #111827;
+  background: #ffffff;
+}
+
+.cc-report-preview {
+  display: block !important;
+  max-width: 7.3in;
+  margin: 0 auto;
+  padding: 0.4in;
+}
+
+/* Masthead: logo, title, slogan. Page one only. */
+.cc-report__masthead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 3px solid #cb2039;
+}
+
+.cc-report__logo {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+.cc-report__masthead-text { flex: 1 1 auto; min-width: 0; }
+
+.cc-report__title {
+  margin: 0;
+  font-size: 19pt;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #111827;
+}
+
+.cc-report__subtitle {
+  margin: 3px 0 0;
+  font-size: 9.5pt;
+  color: #4b5563;
+}
+
+.cc-report__stamp {
+  flex: none;
+  text-align: right;
+  font-size: 8pt;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.cc-report__stamp strong { display: block; color: #111827; font-size: 8.5pt; }
+
+.cc-report__slogan {
+  margin: 9px 0 0;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #cb2039;
+}
+
+/* Sections */
+.cc-report__section { margin-top: 20px; }
+
+.cc-report__section > h2 {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #d1d5db;
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: #111827;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.cc-report__section > h3,
+.cc-report__card h3 {
+  margin: 12px 0 4px;
+  font-size: 9.5pt;
+  font-weight: 700;
+  color: #111827;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.cc-report p { margin: 0 0 7px; }
+.cc-report ul { margin: 0 0 7px; padding-left: 16px; }
+.cc-report li { margin: 0 0 2px; }
+
+.cc-report__lead {
+  font-size: 10.5pt;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.cc-report__muted { color: #4b5563; }
+
+.cc-report__note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #cb2039;
+  background: #fdf2f4;
+  font-size: 8.5pt;
+  line-height: 1.45;
+}
+
+.cc-report__eyebrow {
+  margin: 10px 0 3px;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+/* Key/value figure grid */
+.cc-report__figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 22px;
+  margin: 0 0 8px;
+}
+
+.cc-report__figure {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3.5px 0;
+  border-bottom: 1px solid #f3f4f6;
+  break-inside: avoid;
+}
+
+/* For rows whose label or value is too long to sit in half the width. */
+.cc-report__figure--wide { grid-column: 1 / -1; }
+
+.cc-report__figure dt { color: #4b5563; }
+.cc-report__figure dd { margin: 0; font-weight: 700; text-align: right; white-space: nowrap; }
+.cc-report__figure--flag dd { color: #cb2039; }
+
+/* Tables */
+.cc-report table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0 8px;
+  font-size: 9pt;
+}
+
+.cc-report th {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1.5px solid #111827;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: #4b5563;
+}
+
+.cc-report td {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.cc-report th:last-child,
+.cc-report td:last-child { padding-right: 0; }
+
+.cc-report .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cc-report tr { break-inside: avoid; page-break-inside: avoid; }
+.cc-report tfoot td { border-top: 1.5px solid #111827; border-bottom: none; font-weight: 700; padding-top: 6px; }
+
+/* Allocation cards */
+.cc-report__cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cc-report__card {
+  padding: 9px 11px;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #9ca3af;
+  border-radius: 3px;
+  font-size: 8.5pt;
+  line-height: 1.45;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cc-report__card h3 { margin: 0; font-size: 9.5pt; }
+
+.cc-report__card-amount {
+  margin: 1px 0 5px;
+  font-size: 12pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-report__card p { margin: 0 0 4px; color: #374151; }
+.cc-report__card p:last-child { margin-bottom: 0; }
+.cc-report__card b { color: #111827; }
+
+/* Status pill */
+.cc-report__pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #cb2039;
+  color: #ffffff;
+  font-size: 8pt;
+  font-weight: 700;
+}
+
+/* Footer: fixed so the browser repeats it on every printed page. */
+.cc-report__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 6px;
+  border-top: 1px solid #d1d5db;
+  font-size: 7.5pt;
+  color: #6b7280;
+}
+
+.cc-report__footer a,
+.cc-report__footer strong {
+  color: #cb2039;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media print {
+  /* The shared `.print-only` rule pins its content with `position: absolute;
+     inset: 0`, which fits a one-page output but clips anything longer. This
+     report runs to several pages, so while it is printing the app collapses
+     its siblings with `display: none` (see printReport() in
+     CampaignCalculator.tsx) and the report returns to normal flow, where the
+     browser paginates it. */
+  .cc-print-hidden { display: none !important; }
+
+  body.cc-printing .cc-report.print-only {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+  }
+
+  .cc-report {
+    /* Clears the fixed footer so text never prints underneath it. */
+    padding-bottom: 34px;
+  }
+
+  .cc-report__footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+  }
+
+  /* Keep brand colour and tinted panels when the user prints backgrounds. */
+  .cc-report__pill,
+  .cc-report__note {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

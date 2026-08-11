@@ -451,20 +451,20 @@ export const FEASIBILITY_BANDS: {
   status: FeasibilityStatus; label: string; short: string;
 }[] = [
   {
-    status: "scope-supported", label: "Selected scope supported",
-    short: "The available investment supports the estimated complete-scope requirements, subject to professional review.",
+    status: "scope-supported", label: "Your plan is funded",
+    short: "Your investment covers the scope you selected. We would still review the details together before anything goes live.",
   },
   {
-    status: "focused-pilot", label: "Focused pilot",
-    short: "A reduced one-channel campaign may be feasible. The plan lists what is included, excluded, reused, and deferred.",
+    status: "focused-pilot", label: "Start focused",
+    short: "A focused one-channel campaign looks workable. Below you will find exactly what that includes, what it reuses, and what waits for a later phase.",
   },
   {
-    status: "campaign-preparation", label: "Campaign preparation",
-    short: "The minimum campaign foundation may be supported, but the remaining investment does not meet the minimum practical media requirement.",
+    status: "campaign-preparation", label: "Foundation first",
+    short: "You can build the foundation now. There is not quite enough left to run ads properly yet, so we would activate media in a following phase.",
   },
   {
-    status: "preparation-only", label: "Preparation phase only",
-    short: "The available investment is below the lean professional minimum for responsible campaign activation. It can fund a defined strategy or preparation sprint, not a complete campaign.",
+    status: "preparation-only", label: "Start with preparation",
+    short: "This investment sits below what a campaign needs to run responsibly, and that is a useful thing to know now. It can fund a focused strategy and setup sprint, which is a solid first step rather than a complete campaign.",
   },
 ];
 
@@ -534,10 +534,10 @@ export const DESTINATION_RULES:
 };
 
 export const READINESS_BANDS: { min: number; band: ReadinessBand; label: string; summary: string }[] = [
-  { min: 85, band: "scale",      label: "Scale ready",        summary: "Your campaign foundation is in place. Most of your investment can go toward distribution and optimization." },
-  { min: 65, band: "ready",      label: "Campaign ready",     summary: "The essentials exist. A modest foundation allocation keeps things sharp while media carries the plan." },
-  { min: 40, band: "partial",    label: "Partially prepared", summary: "Some pieces are ready and some are not. Your plan reserves investment for the components that still need attention before scaling media." },
-  { min: 0,  band: "foundation", label: "Foundation required", summary: "The components this campaign depends on still need development. Funding the message first will make every media dollar work harder." },
+  { min: 85, band: "scale",      label: "Ready to scale",   summary: "You are in great shape. The groundwork is done, so most of your investment can go toward reaching more people and improving as you go." },
+  { min: 65, band: "ready",      label: "Ready to run",     summary: "You have the essentials. A little polish keeps things sharp, and your investment can focus on getting the campaign in front of people." },
+  { min: 40, band: "partial",    label: "Partly there",     summary: "Some pieces are ready and some are not, which is completely normal. Your plan sets aside investment for the pieces that still need attention before spending more on reach." },
+  { min: 0,  band: "foundation", label: "Just getting started", summary: "There is groundwork to do first, and that is a good place to be honest about. Building the message before buying reach makes every dollar that follows work harder." },
 ];
 
 // ── Objectives ──────────────────────────────────────────────────────────────────
@@ -619,22 +619,22 @@ export interface ScenarioMeta {
 export const SCENARIOS: ScenarioMeta[] = [
   {
     key: "essential", label: "Essential", tagline: "A focused start",
-    description: "A focused campaign with the minimum viable strategic and creative foundation: fewer channels, a lean creative set, and a smaller testing reserve.",
-    limitations: "Best for validating a campaign or working within a tight budget. Reach is deliberately limited, and there is less room to test alternatives if the first approach underperforms.",
+    description: "A focused campaign with just enough strategy and creative to do the job properly: fewer channels, a lean creative set, and a smaller testing reserve.",
+    limitations: "A good way to prove something works, or to make a tight budget count. Reach is deliberately limited, and there is less room to try a second approach if the first one underperforms.",
     budgetFactor: 0.8, goalFactor: 0.7, channelCap: 2, creativeVariations: 2,
     biases: { testing: -1.5, creative: -2, management: -1 },
   },
   {
     key: "growth", label: "Growth", tagline: "The balanced plan",
-    description: "A balanced investment with stronger creative coverage, meaningful testing, and room for ongoing optimization across a focused channel mix.",
-    limitations: "Designed for sustained campaigns. It assumes you can commit to the full duration and act on what testing reveals.",
+    description: "A balanced plan with stronger creative, real testing, and room to keep improving across a focused set of channels.",
+    limitations: "Built for campaigns that run for a while. It assumes you can commit to the full duration and act on what the testing tells you.",
     budgetFactor: 1.0, goalFactor: 1.0, channelCap: 4, creativeVariations: 4,
     biases: {},
   },
   {
     key: "expansion", label: "Expansion", tagline: "Broader reach",
-    description: "A broader campaign with more reach, additional creative variations, deeper testing, and greater scaling potential where the channel mix justifies it.",
-    limitations: "The larger footprint needs active management and a genuine appetite for iteration; scale amplifies whatever is working and whatever isn't.",
+    description: "A broader campaign with more reach, more creative variations, deeper testing, and room to scale where the channel mix earns it.",
+    limitations: "A bigger footprint needs someone actively running it and a genuine appetite for changing things mid-flight. Scale amplifies whatever is working, and whatever is not.",
     budgetFactor: 1.25, goalFactor: 1.35, channelCap: 8, creativeVariations: 7,
     biases: { testing: 1.5, creative: 1.5, management: 1 },
   },

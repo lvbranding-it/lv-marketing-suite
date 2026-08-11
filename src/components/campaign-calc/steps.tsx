@@ -31,7 +31,7 @@ import {
 export { validateStep };
 export type { StepErrors };
 
-export const STEP_LABELS = ["Profile", "Objective", "Scope", "Readiness", "Investment", "Review"];
+export const STEP_LABELS = ["Profile", "Objective", "Scope", "What you have", "Investment", "Review"];
 
 interface StepProps {
   answers:  CalculatorAnswers;
@@ -223,7 +223,7 @@ export function ScopeStep({ answers, onChange, errors }: StepProps) {
   );
 }
 
-// ── Step 4: Campaign readiness ──────────────────────────────────────────────────
+// ── Step 4: What you already have ───────────────────────────────────────────────
 
 const RELEVANCE_CHIP: Record<ComponentRelevance, string> = {
   essential:      "bg-accent text-accent-foreground",
@@ -672,7 +672,7 @@ export function ReviewStep({ answers, onJump }: ReviewStepProps) {
       value: `${duration} · ${answers.scope.channels.length} channel${answers.scope.channels.length === 1 ? "" : "s"} · ${answers.scope.timeSensitive ? "time-sensitive" : "always-on"}`,
     },
     {
-      step: 3, label: "Readiness",
+      step: 3, label: "What you have",
       value: `${DESTINATIONS.find((d) => d.key === answers.destination)?.label ?? "Destination not selected"} · ${readinessPhrase} · ${ready.essentialReady} of ${ready.essentialTotal} essential component${ready.essentialTotal === 1 ? "" : "s"} ready`,
     },
     { step: 4, label: "Financials", value: financialValue },

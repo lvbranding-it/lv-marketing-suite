@@ -236,7 +236,7 @@ export default function ResultsDashboard({
           then names the levers so a large total reads as a decision, not a price. */}
       <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          <span className="font-semibold text-foreground">Why this recommendation:</span>{" "}
+          <span className="font-semibold text-foreground">Why we suggest this:</span>{" "}
           {summary}
         </p>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{levers}</p>
@@ -257,23 +257,23 @@ export default function ResultsDashboard({
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(protectedAmount)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {fundsProtectedMinimum
-              ? "Creates and operates the campaign: strategy, creative, digital experience, management, and testing."
-              : `This is what the current phase funds. It is below the lean protected minimum of ${formatRange(plan.requirements.protectedTotal)}, so it is not presented as a protected campaign investment.`}
+              ? "This is the work that makes a campaign worth running: strategy, creative, the place people land, running it, and improving it."
+              : `This is what the current phase funds. It sits below the lean minimum of ${formatRange(plan.requirements.protectedTotal)}, so we are not going to call it a protected campaign investment.`}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Media distribution</p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(amounts.media)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            Paid to advertising platforms to distribute the campaign.
+            What you pay the platforms to put your campaign in front of people.
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign reserve</p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(plan.reserveAmount)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            Reserved for approved changes, unexpected production requirements, or opportunities
-            identified while the campaign is active.
+            Set aside for changes you approve, things that come up in production, or an opportunity
+            worth chasing while the campaign is live.
           </p>
         </div>
       </div>
@@ -367,7 +367,9 @@ export default function ResultsDashboard({
             const floorShare = protectedFloorShare(cat.key, plan.requirements, plan.total);
             const floorPct = Math.ceil(floorShare * 100);
             const floorAmount = plan.requirements.floors[cat.key].min;
-            const atFloor = cat.key !== "media" && pct <= floorPct;
+            // Only warn when a FUNDED category has been pulled down to its floor. A
+            // deferred category at zero is already explained by its label.
+            const atFloor = cat.key !== "media" && amounts[cat.key] > 0 && pct <= floorPct;
             const status = shareStatus(share, rec);
             const isLocked = locked.includes(cat.key);
             const isActive = active === cat.key;
@@ -434,9 +436,8 @@ export default function ResultsDashboard({
                 </p>
                 {atFloor && (
                   <p className="mt-1 pl-5 text-[10px] leading-relaxed text-primary">
-                    This category supports an essential campaign requirement. To reduce it
-                    responsibly, adjust the campaign scope rather than removing work the campaign
-                    depends on.
+                    This one covers work the campaign depends on. To bring it down, we would change
+                    the scope rather than remove the work itself.
                   </p>
                 )}
               </div>
@@ -448,7 +449,7 @@ export default function ResultsDashboard({
           </p>
           <details className="mt-1 pl-2">
             <summary className="cursor-pointer select-none text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-              Ways to reduce the investment responsibly
+              Ways we would reduce this responsibly
             </summary>
             <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
               {SCOPE_LEVERS.map((lever) => <li key={lever}>{lever}</li>)}

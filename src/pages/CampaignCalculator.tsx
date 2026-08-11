@@ -29,9 +29,11 @@ import {
 import { StepProgress } from "@/components/campaign-calc/shared";
 import ResultsDashboard from "@/components/campaign-calc/ResultsDashboard";
 import {
-  BalanceCard, BreakEvenCard, DetailCards, Disclaimer, PrintReport,
-  FeasibilityCard, PhaseScopeCard, ReadinessCard, ReviewCta,
+  BalanceCard, BreakEvenCard, DetailCards, Disclaimer,
+  FeasibilityCard, PhaseScopeCard, ReadinessCard,
 } from "@/components/campaign-calc/ResultsInsights";
+import ReviewCta from "@/components/campaign-calc/ReviewCta";
+import PrintReport, { reportFilename } from "@/components/campaign-calc/PrintReport";
 
 type Phase = "intro" | "steps" | "results";
 
@@ -164,6 +166,65 @@ export default function CampaignCalculator() {
     }
   };
 
+  /**
+   * Two things have to happen before `window.print()`:
+   *
+   * 1. `document.title` becomes the suggested PDF filename in every major
+   *    browser, so it is swapped for the report name and restored afterwards.
+   * 2. The report is several pages long, and the app's shared `.print-only`
+   *    rule pins its content absolutely, which would clip everything past page
+   *    one. Collapsing the report's siblings up the ancestor chain lets it
+   *    print from normal flow, where the browser paginates it properly and
+   *    repeats the fixed footer. `visibility: hidden` alone is not enough:
+   *    hidden elements still occupy layout, which would push the report past
+   *    the first page.
+   *
+   * `afterprint` covers the normal path; the timeout is a backstop for browsers
+   * that never fire it, so the page is never left collapsed or misnamed.
+   */
+  const printReport = () => {
+    const report = document.querySelector<HTMLElement>(".cc-report");
+    const collapsed: HTMLElement[] = [];
+
+    if (report) {
+      for (let node: HTMLElement | null = report; node && node !== document.body;) {
+        const parent: HTMLElement | null = node.parentElement;
+        if (!parent) break;
+        for (const sibling of Array.from(parent.children)) {
+          if (sibling !== node && sibling instanceof HTMLElement) {
+            sibling.classList.add("cc-print-hidden");
+            collapsed.push(sibling);
+          }
+        }
+        node = parent;
+      }
+      document.body.classList.add("cc-printing");
+    }
+
+    const originalTitle = document.title;
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      document.title = originalTitle;
+      document.body.classList.remove("cc-printing");
+      collapsed.forEach((el) => el.classList.remove("cc-print-hidden"));
+      window.removeEventListener("afterprint", restore);
+    };
+
+    document.title = reportFilename();
+    window.addEventListener("afterprint", restore);
+    window.setTimeout(restore, 60_000);
+
+    try {
+      window.print();
+    } finally {
+      // Chrome blocks on print() and fires afterprint; Safari returns early.
+      // Either way the listener or this timeout puts the page back.
+      window.setTimeout(restore, 0);
+    }
+  };
+
   const startOver = () => {
     clearState();
     setAnswers(emptyAnswers());
@@ -227,7 +288,7 @@ export default function CampaignCalculator() {
               Calculate My Investment <ArrowRight size={16} aria-hidden="true" />
             </Button>
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Six short steps · about 3 minutes · no account, no email gate
+              Six short steps · about 3 minutes · no account, and the full result is yours to keep
             </p>
             {restored.current && restored.current.phase !== "intro" && (
               <p className="mt-6 text-xs text-muted-foreground">
@@ -279,9 +340,9 @@ export default function CampaignCalculator() {
             <div>
               <h2 className="text-xl font-bold sm:text-2xl">Your Campaign Investment Plan</h2>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                Based on your goals and current campaign readiness, we created three potential
-                investment scenarios. These estimates are intended to support planning and do not
-                guarantee campaign performance.
+                Based on your goals and where you are starting from, here are three ways this could
+                go. They are planning estimates to help you decide, not a guarantee of what a
+                campaign will do.
               </p>
             </div>
 
@@ -296,7 +357,7 @@ export default function CampaignCalculator() {
               onToggleLock={toggleLock}
               onReset={resetShares}
               isCustomised={Boolean(customShares[selected]) || locked.length > 0}
-              onPrint={() => window.print()}
+              onPrint={printReport}
               onCopySummary={copySummary}
               onAdjust={() => jumpTo(4)}
             />
@@ -310,7 +371,7 @@ export default function CampaignCalculator() {
 
             <BreakEvenCard plan={plan} />
             <DetailCards result={result} plan={plan} currentShares={currentShares} />
-            <ReviewCta />
+            <ReviewCta answers={answers} result={result} plan={plan} />
             <Disclaimer />
 
             <PrintReport answers={answers} result={result} plan={plan} currentShares={currentShares} />
