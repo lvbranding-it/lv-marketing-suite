@@ -30,7 +30,7 @@ import { StepProgress } from "@/components/campaign-calc/shared";
 import ResultsDashboard from "@/components/campaign-calc/ResultsDashboard";
 import {
   BalanceCard, BreakEvenCard, DetailCards, Disclaimer, PrintReport,
-  FeasibilityCard, ReadinessCard, ReviewCta,
+  FeasibilityCard, PhaseScopeCard, ReadinessCard, ReviewCta,
 } from "@/components/campaign-calc/ResultsInsights";
 
 type Phase = "intro" | "steps" | "results";
@@ -304,6 +304,7 @@ export default function CampaignCalculator() {
             <div className="grid gap-4 lg:grid-cols-2">
               <ReadinessCard result={result} />
               <FeasibilityCard answers={answers} result={result} />
+              <PhaseScopeCard result={result} />
               <BalanceCard answers={answers} plan={plan} currentShares={currentShares} />
             </div>
 

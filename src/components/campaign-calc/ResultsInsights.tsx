@@ -5,8 +5,10 @@
 import { AlertCircle, ArrowRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  CATEGORIES, DESTINATIONS, READINESS_BANDS, feasibilityBand, formatMoney,
-  objectiveMeta, scenarioMeta, type FeasibilityStatus,
+  CATEGORIES, DESTINATIONS, LEAN_SCOPE_ASSUMPTIONS, PREPARATION_PHASE,
+  READINESS_BANDS, SEPARATE_SCOPE_ADDITIONS, feasibilityBand, formatMoney,
+  formatRange, objectiveMeta, readinessItemMeta, scenarioMeta,
+  type FeasibilityStatus,
 } from "@/lib/campaign/config";
 import {
   allocationAmounts, balanceNotes, displayPercents, feasibilityNarrative,
@@ -71,7 +73,9 @@ export function ReadinessCard({ result }: { result: CalculationResult }) {
 /**
  * Deliberately separate from Campaign readiness. Readiness measures whether the
  * materials exist; this measures whether the money, time, channels, and reach
- * line up. A campaign can score well on one and badly on the other.
+ * line up. It reports the available investment against BOTH the lean
+ * professional minimum and the complete selected scope, because conflating them
+ * is what made an insufficient budget look sufficient.
  */
 export function FeasibilityCard({
   answers, result,
@@ -80,7 +84,8 @@ export function FeasibilityCard({
   if (!fit.applies) return null;
 
   const band = feasibilityBand(fit.status);
-  const order: FeasibilityStatus[] = ["foundation-only", "preparation", "pilot", "supported"];
+  const order: FeasibilityStatus[] =
+    ["preparation-only", "campaign-preparation", "focused-pilot", "scope-supported"];
   const activeIndex = order.indexOf(fit.status);
   const detail = feasibilityNarrative(answers, fit).detail;
 
@@ -99,52 +104,112 @@ export function FeasibilityCard({
         {order.map((status, i) => (
           <span
             key={status}
-            className={cn(
-              "h-2 flex-1 rounded-full",
-              i <= activeIndex ? "bg-primary" : "bg-muted",
-            )}
+            className={cn("h-2 flex-1 rounded-full", i <= activeIndex ? "bg-primary" : "bg-muted")}
           />
         ))}
       </div>
       <div aria-hidden="true" className="mt-1 flex justify-between text-[9px] uppercase tracking-wide text-muted-foreground/70">
-        <span>Foundation</span><span>Preparation</span><span>Pilot</span><span>Supported</span>
+        <span>Preparation</span><span>Foundation</span><span>Pilot</span><span>Full scope</span>
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{detail}</p>
 
-      <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3">
-        <div>
-          {/* Deliberately explicit: this counts channels fundable AFTER the
-              essentials are paid for, which is why it can read 0 while the
-              pilot still plans around one channel on a reduced scope. */}
-          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Channels fundable after the protected investment
-          </dt>
-          <dd className="text-sm font-bold tabular-nums">
-            {fit.supportedChannels} <span className="text-xs font-normal text-muted-foreground">of {fit.selectedChannels} selected</span>
-          </dd>
+      {/* The figures the spec requires to be shown separately, never merged. */}
+      <dl className="mt-3 space-y-2 border-t border-border pt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[11px] text-muted-foreground">Available investment</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatMoney(fit.available)}</dd>
         </div>
-        <div>
-          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Selected scope requires</dt>
-          <dd className="text-sm font-bold tabular-nums">{formatMoney(fit.requirements.total)}</dd>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[11px] text-muted-foreground">Lean professional minimum</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.minimumViable.total)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[11px] text-muted-foreground">Complete selected scope</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScope.total)}</dd>
+        </div>
+        {fit.minimumFundingGap.max > 0 && (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-[11px] text-muted-foreground">Minimum funding gap</dt>
+            <dd className="text-xs font-bold tabular-nums text-primary">{formatRange(fit.minimumFundingGap)}</dd>
+          </div>
+        )}
+        {fit.completeScopeFundingGap.max > 0 && (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-[11px] text-muted-foreground">Complete-scope funding gap</dt>
+            <dd className="text-xs font-bold tabular-nums">{formatRange(fit.completeScopeFundingGap)}</dd>
+          </div>
+        )}
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-[11px] text-muted-foreground">Media available after protected requirements</dt>
+          <dd className="text-xs font-bold tabular-nums">{formatMoney(fit.mediaAvailable)}</dd>
         </div>
       </dl>
-      {fit.fundingGap > 0 ? (
-        <p className="mt-3 text-xs font-medium">
-          Funding gap: <span className="tabular-nums">{formatMoney(fit.fundingGap)}</span>
-          <span className="ml-1 font-normal text-muted-foreground">
-            Your available budget is below the estimated investment required for the complete scope.
-          </span>
-        </p>
-      ) : (
-        <p className="mt-3 text-xs font-medium">
-          Your available budget can support the estimated campaign requirements.
-        </p>
-      )}
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
         Readiness measures whether the campaign materials exist. This measures whether the money,
-        time, channels, and reach align. Production figures are conservative planning floors, not quotes.
+        time, channels, and reach align. All figures are planning estimates calibrated from market
+        references, not LV Branding quotes.
       </p>
+    </section>
+  );
+}
+
+/** What this phase includes and, just as importantly, what it does not. */
+export function PhaseScopeCard({ result }: { result: CalculationResult }) {
+  const fit = result.feasibility;
+  const plan = result.scenarios[result.recommendedScenario];
+  if (!fit.applies || fit.status === "scope-supported") return null;
+
+  const deferred = plan.requirements.deferred;
+
+  return (
+    <section aria-labelledby="phase-h" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <h3 id="phase-h" className="text-sm font-semibold">What this phase includes</h3>
+
+      {plan.isPreparationPhase ? (
+        <>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            {PREPARATION_PHASE.title}. This phase produces a plan, not a running campaign.
+          </p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            {PREPARATION_PHASE.inclusions.map((i) => <li key={i}>{i}</li>)}
+          </ul>
+          <p className="mt-2 text-[11px] font-medium text-primary">
+            Media activation and complete campaign delivery are excluded from this phase.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            A lean professional campaign on {plan.recommendedChannels || 1} channel, reusing what
+            already works.
+          </p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            {LEAN_SCOPE_ASSUMPTIONS.slice(0, 6).map((a) => <li key={a}>{a}</li>)}
+          </ul>
+        </>
+      )}
+
+      {deferred.length > 0 && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Deferred from this phase
+          </p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            {deferred.map((d) => <li key={d.key}>{readinessItemMeta(d.key).label}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Quoted separately
+        </p>
+        <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+          {SEPARATE_SCOPE_ADDITIONS.slice(0, 5).map((a) => <li key={a}>{a}</li>)}
+        </ul>
+      </div>
     </section>
   );
 }

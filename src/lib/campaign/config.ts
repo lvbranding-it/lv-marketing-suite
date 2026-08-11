@@ -32,6 +32,14 @@ export function formatMoney(amount: number, currency: CurrencyCode = "USD", opts
   }
 }
 
+/** Public estimates are ranges; a single number would be false precision. */
+export function formatRange(r: { min: number; max: number }, currency: CurrencyCode = "USD"): string {
+  const lo = Math.round(r.min);
+  const hi = Math.round(r.max);
+  if (hi <= lo) return formatMoney(lo, currency);
+  return `${formatMoney(lo, currency)} to ${formatMoney(hi, currency)}`;
+}
+
 // ── Allocation categories ───────────────────────────────────────────────────────
 // Order here IS the donut ring order. The colour assignment was validated for
 // colour-vision-deficiency separation between ring neighbours (including the
@@ -214,49 +222,152 @@ export const CHANNELS_WITH_NATIVE_FORMS: ChannelKey[] =
 // floors, not quotes, and LV Branding should replace them with real production
 // ranges before launch.
 
-/**
- * Cost to bring one component to campaign-ready, and the share of that cost a
- * review implies. Reviewing an existing asset is not a fixed fraction of building
- * one, so `review` is per component rather than one global factor. [ASSUMPTION]
+/*
+ * ── Market calibration ────────────────────────────────────────────────────────
+ * Costs are built from EFFORT (hours) x a blended rate, plus explicit
+ * pass-through amounts for third-party spend. Everything is a RANGE, because the
+ * underlying market inputs are ranges and publishing a single number would be
+ * false precision.
+ *
+ * Two scopes are costed INDEPENDENTLY (never one discounted from the other):
+ *   J_full  every applicable component, at full scope
+ *   J_min   the lean, professionally responsible one-channel campaign
+ *
+ * Calibration source: LV Branding's own historical hours, vendor costs,
+ * utilization, overhead, and target margin should replace these before launch.
+ * The starting figures come from published market references (Clutch, 4A's,
+ * AgencyAnalytics, Unbounce) and are PLANNING ASSUMPTIONS, not quotes.
  */
-export interface ComponentCostMeta { base: number; review: number }
 
-export const COMPONENT_COSTS: Record<ReadinessKey, ComponentCostMeta> = {
+export interface Range { min: number; max: number }
+
+export const rangeOf = (min: number, max: number): Range => ({ min, max });
+export const addRange = (a: Range, b: Range): Range => ({ min: a.min + b.min, max: a.max + b.max });
+export const scaleRange = (r: Range, f: number): Range => ({ min: r.min * f, max: r.max * f });
+export const maxRange = (a: Range, b: Range): Range =>
+  ({ min: Math.max(a.min, b.min), max: Math.max(a.max, b.max) });
+export const emptyRange = (): Range => ({ min: 0, max: 0 });
+
+/** Blended hourly rate for specialist digital-marketing work. [ASSUMPTION] */
+export const BLENDED_RATE: Range = { min: 100, max: 149 };
+
+/**
+ * Bundling and integration factor (beta). Campaign tasks overlap: positioning
+ * informs messaging, messaging informs copy, channel strategy sits inside
+ * campaign planning, analytics and conversion tracking share implementation.
+ * Summing every component at full standalone cost over-counts the work.
+ * NEVER applied to media or third-party pass-through.
+ */
+export const BUNDLING: Range = { min: 0.65, max: 0.85 };
+
+/** Base campaign setup and project cost, charged once. [ASSUMPTION] */
+export const BASE_SETUP_COST: Range = { min: 400, max: 900 };
+
+export interface ComponentEffort {
+  /** Hours at full scope. */
+  fullHours: number;
+  /**
+   * Hours inside the lean minimum viable campaign. 0 means the component is
+   * NOT in J_min at all: the lean scope assumes it already exists or is
+   * deferred to a separate phase.
+   */
+  leanHours: number;
+  /** Readiness factor when the component exists but needs review (0.25 to 0.5). */
+  review: number;
+  /** Third-party spend, which bundling must never reduce. */
+  passThrough?: Range;
+  /**
+   * Major custom development is exempt from bundling: it does not share effort
+   * with strategy or creative work.
+   */
+  bundlingExempt?: boolean;
+}
+
+export const COMPONENT_EFFORT: Record<ReadinessKey, ComponentEffort> = {
   // Strategy and planning
-  positioning:     { base: 2_500, review: 0.40 },
-  objectiveOffer:  { base:   900, review: 0.30 },
-  message:         { base: 1_500, review: 0.40 },
-  channelStrategy: { base: 1_100, review: 0.35 },
-  campaignPlan:    { base: 1_400, review: 0.30 },
-  successMetrics:  { base:   600, review: 0.30 },
-  // Branding and creative
-  visualIdentity:  { base: 3_500, review: 0.25 },
-  photography:     { base: 1_800, review: 0.45 },
-  video:           { base: 3_500, review: 0.45 },
-  graphics:        { base: 1_200, review: 0.40 },
-  adCopy:          { base:   800, review: 0.50 },
-  // Digital experience
-  landingPage:     { base: 3_000, review: 0.40 },
-  leadForm:        { base:   900, review: 0.35 },
-  checkoutFlow:    { base: 4_000, review: 0.35 },
-  eventPage:       { base: 1_800, review: 0.35 },
-  tracking:        { base: 1_200, review: 0.40 },
-  analytics:       { base:   800, review: 0.35 },
-  pixels:          { base:   600, review: 0.35 },
+  positioning:     { fullHours: 18, leanHours: 2, review: 0.40 },
+  objectiveOffer:  { fullHours:  7, leanHours: 1, review: 0.30 },
+  message:         { fullHours: 11, leanHours: 2, review: 0.40 },
+  channelStrategy: { fullHours:  8, leanHours: 0, review: 0.35 },
+  campaignPlan:    { fullHours: 10, leanHours: 2, review: 0.30 },
+  successMetrics:  { fullHours:  4, leanHours: 1, review: 0.30 },
+  // Branding and creative. Lean scope reuses existing identity and runs no
+  // custom photo or video production; those are separate scope additions.
+  visualIdentity:  { fullHours: 24, leanHours: 0, review: 0.25 },
+  photography:     { fullHours:  6, leanHours: 0, review: 0.45, passThrough: { min:  800, max: 2_500 } },
+  video:           { fullHours: 10, leanHours: 0, review: 0.45, passThrough: { min: 1_500, max: 6_000 } },
+  graphics:        { fullHours:  9, leanHours: 4, review: 0.40 },
+  adCopy:          { fullHours:  6, leanHours: 3, review: 0.50 },
+  // Digital experience. Lean scope assumes a working website or store already
+  // exists and only basic tracking is configured.
+  landingPage:     { fullHours: 20, leanHours: 0, review: 0.40, bundlingExempt: true },
+  leadForm:        { fullHours:  7, leanHours: 0, review: 0.35 },
+  checkoutFlow:    { fullHours: 24, leanHours: 0, review: 0.35, bundlingExempt: true },
+  eventPage:       { fullHours: 12, leanHours: 0, review: 0.35 },
+  tracking:        { fullHours:  9, leanHours: 3, review: 0.40 },
+  analytics:       { fullHours:  6, leanHours: 2, review: 0.35 },
+  pixels:          { fullHours:  4, leanHours: 1, review: 0.35 },
 };
 
-/** "Not sure" is priced as a small review plus a discovery reserve. */
+/** Components the lean minimum viable campaign actually includes (J_min). */
+export const LEAN_SCOPE_COMPONENTS: ReadinessKey[] =
+  (Object.keys(COMPONENT_EFFORT) as ReadinessKey[]).filter((k) => COMPONENT_EFFORT[k].leanHours > 0);
+
+/**
+ * Absolute operational floors per protected category (F_k) for a lean,
+ * one-channel, 30-day campaign that reuses existing business infrastructure.
+ * A category minimum is max(F_k, bundled effort cost), so the floor holds even
+ * when the effort maths lands lower. [ASSUMPTION]
+ */
+export const LEAN_CATEGORY_FLOORS: Record<CategoryKey, Range> = {
+  strategy:   { min: 500, max: 1_000 },
+  creative:   { min: 600, max: 1_500 },
+  digital:    { min: 500, max: 1_500 },
+  management: { min: 500, max: 1_000 },
+  testing:    { min: 150, max:   400 },
+  media:      { min: 500, max: 1_500 },
+};
+
+/** What the lean scope assumes, shown to the user so the exclusions are explicit. */
+export const LEAN_SCOPE_ASSUMPTIONS: string[] = [
+  "One advertising channel",
+  "One campaign objective",
+  "One primary audience",
+  "One campaign concept",
+  "Limited copy and graphics",
+  "Existing brand identity",
+  "Existing website or ecommerce system",
+  "Basic tracking setup",
+  "No custom photography production",
+  "No custom video production",
+  "No new ecommerce development",
+  "Basic campaign management and reporting",
+];
+
+/** Work that sits outside the lean minimum and is quoted separately. */
+export const SEPARATE_SCOPE_ADDITIONS: string[] = [
+  "Custom video production",
+  "Custom photography production",
+  "Brand identity development",
+  "New landing-page or ecommerce development",
+  "Advanced integrations",
+  "Additional channels",
+  "Additional creative formats and variations",
+];
+
+/** Readiness factors. `review` is per component; see COMPONENT_EFFORT. */
 export const READINESS_COST_FACTORS = {
   ready:  0,
   create: 1,
+  /** "Not sure" carries discovery effort plus an uncertainty reserve. */
   unsureBase: 0.25,
-  /** Added on top of the unsure base to fund finding out. */
   discoveryReserve: 0.15,
 } as const;
 
 /**
  * Strategy scales with how complicated the campaign is to plan:
- * F_scope = 1 + F_channels + F_market + F_duration + F_audience. [ASSUMPTION]
+ * F_scope = 1 + F_channels + F_market + F_duration + F_audience. Applied to the
+ * full scope only; the lean scope is one channel by definition. [ASSUMPTION]
  */
 export const SCOPE_FACTORS = {
   perExtraChannel: 0.06,
@@ -333,26 +444,55 @@ export const RESERVE = {
  * The score is a separate 0-100 read on how close the budget is to the
  * requirement, and its thresholds are configurable.
  */
-export type FeasibilityStatus = "foundation-only" | "preparation" | "pilot" | "supported";
+export type FeasibilityStatus =
+  | "preparation-only" | "campaign-preparation" | "focused-pilot" | "scope-supported";
 
 export const FEASIBILITY_BANDS: {
   status: FeasibilityStatus; label: string; short: string;
 }[] = [
-  { status: "supported",       label: "Scope supported",     short: "The available investment can support the protected campaign requirements and the selected media mix." },
-  { status: "pilot",           label: "Focused pilot",       short: "Your budget can support a reduced channel mix, but not every channel originally selected." },
-  { status: "preparation",     label: "Campaign preparation", short: "The campaign foundation can be developed, but the remaining budget does not support responsible media activation." },
-  { status: "foundation-only", label: "Foundation phase only", short: "Your available investment does not currently fund all essential campaign requirements and media activation." },
+  {
+    status: "scope-supported", label: "Selected scope supported",
+    short: "The available investment supports the estimated complete-scope requirements, subject to professional review.",
+  },
+  {
+    status: "focused-pilot", label: "Focused pilot",
+    short: "A reduced one-channel campaign may be feasible. The plan lists what is included, excluded, reused, and deferred.",
+  },
+  {
+    status: "campaign-preparation", label: "Campaign preparation",
+    short: "The minimum campaign foundation may be supported, but the remaining investment does not meet the minimum practical media requirement.",
+  },
+  {
+    status: "preparation-only", label: "Preparation phase only",
+    short: "The available investment is below the lean professional minimum for responsible campaign activation. It can fund a defined strategy or preparation sprint, not a complete campaign.",
+  },
 ];
 
 export const feasibilityBand = (status: FeasibilityStatus) =>
   FEASIBILITY_BANDS.find((b) => b.status === status) as (typeof FEASIBILITY_BANDS)[number];
 
-/** F_budget = min(100, A / I_required × 100). Thresholds are configurable. */
+/**
+ * What a preparation-only phase can honestly deliver. Media activation and
+ * complete campaign delivery are explicitly excluded.
+ */
+export const PREPARATION_PHASE = {
+  title: "Strategy and setup sprint",
+  inclusions: [
+    "Campaign objective and audience definition",
+    "One-channel recommendation",
+    "Core message direction",
+    "Basic activation plan",
+  ],
+  /** Categories a preparation sprint actually funds. */
+  categories: ["strategy", "testing"] as CategoryKey[],
+} as const;
+
+/** F_budget = min(100, A / I_full × 100). Thresholds are configurable. */
 export const FEASIBILITY_SCORE_BANDS: { min: number; label: string }[] = [
-  { min: 100, label: "Scope supported" },
+  { min: 100, label: "Complete scope supported" },
   { min:  80, label: "Workable with adjustments" },
   { min:  50, label: "Focused pilot" },
-  { min:   0, label: "Foundation or scope revision required" },
+  { min:   0, label: "Preparation or scope revision required" },
 ];
 
 /** Ways to reduce cost responsibly, offered instead of cutting a protected line. */

@@ -150,16 +150,20 @@ export interface BreakEvenResult {
 
 export interface ScenarioPlan {
   key:         ScenarioKey;
-  /** Total investment for this scenario (P + M + R), rounded for planning. */
+  /** The single figure this plan allocates against (the budget when known). */
   total:       number;
+  /** The estimate range for this scope; what the public result should show. */
+  totalRange:  Range;
   /** The campaign reserve carried inside `total`, held outside `amounts`. */
   reserveAmount: number;
   /** Recommended shares (decimals summing to 1). */
   shares:      Shares;
   /** Dollar amounts per category; always sums exactly to `total`. */
   amounts:     Record<CategoryKey, number>;
-  /** The bottom-up requirement this scenario's scope implies. */
+  /** The bottom-up requirement this scenario's scope implies (a range). */
   requirements: Requirements;
+  /** True when this plan is a preparation sprint, not a campaign. */
+  isPreparationPhase: boolean;
   /** Channels this scenario is actually costed against. */
   plannedChannels: ChannelKey[];
   /** Media dollars implied by the goal (goal-first) or the allocation (budget-first). */
@@ -172,44 +176,49 @@ export interface ScenarioPlan {
   breakEven:        BreakEvenResult | null;
 }
 
+/** Which scope is being priced. `lean` is J_min, `full` is J_full. */
+export type ScopeKind = "lean" | "full";
+
+/** Market inputs are ranges, so estimates are ranges. */
+export interface Range { min: number; max: number }
+
 /** One line of the requirements build-up, for display and for the report. */
 export interface RequirementLine {
   key:    string;
   label:  string;
-  amount: number;
-  /** Component keys that contributed, when the line is a component roll-up. */
+  amount: Range;
   detail?: string;
 }
 
 /**
- * The campaign priced from the bottom up:
- *   I_required = S_min + B_min + D_min + M_required + G_min + T_min + R
- *   P          = S_min + B_min + D_min + G_min + T_min      (protected)
- *   I_required = P + M_required + R
- * Media buys distribution; the protected investment creates, operates, measures,
- * and improves the thing being distributed.
+ * The campaign priced from the bottom up for ONE scope:
+ *   I = P + M + R,  P = S + B + D + G + T
+ * The lean and full scopes are built independently; neither is derived from the
+ * other by a discount factor.
  */
 export interface Requirements {
-  strategy:   number;   // S_min
-  creative:   number;   // B_min
-  digital:    number;   // D_min
-  media:      number;   // M_required
-  management: number;   // G_min
-  testing:    number;   // T_min
-  reserve:    number;   // R
+  scope:      ScopeKind;
+  strategy:   Range;   // S_min
+  creative:   Range;   // B_min
+  digital:    Range;   // D_min
+  media:      Range;   // M
+  management: Range;   // G_min
+  testing:    Range;   // T_min
+  reserve:    Range;   // R
   /** S + B + D + G + T. Excludes media and reserve. */
-  protectedTotal: number;
+  protectedTotal: Range;
   /** P + M + R */
-  total: number;
-  /** Protected floor per allocation category; a slider may not go below these. */
-  floors: Record<CategoryKey, number>;
-  /** Per-channel monthly media minimums, summed for the duration. */
+  total: Range;
+  /** Protected floor per allocation category for THIS scope. */
+  floors: Record<CategoryKey, Range>;
   channelMediaFloors: { channel: ChannelKey; amount: number }[];
-  /** The cheapest single channel, used for the "can we activate at all" test. */
   singleChannelFloor: number;
-  /** Media implied by the goal, before the channel floor is applied. */
   goalMedia: number | null;
   creativeVariations: number;
+  /** Channels this scope actually funds. */
+  activeChannels: ChannelKey[];
+  /** Applicable components this scope does not deliver. */
+  deferred: ComponentAssessment[];
   breakdown: {
     strategy:   RequirementLine[];
     creative:   RequirementLine[];
@@ -221,25 +230,30 @@ export interface Requirements {
 }
 
 /**
- * Whether the money, time, channels, and reach line up. Separate from readiness:
- * readiness asks whether the materials exist, feasibility asks whether the budget
- * can actually do the job that was described.
+ * Whether the money, time, channels, and reach line up. Reports the client's
+ * available investment against BOTH the lean professional minimum and the
+ * complete selected scope, because conflating the two is what made an
+ * insufficient budget look sufficient.
  */
 export interface FeasibilityResult {
-  status: "foundation-only" | "preparation" | "pilot" | "supported";
+  status: "preparation-only" | "campaign-preparation" | "focused-pilot" | "scope-supported";
   /** Only meaningful in budget-first mode; goal-first sizes to the goal instead. */
   applies: boolean;
-  /** Stated budget (A), or 0 in goal-first mode. */
-  budget: number;
-  /** F_budget = min(100, A / I_required x 100). */
+  /** A: the stated available investment, or 0 in goal-first mode. */
+  available: number;
+  /** I_min: the lean, professionally responsible one-channel campaign. */
+  minimumViable: Requirements;
+  /** I_full: everything originally selected. */
+  completeScope: Requirements;
+  /** max(0, I_min - A) */
+  minimumFundingGap: Range;
+  /** max(0, I_full - A) */
+  completeScopeFundingGap: Range;
+  /** F_budget = min(100, A / I_full x 100), on the optimistic bound. */
   score: number;
   scoreLabel: string;
-  /** The full bottom-up requirement for the selected scope. */
-  requirements: Requirements;
-  /** M_available = max(0, A - P - R). */
+  /** Investment left for media once the lean protected minimum is funded. */
   mediaAvailable: number;
-  /** I_required - A; positive means the budget is short. */
-  fundingGap: number;
   /** Channels the remaining media budget can actually fund. */
   supportedChannels: number;
   selectedChannels: number;

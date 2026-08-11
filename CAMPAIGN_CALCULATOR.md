@@ -37,60 +37,82 @@ link exists in `AppShell.tsx` under the standalone-tools group.
 
 ## How calculations work
 
-The calculator prices the campaign **bottom up** and only then allocates. It does
-not divide whatever number the user typed.
+The calculator prices the campaign **bottom up** and only then allocates, and it
+prices **two scopes independently**:
 
 ```
-I_required = S_min + B_min + D_min + M_required + G_min + T_min + R
-P          = S_min + B_min + D_min + G_min + T_min        (protected)
-I_required = P + M_required + R
+I_full = P_full + M_full + R_full     every applicable component (J_full)
+I_min  = P_min  + M_min  + R_min      the lean one-channel campaign (J_min)
+P      = S_min + B_min + D_min + G_min + T_min
 ```
 
-Paid media buys distribution. The protected campaign investment creates, operates,
-measures, and improves what is being distributed. `src/lib/campaign/requirements.ts`
-implements the model; `engine.ts` consumes it.
+`J_min` is **not** `J_full` at a discount. It is a genuinely smaller deliverable
+set: one channel, one objective, one audience, one concept, limited copy and
+graphics, existing brand identity, existing website or store, basic tracking, no
+custom photo or video. Deriving one scope from the other by multiplying would
+misrepresent what is actually being delivered, so the code never does it.
 
-**1. Readiness cost.** `C_j = BaseCost_j x ReadinessFactor_j x ScopeFactor_j`.
-Factors: ready 0, needs-review a **per-component** rate (0.25 to 0.50, because
-reviewing an asset is not a fixed fraction of building one), not-sure 0.25 plus a
-0.15 discovery reserve, to-create 1. Unanswered is priced as to-create. Components
-that don't apply are excluded.
+**Component cost is effort, not a flat price.**
 
-**2. Strategy.** `S_min = Σ(StrategyCost_j x ReadinessFactor_j) x F_scope`, where
-`F_scope = 1 + F_channels + F_market + F_duration + F_audience`.
+```
+C_j     = hours_j x blended rate x readinessFactor_j
+P_full  = B_base + beta x Σ C_j  + pass-through
+```
 
-**3. Creative.** `B_min = C_concept + components + C_formats + C_variations`. The
-concept is charged **once**; each channel adds an adaptation cost, not a new
-concept. Variations beyond the first are priced per variation.
+`beta` (0.65 to 0.85) is the **bundling factor**: positioning informs messaging,
+messaging informs copy, channel strategy sits inside campaign planning, analytics
+and conversion tracking share implementation. Summing every component at full
+standalone cost over-counts the work. Bundling is **never** applied to paid media,
+third-party pass-through (photo and video production), or major custom development
+(landing page, checkout flow).
 
-**4. Digital experience.** `D_min` = destination + conversion + analytics +
-platform tracking, limited to the components the chosen destination makes relevant.
+Readiness factors: ready 0, needs-review a **per-component** rate (0.25 to 0.50,
+because reviewing an asset is not a fixed fraction of building one), not-sure 0.25
+plus a 0.15 discovery reserve, to-create 1. Unanswered is priced as to-create.
 
-**5. Paid media.** `M_required = max(M_goal, Σ_c M_min,c)` with per-channel monthly
-minimums (LinkedIn and programmatic cost more than email). Goal-first computes
-`M_goal` per objective; awareness uses `reach x frequency / 1,000 x CPM`.
+**Everything is a range**, because the market inputs are ranges. Publishing a
+single number would be false precision. Ranges are shown wherever the underlying
+inputs are ranges; only the plan a known budget actually funds is a single figure.
 
-**6. Management.** `G_min = max(G_base, r_G x M_required) + G_complexity`, where
-complexity = channels, variations, duration, and reporting.
+Category minimums use an absolute floor: `P_k_min = max(F_k, bundled effort)`, so
+a lean campaign never prices below what the work costs to run.
 
-**7. Testing and optimization.** `T_min = max(T_base, r_T x (B_min + D_min + M_required))`,
-protected so it is never silently absorbed into media.
+## Feasibility: can this investment do the job?
 
-**8. Reserve.** `R = r_R x (S + B + D + M + G)`, displayed separately as Campaign
-Reserve. In a plan it is carried as the exact remainder `total - allocatable`, so
-**P + M + R equals the total exactly** whatever the rounding does.
+`feasibility()` reports the available investment `A` against **both** scopes.
+Conflating them is what let an insufficient budget look sufficient.
 
-Amounts start at the protected minimums; surplus flows to media. When the budget
-falls short, **media absorbs the shortfall first** and the protected lines are the
-last thing scaled, because they are the work the campaign depends on.
+```
+gap_min  = max(0, I_min  - A)
+gap_full = max(0, I_full - A)
+F_budget = min(100, A / I_full x 100)
+```
 
-### Protected allocation rule
+| Status | Condition |
+|---|---|
+| Preparation phase only | `A < P_min` |
+| Campaign preparation | `P_min <= A < P_min + M_min` |
+| Focused pilot | `P_min + M_min <= A < I_full` |
+| Selected scope supported | `A >= I_full` |
 
-`X_i >= P_i` for every protected category (strategy, creative, digital,
-management, testing). Sliders enforce the floor, show the protected minimum in
-dollars, and explain that reducing it responsibly means changing scope. Media is
-freely adjustable down to zero, and reducing it recalculates the fundable channels.
-`SCOPE_LEVERS` in config lists the offered alternatives.
+Thresholds use the optimistic bound of each range, so an investment is only called
+short when it is short even at the lean end of the market, and the copy hedges
+with "may" accordingly.
+
+**No media activation below `P_min + M_min`.** A few hundred dollars cannot run a
+channel, so the media line is zero and the plan says so rather than implying an
+activation that will not happen.
+
+**A preparation-only result is a different deliverable, not a shrunken campaign.**
+Below the lean minimum the plan funds a strategy and setup sprint, states plainly
+that media activation and complete campaign delivery are excluded, and lists what
+is deferred. Categories are never scaled down proportionally to imply the whole
+scope is still deliverable.
+
+**Nothing is called "protected" unless the displayed plan funds that minimum.**
+When it does not, the figure is labelled *Current phase allocation* with the lean
+protected minimum stated beside it, and each category minimum above its allocation
+is qualified as *deferred* or *partially funded this phase*.
 
 ## Where assumptions are configured
 
@@ -107,8 +129,15 @@ planning assumption, notably:
 - `SCENARIOS`: budget/goal factors, channel caps, allocation biases, and copy
 - `ASSUMPTIONS`: the $600/month minimum channel spend, input guardrails, the
   Essential-vs-Growth recommendation cutoff, and the "balanced" band width
-- `COMPONENT_COSTS`: base build cost and per-component review rate for all 18
-  components
+- `BLENDED_RATE`, `BUNDLING`, `BASE_SETUP_COST`: the rate range, the bundling
+  factor (beta), and the once-only campaign setup cost
+- `COMPONENT_EFFORT`: full-scope hours, **lean-scope hours** (0 means the
+  component is outside J_min), per-component review rate, third-party
+  pass-through, and bundling exemptions
+- `LEAN_CATEGORY_FLOORS`: the absolute operational floors F_k
+- `LEAN_SCOPE_ASSUMPTIONS` / `SEPARATE_SCOPE_ADDITIONS` / `PREPARATION_PHASE`:
+  what the lean scope assumes, what is quoted separately, and what a preparation
+  sprint delivers
 - `SCOPE_FACTORS`, `CHANNEL_MEDIA_MINIMUM`, `CHANNEL_ADAPTATION_COST`, `CREATIVE`,
   `MANAGEMENT`, `TESTING`, `RESERVE`: every coefficient in the requirements model
 - `FEASIBILITY_BANDS` / `FEASIBILITY_SCORE_BANDS` / `SCOPE_LEVERS`: statuses,
@@ -258,10 +287,13 @@ There is no repo-wide linter configured, so no lint step exists.
 - UI flow is verified manually/by browser automation; there is no DOM test
   infrastructure in the repo, so interface tests are not automated.
 - Single currency (USD). `config.ts → CURRENCIES` is structured for more.
-- Default unit economics are deliberately generic, not per-industry. **The awareness
-  defaults ($15 CPM, frequency 3), the essential/recommended relevance tiering, and
-  the `PRODUCTION_COSTS` floors are the assumptions most worth LV Branding's review
-  before launch.**
+- Market figures are calibrated from published references (Clutch, 4A's,
+  AgencyAnalytics, Unbounce) and are **planning assumptions, not quotes**.
+  **Before launch, replace `COMPONENT_EFFORT` hours, `BLENDED_RATE`, `BUNDLING`,
+  and `LEAN_CATEGORY_FLOORS` with LV Branding's own historical project hours,
+  vendor costs, utilization, overhead, and minimum target margin.** The awareness
+  defaults ($15 CPM, frequency 3) and the essential/recommended relevance tiering
+  also need review.
 - Feasibility applies to budget-first mode only; goal-first sizes the investment to
   the goal, so there is no stated budget to test the scope against.
 - The donut's hover and keyboard focus both drive the centre label; when a mouse

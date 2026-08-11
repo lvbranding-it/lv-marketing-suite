@@ -12,7 +12,7 @@ import {
   planLevers, protectedFloorShare, recommendationSummary, scenarioRationale,
   shareStatus,
 } from "@/lib/campaign/engine";
-import { SCOPE_LEVERS } from "@/lib/campaign/config";
+import { SCOPE_LEVERS, formatRange } from "@/lib/campaign/config";
 import type {
   CalculationResult, CalculatorAnswers, CategoryKey, ScenarioKey, Shares,
 } from "@/lib/campaign/types";
@@ -62,6 +62,12 @@ export default function ResultsDashboard({
     [amounts],
   );
   const levers = useMemo(() => planLevers(answers, result), [answers, result]);
+  /*
+   * An amount is only called "protected" when the displayed plan actually funds
+   * that minimum. Labelling a smaller allocation as protected would claim work
+   * the phase cannot deliver.
+   */
+  const fundsProtectedMinimum = protectedAmount >= plan.requirements.protectedTotal.min - 1;
   // While a contradiction is open we show the scenarios for comparison but stop
   // short of endorsing one.
   const hasContradiction = result.contradictions.length > 0;
@@ -137,10 +143,14 @@ export default function ResultsDashboard({
           const isWhyOpen = whyOpen === key;
           // Under a constrained budget the affordable plan is a reduced-scope
           // pilot, and the larger ones are priced at what the scope really costs.
-          const isPilot = isConstrained && key === "essential";
-          const label = isPilot ? "Focused Pilot" : meta.label;
-          const extraNeeded = isConstrained && !isPilot
-            ? Math.max(0, scenario.total - result.feasibility.budget)
+          const isAffordablePlan = isConstrained && key === "essential";
+          const label = isAffordablePlan
+            ? (scenario.isPreparationPhase ? "Preparation phase" : "Focused pilot")
+            : meta.label;
+          // Estimates are ranges; only the plan the budget actually funds is exact.
+          const showRange = !isAffordablePlan && scenario.totalRange.max > scenario.totalRange.min;
+          const extraNeeded = isConstrained && !isAffordablePlan
+            ? Math.max(0, scenario.totalRange.min - result.feasibility.available)
             : 0;
           return (
             /* The card is a div so the "Why this amount?" toggle isn't nested
@@ -166,7 +176,7 @@ export default function ResultsDashboard({
                       <span className="inline-flex items-center gap-1 rounded-full border border-primary/50 px-2 py-0.5 text-[10px] font-semibold text-primary">
                         <AlertTriangle size={9} aria-hidden="true" /> Review assumptions
                       </span>
-                    ) : isPilot ? (
+                    ) : isAffordablePlan ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
                         <Star size={9} aria-hidden="true" /> Best fit for current budget
                       </span>
@@ -178,19 +188,29 @@ export default function ResultsDashboard({
                   )}
                   {extraNeeded > 0 && (
                     <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                      Requires {formatMoney(extraNeeded)} more
+                      Needs {formatMoney(extraNeeded)}+ more
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(scenario.total)}</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                  {scenario.recommendedChannels === 0
-                    ? "Foundation phase · no media activation"
-                    : `${isPilot ? "Reduced scope" : meta.tagline} · plans around ${scenario.recommendedChannels} channel${scenario.recommendedChannels === 1 ? "" : "s"}`}
+                <p className="mt-1 text-lg font-bold tabular-nums">
+                  {showRange ? formatRange(scenario.totalRange) : formatMoney(scenario.total)}
                 </p>
-                {isPilot && (
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {scenario.isPreparationPhase
+                    ? "Strategy and setup sprint · no media activation"
+                    : isAffordablePlan
+                      ? (scenario.recommendedChannels === 0
+                          ? "No media activation at this investment"
+                          : `Reduced scope · ${scenario.recommendedChannels} channel${scenario.recommendedChannels === 1 ? "" : "s"}`)
+                      /* Growth and Expansion are estimates of their own scope, so
+                         they describe the channels that scope funds. */
+                      : `${meta.tagline} · ${scenario.requirements.activeChannels.length} channel${scenario.requirements.activeChannels.length === 1 ? "" : "s"}`}
+                </p>
+                {isAffordablePlan && (
                   <p className="mt-1 text-[11px] leading-relaxed text-primary">
-                    This is a reduced-scope plan, not the complete {result.feasibility.selectedChannels}-channel campaign originally selected.
+                    {scenario.isPreparationPhase
+                      ? "This funds preparation only. It is not a complete campaign and does not include media activation."
+                      : `This is a reduced-scope plan, not the complete ${result.feasibility.selectedChannels}-channel campaign originally selected.`}
                   </p>
                 )}
               </button>
@@ -231,11 +251,14 @@ export default function ResultsDashboard({
           investment creates, operates, measures, and improves what is distributed. */}
       <div className="grid gap-2 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Protected campaign investment</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {fundsProtectedMinimum ? "Protected campaign investment" : "Current phase allocation"}
+          </p>
           <p className="mt-1 text-lg font-bold tabular-nums">{formatMoney(protectedAmount)}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            Creates and operates the campaign: strategy, creative, digital experience, management,
-            and testing.
+            {fundsProtectedMinimum
+              ? "Creates and operates the campaign: strategy, creative, digital experience, management, and testing."
+              : `This is what the current phase funds. It is below the lean protected minimum of ${formatRange(plan.requirements.protectedTotal)}, so it is not presented as a protected campaign investment.`}
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
@@ -255,8 +278,9 @@ export default function ResultsDashboard({
         </div>
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {formatMoney(protectedAmount)} protected + {formatMoney(amounts.media)} media +{" "}
-        {formatMoney(plan.reserveAmount)} reserve = {formatMoney(plan.total)} total. The media budget
+        {formatMoney(protectedAmount)} {fundsProtectedMinimum ? "protected" : "this phase"} +{" "}
+        {formatMoney(amounts.media)} media + {formatMoney(plan.reserveAmount)} reserve ={" "}
+        {formatMoney(plan.total)} total. The media budget
         buys distribution; the protected campaign investment funds the strategy, creative production,
         digital infrastructure, management, and optimization required to make that distribution
         purposeful and accountable.
@@ -342,7 +366,7 @@ export default function ResultsDashboard({
             // that may be reduced freely, because reach is recalculated with it.
             const floorShare = protectedFloorShare(cat.key, plan.requirements, plan.total);
             const floorPct = Math.ceil(floorShare * 100);
-            const floorAmount = plan.requirements.floors[cat.key];
+            const floorAmount = plan.requirements.floors[cat.key].min;
             const atFloor = cat.key !== "media" && pct <= floorPct;
             const status = shareStatus(share, rec);
             const isLocked = locked.includes(cat.key);
@@ -398,9 +422,15 @@ export default function ResultsDashboard({
                   <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
                 </div>
                 <p className="pl-5 text-[10px] text-muted-foreground/80">
+                  {/* A minimum above the current allocation is always qualified,
+                      so it can never read as work this phase will deliver. */}
                   {cat.key === "media"
                     ? "Adjustable. Reducing media reduces reach, channels, or duration."
-                    : `Protected minimum: ${formatMoney(floorAmount)}`}
+                    : amounts[cat.key] === 0
+                      ? `Lean category minimum: ${formatMoney(floorAmount)} (deferred from this phase)`
+                      : amounts[cat.key] < floorAmount
+                        ? `Lean category minimum: ${formatMoney(floorAmount)} (partially funded this phase)`
+                        : `Lean category minimum: ${formatMoney(floorAmount)}`}
                 </p>
                 {atFloor && (
                   <p className="mt-1 pl-5 text-[10px] leading-relaxed text-primary">

@@ -17,19 +17,22 @@ import {
   ASSUMPTIONS, CATEGORY_KEYS, CHANNELS,
   CHANNELS_FAVOURING_VIDEO, CHANNELS_REQUIRING_IMAGERY, CHANNELS_REQUIRING_VIDEO,
   CHANNELS_SUPPORTING_VIDEO, CHANNELS_WITH_NATIVE_FORMS, DESTINATIONS,
-  DESTINATION_RULES, FEASIBILITY_SCORE_BANDS, READINESS_BANDS, RESERVE,
+  DESTINATION_RULES, FEASIBILITY_SCORE_BANDS, READINESS_BANDS,
   READINESS_ITEMS, RELEVANCE_GAP_MULTIPLIER, RELEVANCE_WEIGHTS, SCENARIOS,
-  audienceBandMeta, categoryMeta, formatMoney, objectiveMeta, readinessItemMeta,
+  audienceBandMeta, categoryMeta, formatMoney, formatRange, objectiveMeta,
+  readinessItemMeta,
   readinessStateMeta, scenarioMeta,
 } from "./config";
 import {
   affordableChannels, buildRequirements, campaignMonths, channelLabel,
 } from "./requirements";
+import { PREPARATION_PHASE, RESERVE } from "./config";
 import type {
   BalanceNote, BreakEvenResult, CalculationResult, CalculatorAnswers,
   CategoryInsight, CategoryKey, ChannelKey, ComponentAssessment,
   ComponentRelevance, FeasibilityResult, ReadinessKey, ReadinessResult,
-  ReadinessState, Requirements, ScenarioKey, ScenarioPlan, Shares,
+  ReadinessState, Range, Requirements, ScenarioKey, ScenarioPlan, ScopeKind,
+  Shares,
 } from "./types";
 
 // ── Numeric guards ──────────────────────────────────────────────────────────────
@@ -365,7 +368,9 @@ export function protectedFloorShare(
   key: CategoryKey, requirements: Requirements, total: number,
 ): number {
   if (key === "media" || total <= 0) return 0;
-  return clamp(safeDiv(requirements.floors[key], total, 0), 0, 1);
+  // The lean end of the range: the floor is what the DISPLAYED scenario must
+  // fund, never the full-scope requirement shown beside a smaller allocation.
+  return clamp(safeDiv(requirements.floors[key].min, total, 0), 0, 1);
 }
 
 // ── Goal-first media estimate ───────────────────────────────────────────────────
@@ -448,65 +453,74 @@ export function breakEven(
 }
 
 // ── Feasibility ─────────────────────────────────────────────────────────────────
-// Budget-first asks two questions. The requirements model answers the first
-// ("what does this campaign actually cost?"); this answers the second ("can the
-// available budget do that job, and if not, what can it do?").
+// Reports the available investment against BOTH the lean professional minimum
+// and the complete selected scope. Conflating the two is what let an
+// insufficient budget look like a funded campaign.
 //
-//   P             = S_min + B_min + D_min + G_min + T_min
-//   M_available   = max(0, A - P - R)
-//   Funding gap   = I_required - A
-//   F_budget      = min(100, A / I_required x 100)
+//   gap_min  = max(0, I_min  - A)
+//   gap_full = max(0, I_full - A)
 
-/** The requirements for the scope the user actually selected, at Growth scope. */
-export function selectedScopeRequirements(answers: CalculatorAnswers): Requirements {
+/** Prices one scope for the answers as given. The two scopes never derive from each other. */
+export function scopeRequirements(answers: CalculatorAnswers, scope: ScopeKind): Requirements {
   const assessments = componentAssessments(answers);
   const goalMedia = answers.financial.mode === "goal"
     ? estimateMediaSpend(answers, clamp(num(answers.financial.goalCount) ?? 0, 0, ASSUMPTIONS.maxGoal))
     : null;
-  return buildRequirements(answers, assessments, "growth", { goalMedia });
+  return buildRequirements(answers, assessments, "growth", { goalMedia, scope });
 }
 
+const gapRange = (required: Range, available: number): Range => ({
+  min: Math.max(0, required.min - available),
+  max: Math.max(0, required.max - available),
+});
+
 export function feasibility(answers: CalculatorAnswers): FeasibilityResult {
-  const requirements = selectedScopeRequirements(answers);
-  const budget = answers.financial.mode === "budget"
+  const minimumViable = scopeRequirements(answers, "lean");
+  const completeScope = scopeRequirements(answers, "full");
+  const available = answers.financial.mode === "budget"
     ? clamp(num(answers.financial.budgetTotal) ?? 0, 0, ASSUMPTIONS.maxBudget)
     : 0;
-  const applies = answers.financial.mode === "budget" && budget > 0;
+  const applies = answers.financial.mode === "budget" && available > 0;
 
-  const P = requirements.protectedTotal;
-  const R = requirements.reserve;
-  const mediaAvailable = Math.max(0, budget - P - R);
-  const fundingGap = requirements.total - budget;
-  const selectedChannels = Math.max(1, answers.scope.channels.length);
+  const pMin = minimumViable.protectedTotal;
+  const mMin = minimumViable.media;
+  const mediaAvailable = Math.max(0, available - pMin.min - minimumViable.reserve.min);
   const funded = affordableChannels(answers.scope.channels, answers.scope.durationDays, mediaAvailable);
 
-  const score = requirements.total > 0
-    ? clamp(Math.round(safeDiv(budget, requirements.total, 0) * 100), 0, 100)
+  /*
+   * Thresholds use the OPTIMISTIC bound of each range, so a budget is only
+   * called short when it is short even at the lean end of the market. The copy
+   * then hedges with "may", because the range is real uncertainty, not a quote.
+   */
+  let status: FeasibilityResult["status"] = "scope-supported";
+  if (applies) {
+    if (available < pMin.min) status = "preparation-only";
+    else if (available < pMin.min + mMin.min) status = "campaign-preparation";
+    else if (available < completeScope.total.min) status = "focused-pilot";
+    else status = "scope-supported";
+  }
+
+  const score = completeScope.total.min > 0
+    ? clamp(Math.round(safeDiv(available, completeScope.total.min, 0) * 100), 0, 100)
     : 0;
   const scoreLabel = (FEASIBILITY_SCORE_BANDS.find((b) => score >= b.min)
     ?? FEASIBILITY_SCORE_BANDS[FEASIBILITY_SCORE_BANDS.length - 1]).label;
 
-  // The detailed rules decide the status; the score is a separate read.
-  const allChannelFloors = requirements.channelMediaFloors.reduce((t, f) => t + f.amount, 0);
-  let status: FeasibilityResult["status"] = "supported";
-  if (applies) {
-    if (budget < P) status = "foundation-only";
-    else if (budget < P + requirements.singleChannelFloor) status = "preparation";
-    else if (budget < P + allChannelFloors) status = "pilot";
-    else status = "supported";
-  }
-
   return {
-    status, applies, budget, score, scoreLabel, requirements,
-    mediaAvailable, fundingGap,
+    status, applies, available, minimumViable, completeScope,
+    minimumFundingGap: gapRange(minimumViable.total, available),
+    completeScopeFundingGap: gapRange(completeScope.total, available),
+    score, scoreLabel, mediaAvailable,
     supportedChannels: funded.length,
-    selectedChannels,
+    selectedChannels: Math.max(1, answers.scope.channels.length),
   };
 }
 
 // ── Scenario construction ───────────────────────────────────────────────────────
-// A scenario is a SCOPE, and its total is that scope's real requirement. The
-// budget no longer decides the plan; it decides which scope is affordable.
+// A scenario is a SCOPE. Its estimate is that scope's real requirement range.
+// The budget decides which scope is affordable, never what the work costs.
+
+const midpoint = (r: Range) => (r.min + r.max) / 2;
 
 export function buildScenario(
   answers: CalculatorAnswers,
@@ -517,102 +531,143 @@ export function buildScenario(
   const sMeta = scenarioMeta(key);
   const fin = answers.financial;
   const assessments = componentAssessments(answers);
-  const selectedChannels = answers.scope.channels;
+  const scopeFit = fit ?? feasibility(answers);
 
   let requirements: Requirements;
   let total: number;
+  let totalRange: Range;
   let estimatedResults: number | null = null;
-  let plannedChannels: ChannelKey[] = selectedChannels.length > 0 ? selectedChannels : ["google-search"];
+  let isPreparationPhase = false;
 
-  if (fin.mode === "budget") {
-    const budget = clamp(num(fin.budgetTotal) ?? 0, 0, ASSUMPTIONS.maxBudget);
-    const scopeFit = fit ?? feasibility(answers);
-    const constrained = scopeFit.applies && scopeFit.status !== "supported";
+  if (fin.mode === "budget" && scopeFit.applies) {
+    const available = scopeFit.available;
 
-    if (constrained && key === "essential") {
-      /*
-       * The focused pilot is a genuine reduction in scope, not a smaller number:
-       * cost the protected requirements first, then fund only the channels the
-       * remainder can actually carry. Two passes, because the protected total
-       * itself depends on the channel count through creative adaptations and
-       * management complexity.
-       */
-      let channels = plannedChannels;
-      for (let pass = 0; pass < 2; pass++) {
-        const draft = buildRequirements(answers, assessments, key, { channels });
-        const available = Math.max(0, budget - draft.protectedTotal - draft.reserve);
-        const affordable = affordableChannels(plannedChannels, answers.scope.durationDays, available);
-        channels = affordable.length > 0 ? affordable : plannedChannels.slice(0, 1);
+    if (key === "essential") {
+      // The affordable plan. Which plan that IS depends on the status, and a
+      // preparation sprint is a different deliverable, not a shrunken campaign.
+      isPreparationPhase = scopeFit.status === "preparation-only";
+      requirements = scopeFit.minimumViable;
+      if (scopeFit.status === "scope-supported") {
+        // Nothing is constrained, so this is simply the leaner option, priced
+        // at what the lean scope costs rather than at the whole budget.
+        totalRange = requirements.total;
+        total = roundTotal(midpoint(totalRange));
+      } else {
+        total = roundTotal(available);
+        totalRange = isPreparationPhase
+          ? { min: available, max: available }
+          : requirements.total;
       }
-      plannedChannels = channels;
-      requirements = buildRequirements(answers, assessments, key, { channels });
-      // Spend the whole budget: withholding a fraction of an insufficient budget
-      // helps nobody, and promising more than the budget would be dishonest.
-      total = roundTotal(budget);
-    } else if (constrained) {
-      // Show what the selected scope genuinely costs, not a budget multiple.
-      requirements = buildRequirements(answers, assessments, key);
-      total = roundTotal(requirements.total);
+    } else if (key === "growth") {
+      // The selected scope. A budget with headroom simply funds more media.
+      requirements = scopeFit.completeScope;
+      totalRange = requirements.total;
+      total = roundTotal(Math.max(available, midpoint(totalRange)));
     } else {
-      // The budget covers the requirement, so any surplus buys more reach.
-      requirements = buildRequirements(answers, assessments, key);
-      total = roundTotal(Math.max(requirements.total, budget * sMeta.budgetFactor));
+      /*
+       * A broader scope carries its own price and is never clamped to the
+       * budget, otherwise a generous budget would collapse Growth and Expansion
+       * onto the same number and the ladder would stop meaning anything.
+       */
+      requirements = buildRequirements(answers, assessments, key, { scope: "full" });
+      totalRange = requirements.total;
+      const growthTotal = roundTotal(Math.max(available, midpoint(scopeFit.completeScope.total)));
+      total = roundTotal(Math.max(midpoint(totalRange), growthTotal * 1.25));
     }
   } else {
     const goal = clamp(num(fin.goalCount) ?? 0, 0, ASSUMPTIONS.maxGoal);
     const scenarioGoal = Math.round(goal * sMeta.goalFactor);
     const goalMedia = estimateMediaSpend(answers, scenarioGoal);
-    requirements = buildRequirements(answers, assessments, key, { goalMedia });
-    total = roundTotal(requirements.total);
+    requirements = buildRequirements(answers, assessments, key, { goalMedia, scope: "full" });
+    totalRange = requirements.total;
+    total = roundTotal(midpoint(totalRange));
     if (goalMedia !== null && goalMedia > 0) estimatedResults = scenarioGoal;
   }
 
   /*
-   * The reserve sits OUTSIDE the six allocation categories, so the presentation
-   * can hold to I = P + M + R. Since R = r_R x (P + M), the reserve inside any
-   * total is total x r_R / (1 + r_R), which keeps the three displayed figures
-   * adding up exactly whatever the total turns out to be.
+   * The reserve sits outside the six allocation categories so P + M + R = I
+   * holds exactly, whatever the rounding does.
    */
   const allocatable = roundTotal(Math.max(0, total / (1 + RESERVE.rate)));
-  // Defined as the remainder rather than recomputed, so P + M + R equals the
-  // total exactly no matter how the allocation rounding lands.
   const reserveAmount = Math.max(0, total - allocatable);
 
-  // Amounts start at the protected minimums. Anything left over flows to media,
-  // the line that buys more reach.
-  const base: Record<CategoryKey, number> = {
-    strategy:   requirements.strategy,
-    creative:   requirements.creative,
-    digital:    requirements.digital,
-    media:      requirements.media,
-    management: requirements.management,
-    testing:    requirements.testing,
-  };
-  const baseTotal = CATEGORY_KEYS.reduce((t, k) => t + base[k], 0);
-  const surplus = allocatable - baseTotal;
-  if (surplus > 0) {
-    base.media += surplus;
-  } else if (surplus < 0 && baseTotal > 0) {
-    // Budget below the requirement: media absorbs the shortfall first, because
-    // the protected lines are the work the campaign depends on. Only once media
-    // is exhausted do the protected lines scale, and the feasibility panel then
-    // says plainly that the foundation itself is underfunded.
-    const shortfall = -surplus;
-    if (base.media >= shortfall) {
-      base.media -= shortfall;
-    } else {
-      const remaining = shortfall - base.media;
-      base.media = 0;
-      const protectedTotal = baseTotal - requirements.media;
-      const scale = protectedTotal > 0 ? Math.max(0, (protectedTotal - remaining) / protectedTotal) : 0;
-      for (const k of CATEGORY_KEYS) if (k !== "media") base[k] *= scale;
+  let base: Record<CategoryKey, number>;
+  let plannedChannels: ChannelKey[] = requirements.activeChannels;
+
+  if (isPreparationPhase) {
+    /*
+     * Below the lean minimum there is no campaign to allocate. Scaling every
+     * category down would imply the whole scope is still deliverable, which is
+     * exactly the misrepresentation this model exists to prevent. A preparation
+     * sprint funds only what it can honestly deliver, and media stays at zero.
+     */
+    base = { strategy: 0, creative: 0, digital: 0, media: 0, management: 0, testing: 0 };
+    const share = allocatable / PREPARATION_PHASE.categories.length;
+    for (const cat of PREPARATION_PHASE.categories) base[cat] = share;
+    // Weight the sprint toward strategy; testing holds a small validation reserve.
+    base.strategy = allocatable * 0.8;
+    base.testing = allocatable * 0.2;
+    plannedChannels = [];
+  } else {
+    /*
+     * Media activation is only responsible once the lean protected minimum AND
+     * the minimum practical channel media are both funded. Below that the media
+     * line is zero: a few hundred dollars cannot run a channel, and showing it
+     * as media would imply an activation that will not happen.
+     */
+    const mediaActivation = fin.mode !== "budget" || !scopeFit.applies
+      || scopeFit.status === "focused-pilot" || scopeFit.status === "scope-supported";
+
+    // Price at the midpoint when the plan can carry it, at the lean minimum when
+    // it cannot. Either way the protected lines come first.
+    const mid = (r: Range) => (r.min + r.max) / 2;
+    const midSum = [requirements.strategy, requirements.creative, requirements.digital,
+      requirements.media, requirements.management, requirements.testing]
+      .reduce((t, r) => t + mid(r), 0);
+    const useMid = allocatable >= midSum;
+    const pick = (r: Range) => (useMid ? mid(r) : r.min);
+
+    base = {
+      strategy:   pick(requirements.strategy),
+      creative:   pick(requirements.creative),
+      digital:    pick(requirements.digital),
+      media:      mediaActivation ? pick(requirements.media) : 0,
+      management: pick(requirements.management),
+      testing:    pick(requirements.testing),
+    };
+    if (!mediaActivation) plannedChannels = [];
+
+    const baseTotal = CATEGORY_KEYS.reduce((t, k) => t + base[k], 0);
+    const surplus = allocatable - baseTotal;
+    if (surplus > 0) {
+      if (mediaActivation) base.media += surplus;
+      else {
+        // No channel to fund, so deepen the protected work instead of inventing
+        // a media line the plan cannot activate.
+        const protectedSum = baseTotal;
+        if (protectedSum > 0) {
+          const factor = (protectedSum + surplus) / protectedSum;
+          for (const k of CATEGORY_KEYS) if (k !== "media") base[k] *= factor;
+        }
+      }
+    } else if (surplus < 0 && baseTotal > 0) {
+      // Media absorbs a shortfall first; protected work is the last thing cut.
+      const shortfall = -surplus;
+      if (base.media >= shortfall) base.media -= shortfall;
+      else {
+        const remaining = shortfall - base.media;
+        base.media = 0;
+        plannedChannels = [];
+        const protectedSum = baseTotal - base.media;
+        const scale = protectedSum > 0 ? Math.max(0, (protectedSum - remaining) / protectedSum) : 0;
+        for (const k of CATEGORY_KEYS) if (k !== "media") base[k] *= scale;
+      }
     }
   }
 
   const shares = sharesFromAmounts(base);
   const amounts = allocationAmounts(allocatable, shares);
-  const supported = affordableChannels(selectedChannels, answers.scope.durationDays, amounts.media);
-  // Never claim a channel the media line cannot actually fund.
+  const supported = affordableChannels(answers.scope.channels, answers.scope.durationDays, amounts.media);
   if (supported.length === 0) plannedChannels = [];
   else if (plannedChannels.length > supported.length) plannedChannels = supported;
   const recommendedChannels = Math.min(plannedChannels.length, sMeta.channelCap);
@@ -620,10 +675,12 @@ export function buildScenario(
   return {
     key,
     total,
+    totalRange,
     reserveAmount,
     shares,
     amounts,
     requirements,
+    isPreparationPhase,
     plannedChannels,
     mediaSpend: amounts.media,
     recommendedChannels,
@@ -897,7 +954,7 @@ export function readinessNarrative(result: ReadinessResult): string {
 export function calculate(answers: CalculatorAnswers): CalculationResult {
   const readiness = readinessScore(answers);
   const fit = feasibility(answers);
-  const budgetConstrained = fit.applies && fit.status !== "supported";
+  const budgetConstrained = fit.applies && fit.status !== "scope-supported";
 
   const scenarios = {
     essential: buildScenario(answers, "essential", fit),
@@ -936,36 +993,37 @@ export function feasibilityNarrative(answers: CalculatorAnswers, fit: Feasibilit
   const months = Math.round(campaignMonths(answers.scope.durationDays));
   const duration = months >= 2 ? `${months} months` : `${answers.scope.durationDays} days`;
   const channels = fit.selectedChannels;
-  const req = fit.requirements;
+  const lean = fit.minimumViable;
+  const full = fit.completeScope;
 
   if (!fit.applies) {
     return {
-      headline: "Scope and budget are sized from your goal.",
-      detail: `In goal-first mode the investment is derived from what you want to achieve. This scope prices at about ${formatMoney(req.total)}: ${formatMoney(req.protectedTotal)} of protected campaign investment plus ${formatMoney(req.media)} of media.`,
+      headline: "Scope and investment are sized from your goal.",
+      detail: `In goal-first mode the investment follows from what you want to achieve. The complete selected scope estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is protected campaign investment.`,
     };
   }
 
-  if (fit.status === "supported") {
+  if (fit.status === "scope-supported") {
     return {
-      headline: "Scope supported.",
-      detail: `The available investment can support the protected campaign requirements (${formatMoney(req.protectedTotal)}) and the selected media mix across ${channels} channel${channels === 1 ? "" : "s"} over ${duration}.`,
+      headline: "Selected scope supported.",
+      detail: `The available investment supports the estimated complete-scope requirements of ${formatRange(full.total)} across ${channels} channel${channels === 1 ? "" : "s"} over ${duration}, subject to professional review.`,
     };
   }
-  if (fit.status === "pilot") {
+  if (fit.status === "focused-pilot") {
     return {
       headline: "Focused pilot.",
-      detail: `Your budget can support a reduced channel mix, but not every channel originally selected. After the ${formatMoney(req.protectedTotal)} of protected campaign requirements, about ${formatMoney(fit.mediaAvailable)} remains for media, which funds ${fit.supportedChannels} of your ${channels} selected channel${channels === 1 ? "" : "s"} over ${duration}.`,
+      detail: `A reduced one-channel campaign may be feasible. The lean professional minimum is ${formatRange(lean.total)}, against a complete selected scope of ${formatRange(full.total)}. The plan below lists what is included, reused, and deferred.`,
     };
   }
-  if (fit.status === "preparation") {
+  if (fit.status === "campaign-preparation") {
     return {
       headline: "Campaign preparation.",
-      detail: `The campaign foundation can be developed, but the remaining budget does not support responsible media activation. The protected requirements come to ${formatMoney(req.protectedTotal)}, and the cheapest single channel needs about ${formatMoney(req.singleChannelFloor)} of media over ${duration}.`,
+      detail: `The minimum campaign foundation may be supported, but the remaining investment does not meet the minimum practical media requirement of ${formatRange(lean.media)} for a single channel over ${duration}.`,
     };
   }
   return {
-    headline: "Foundation phase only.",
-    detail: `Your available investment does not currently fund all essential campaign requirements and media activation. The protected campaign investment alone is about ${formatMoney(req.protectedTotal)}, against a stated budget of ${formatMoney(fit.budget)}. Delivering the full selected scope is closer to ${formatMoney(req.total)}.`,
+    headline: "Preparation phase only.",
+    detail: `The available investment of ${formatMoney(fit.available)} is below the lean professional minimum of ${formatRange(lean.total)} for responsible campaign activation. It can fund a defined strategy or preparation sprint. Media activation and complete campaign delivery are excluded from this phase. The complete selected scope estimates at ${formatRange(full.total)}.`,
   };
 }
 
@@ -975,27 +1033,28 @@ export interface FeasibilityPath {
   text:  string;
 }
 
-/** The three practical ways forward when the budget cannot fund the scope. */
+/** The practical ways forward when the investment cannot fund the selected scope. */
 export function feasibilityPaths(answers: CalculatorAnswers, fit: FeasibilityResult): FeasibilityPath[] {
-  if (!fit.applies || fit.status === "supported") return [];
-  const req = fit.requirements;
-  const cheapest = req.channelMediaFloors.slice().sort((a, b) => a.amount - b.amount)[0];
+  if (!fit.applies || fit.status === "scope-supported") return [];
+  const lean = fit.minimumViable;
+  const full = fit.completeScope;
+  const cheapest = lean.channelMediaFloors.slice().sort((a, b) => a.amount - b.amount)[0];
 
   return [
     {
-      id: "pilot",
-      title: "Focused pilot",
-      text: `Use the available ${formatMoney(fit.budget)} to prepare one campaign destination, one primary creative format, basic measurement, and one advertising channel${cheapest ? ` (${channelLabel(cheapest.channel)} needs about ${formatMoney(cheapest.amount)} of media over the campaign)` : ""}.`,
+      id: "preparation",
+      title: "Strategy and setup sprint",
+      text: `Use the available ${formatMoney(fit.available)} to define the campaign objective and audience, recommend one channel, set the core message direction, and build a basic activation plan. Media activation is not included in this phase.`,
     },
     {
-      id: "foundation",
-      title: "Build the foundation first",
-      text: `Allocate this phase to positioning, messaging, essential creative, and campaign infrastructure. The protected campaign investment is about ${formatMoney(req.protectedTotal)}. Activate paid media in a future phase.`,
+      id: "pilot",
+      title: "Reduce to a one-channel pilot",
+      text: `A lean professional campaign on one channel${cheapest ? ` (${channelLabel(cheapest.channel)}, about ${formatMoney(cheapest.amount)} of media)` : ""} using existing brand identity, website, and basic tracking estimates at ${formatRange(lean.total)}.`,
     },
     {
       id: "increase",
-      title: "Increase the investment",
-      text: `Maintain the ${fit.selectedChannels}-channel scope by increasing the available budget to about ${formatMoney(req.total)} once the required campaign components are defined.`,
+      title: "Fund the selected scope",
+      text: `Delivering the ${fit.selectedChannels}-channel scope originally selected estimates at ${formatRange(full.total)}, of which ${formatRange(full.protectedTotal)} is protected campaign investment.`,
     },
   ];
 }
