@@ -35,6 +35,18 @@ import { useOrg } from "@/hooks/useOrg";
 import BranchSelect from "@/components/branches/BranchSelect";
 import { branchMatchesFilter, useAccessibleBranches, type BranchFilterValue } from "@/hooks/useBranches";
 
+/**
+ * Column widths for the desktop contact table. The header and the rows MUST use
+ * the same track list or the headings drift out of line with their cells, so it
+ * is declared once here rather than repeated in both places.
+ */
+const GRID_COLS =
+  // Must stay ONE unbroken literal: Tailwind's scanner matches whole class
+  // names in the source, so splitting it across a concatenation means no CSS is
+  // generated and the grid collapses to a single column.
+  // eslint-disable-next-line max-len
+  "grid-cols-[36px_minmax(0,2.4fr)_minmax(0,0.8fr)_minmax(0,0.85fr)_minmax(0,1.35fr)_minmax(0,0.7fr)_minmax(0,0.6fr)_minmax(0,0.4fr)_84px]";
+
 type SortKey = "activity" | "name" | "company" | "stage" | "contacted" | "followup" | "deal";
 type SortDir = 1 | -1;
 type StageFilter = "all" | "none" | PipelineStage;
@@ -506,8 +518,12 @@ export default function Contacts() {
 
                 {/* Table */}
                 <div className="border border-border rounded-lg overflow-hidden">
-                  {/* Header (desktop) */}
-                  <div className="hidden md:grid grid-cols-[36px_1.4fr_1fr_0.8fr_1fr_0.8fr_0.8fr_0.6fr_96px] bg-muted/50 border-b border-border">
+                  {/* Rows and header share one scroll box: with the header
+                      outside it, the rows lost the scrollbar's width and every
+                      column drifted left of its heading. Sticky keeps it in
+                      view while scrolling. */}
+                  <div className="max-h-[640px] overflow-y-auto">
+                  <div className={cn("hidden md:grid sticky top-0 z-10", GRID_COLS, "bg-muted border-b border-border")}>
                     <div className="px-3 py-2 flex items-center justify-center border-r border-border">
                       <button onClick={toggleSelectAll} className="text-muted-foreground hover:text-primary transition-colors">
                         {allSelected ? <CheckSquare size={14} className="text-primary" /> : <Square size={14} />}
@@ -531,7 +547,7 @@ export default function Contacts() {
                   </div>
 
                   {/* Rows */}
-                  <div className="max-h-[640px] overflow-y-auto">
+                  <div>
                     {isLoading ? (
                       <div className="p-4 space-y-2">
                         {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -552,7 +568,8 @@ export default function Contacts() {
                             {/* Desktop row */}
                             <div
                               className={cn(
-                                "hidden md:grid grid-cols-[36px_2.4fr_0.8fr_0.85fr_1.35fr_0.7fr_0.6fr_0.4fr_84px] border-b border-border last:border-b-0 transition-colors group cursor-pointer",
+                                "hidden md:grid border-b border-border last:border-b-0 transition-colors group cursor-pointer",
+                                GRID_COLS,
                                 isChecked ? "bg-primary/5" : "hover:bg-muted/40"
                               )}
                               onClick={() => setSlideOverContact(c)}
@@ -791,6 +808,7 @@ export default function Contacts() {
                       })
                     )}
                   </div>
+                  </div>{/* end scroll box */}
                 </div>
               </div>{/* end main content */}
             </div>{/* end flex layout */}
