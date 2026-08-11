@@ -7,7 +7,7 @@
 // prospect can ignore it, print it, or copy it without giving up anything.
 
 import { useRef, useState } from "react";
-import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,15 +17,22 @@ import {
   CTA_COPY, LEAD_INTENTS, buildLeadBody, isEmail, planSummaryLines,
   type LeadIntent,
 } from "@/lib/campaign/lead";
-import type { CalculationResult, CalculatorAnswers, ScenarioPlan } from "@/lib/campaign/types";
+import { buildPlanPdf, downloadPdf, type PlanPdf } from "@/lib/campaign/pdf";
+import type {
+  CalculationResult, CalculatorAnswers, ScenarioPlan, Shares,
+} from "@/lib/campaign/types";
+
+/** SendGrid caps a message at 30MB; this is a far more conservative guard. */
+const MAX_ATTACHMENT_BYTES = 4_000_000;
 
 interface ReviewCtaProps {
-  answers: CalculatorAnswers;
-  result:  CalculationResult;
-  plan:    ScenarioPlan;
+  answers:       CalculatorAnswers;
+  result:        CalculationResult;
+  plan:          ScenarioPlan;
+  currentShares: Shares;
 }
 
-export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
+export default function ReviewCta({ answers, result, plan, currentShares }: ReviewCtaProps) {
   const copy = CTA_COPY[result.feasibility.status];
 
   const [name,   setName]   = useState("");
@@ -34,6 +41,9 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
   const [intent, setIntent] = useState<LeadIntent>("second-opinion");
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  /** Kept after submitting so the download works without rebuilding the file. */
+  const [pdf, setPdf] = useState<PlanPdf | null>(null);
+  const [emailed, setEmailed] = useState(true);
   const hp = useRef("");
 
   const summary = planSummaryLines(answers, result, plan);
@@ -50,10 +60,27 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
     if (Object.keys(next).length > 0) return;
 
     setStatus("sending");
+
+    // The PDF is a bonus, never a blocker: if it fails to build, the lead still
+    // goes through and the prospect is told the copy is not attached.
+    let built: PlanPdf | null = null;
+    try {
+      built = await buildPlanPdf(answers, result, plan, currentShares);
+      setPdf(built);
+    } catch (err) {
+      console.error("Plan PDF generation failed", err);
+    }
+
+    const attachable = built && built.bytes <= MAX_ATTACHMENT_BYTES ? built : null;
+    setEmailed(Boolean(attachable));
+
     try {
       const body = buildLeadBody(answers, result, plan, intent, {
         name, email, phone, hp: hp.current,
       });
+      if (attachable) {
+        body.attachment = { filename: attachable.filename, content_base64: attachable.base64 };
+      }
       const { data, error } = await supabase.functions.invoke("submit-av-lead", { body });
       if (error || (data as { error?: string } | null)?.error) {
         throw new Error((data as { error?: string } | null)?.error || error?.message);
@@ -62,6 +89,21 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
     } catch {
       setStatus("error");
     }
+  };
+
+  /** Builds on demand if the submit-time build failed, so the button always works. */
+  const handleDownload = async () => {
+    let file = pdf;
+    if (!file) {
+      try {
+        file = await buildPlanPdf(answers, result, plan, currentShares);
+        setPdf(file);
+      } catch (err) {
+        console.error("Plan PDF generation failed", err);
+        return;
+      }
+    }
+    downloadPdf(file);
   };
 
   if (status === "sent") {
@@ -79,11 +121,26 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
               Got it, {name.trim().split(/\s+/)[0]}. Your plan is on its way.
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              A copy is heading to {email.trim()} so you have it on hand, and it reached our team
-              with everything you worked out here. Someone will follow up within one business day,
-              and they will have read the plan first.
+              {emailed
+                ? <>Your plan is heading to {email.trim()} as a PDF, and it reached our team with
+                    everything you worked out here.</>
+                : <>It reached our team with everything you worked out here. The PDF was too large
+                    to email, so grab it below and it is yours.</>}{" "}
+              Someone will follow up within one business day, and they will have read the plan first.
             </p>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              className="mt-3 gap-1.5 bg-background"
+            >
+              <Download size={14} aria-hidden="true" />
+              Download your plan (PDF)
+            </Button>
+
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
               Nothing on this page changed. Print it or copy the summary any time.
             </p>
           </div>
@@ -187,7 +244,7 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
               className="transition-transform group-open:rotate-180 motion-reduce:transition-none"
               aria-hidden="true"
             />
-            Your plan goes with this. See exactly what we receive.
+            Your plan goes with this as a PDF. See exactly what we receive.
           </summary>
           <dl className="mt-2 space-y-1 border-t border-border pt-2 text-[11px] leading-relaxed">
             {summary.map((line) => (
@@ -219,7 +276,7 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
             {status === "sending" ? (
               <>
                 <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                Sending
+                Preparing your plan
               </>
             ) : (
               <>
@@ -229,7 +286,8 @@ export default function ReviewCta({ answers, result, plan }: ReviewCtaProps) {
             )}
           </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            No obligation, and the plan stays yours either way.
+            We email you the PDF and you can download it here too. No obligation, and the plan
+            stays yours either way.
           </p>
         </div>
         <p aria-live="polite" className="sr-only">

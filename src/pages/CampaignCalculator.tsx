@@ -371,7 +371,7 @@ export default function CampaignCalculator() {
 
             <BreakEvenCard plan={plan} />
             <DetailCards result={result} plan={plan} currentShares={currentShares} />
-            <ReviewCta answers={answers} result={result} plan={plan} />
+            <ReviewCta answers={answers} result={result} plan={plan} currentShares={currentShares} />
             <Disclaimer />
 
             <PrintReport answers={answers} result={result} plan={plan} currentShares={currentShares} />

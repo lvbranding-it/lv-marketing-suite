@@ -208,6 +208,8 @@ export interface CampaignLeadBody {
   company:         string | null;
   message:         string | null;
   plan_summary:    PlanLine[];
+  /** The plan PDF, attached to both emails. Omitted if generation failed. */
+  attachment?:     { filename: string; content_base64: string };
   hp:              string;
 }
 

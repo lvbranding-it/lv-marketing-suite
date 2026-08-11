@@ -119,7 +119,40 @@ interface LeadPayload {
   message?:         string | null;
   /** Optional pre-computed brief (campaign calculator). Rendered verbatim. */
   plan_summary?:    { label: string; value: string }[];
+  /** Optional PDF built in the browser, attached to both emails. */
+  attachment?:      { filename: string; content_base64: string };
   hp?:              string;
+}
+
+/** SendGrid caps a message at 30MB. This stays well under it. */
+const MAX_ATTACHMENT_BYTES = 6_000_000;
+
+/**
+ * Validates the client-supplied attachment. It arrives from a public endpoint,
+ * so the filename is stripped to a safe basename and the payload is checked for
+ * being base64 and for size before it is ever handed to SendGrid.
+ */
+function attachmentOf(l: LeadPayload): { content: string; filename: string; type: string; disposition: string }[] {
+  const a = l.attachment;
+  if (!a || typeof a.content_base64 !== "string" || typeof a.filename !== "string") return [];
+
+  const content = a.content_base64.replace(/\s/g, "");
+  if (!content || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
+    console.error("Attachment rejected: not base64");
+    return [];
+  }
+  // 4 base64 chars encode 3 bytes.
+  const bytes = Math.floor(content.length * 3 / 4);
+  if (bytes > MAX_ATTACHMENT_BYTES) {
+    console.error("Attachment rejected: too large", bytes);
+    return [];
+  }
+
+  const filename = (a.filename.split(/[\\/]/).pop() ?? "")
+    .replace(/[^\w\s.,()-]/g, "")
+    .slice(0, 120) || "campaign-investment-plan.pdf";
+
+  return [{ content, filename, type: "application/pdf", disposition: "attachment" }];
 }
 
 /** Guards against a client sending an oversized or malformed brief. */
@@ -186,7 +219,7 @@ function teamEmail(l: LeadPayload, cfg: FormConfig, id: string, isEs: boolean): 
 }
 
 // Prospect auto-reply, in the visitor's language
-function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
+function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean, hasPdf = false): string {
   const first = esc(l.contact_name.split(" ")[0] || l.contact_name);
   const homeUrl = isEs ? "https://es.lvbranding.com" : "https://www.lvbranding.com";
   const t = isEs
@@ -195,6 +228,7 @@ function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
         p1:   `Tu ${esc(cfg.replyContextEs)} llegó a nuestro equipo. Revisaremos los detalles y te contactaremos en un día hábil para agendar una llamada.`,
         p2:   `Mientras tanto, si algo es urgente, responde a este correo y nos llega directo.`,
         planH: "Tu plan, para que lo tengas a la mano:",
+        pdf:  "El plan completo va adjunto en PDF, para que lo guardes o lo compartas con tu equipo.",
         cta:  "Explora LV Branding →",
         foot: `LV Branding · ${esc(cfg.labelEs)} · Houston, TX`,
       }
@@ -203,6 +237,7 @@ function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
         p1:   `Your ${esc(cfg.replyContext)} just landed with our team. We'll review the details and reach out within one business day to book a discovery call.`,
         p2:   `In the meantime, if anything's time-sensitive, just reply to this email and it comes straight to us.`,
         planH: "Here's the plan you built, so you have it on hand:",
+        pdf:  "The full plan is attached as a PDF, so you can keep it or pass it on to your team.",
         cta:  "Explore LV Branding →",
         foot: `LV Branding · ${esc(cfg.label)} · Houston, TX`,
       };
@@ -226,6 +261,7 @@ function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean): string {
         <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.65;">${t.p1}</p>
         <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65;">${t.p2}</p>
         ${planBlock}
+        ${hasPdf ? `<p style="margin:0 0 20px;font-size:13px;color:#4B5563;line-height:1.6;">📄 ${t.pdf}</p>` : ""}
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;"><tr>
           <td style="border-radius:10px;background:${BRAND};">
             <a href="${homeUrl}" target="_blank" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px;">${t.cta}</a>
@@ -292,7 +328,9 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
         pipeline_stage: "lead",
         tags:           baseTags,
         crm_notes:      note,
-        raw_data:       l as unknown as Record<string, unknown>,
+        // The attachment is stripped: storing a base64 PDF here would add tens
+        // of kilobytes to every contact row for no retrievable benefit.
+        raw_data:       { ...l, attachment: undefined } as unknown as Record<string, unknown>,
       });
     }
   } catch (e) {
@@ -300,7 +338,15 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
   }
 }
 
-async function sendMail(to: { email: string; name?: string }[], subject: string, html: string, replyTo?: string) {
+type Attachment = { content: string; filename: string; type: string; disposition: string };
+
+async function sendMail(
+  to: { email: string; name?: string }[],
+  subject: string,
+  html: string,
+  replyTo?: string,
+  attachments: Attachment[] = [],
+) {
   if (!SENDGRID_API_KEY) { console.error("SENDGRID_API_KEY not set, skipping email"); return; }
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method:  "POST",
@@ -311,6 +357,7 @@ async function sendMail(to: { email: string; name?: string }[], subject: string,
       ...(replyTo ? { reply_to: { email: replyTo } } : {}),
       subject,
       content: [{ type: "text/html", value: html }],
+      ...(attachments.length > 0 ? { attachments } : {}),
     }),
   });
   if (res.status !== 202) console.error("SendGrid error:", res.status, await res.text());
@@ -368,10 +415,14 @@ Deno.serve(async (req: Request) => {
     ? `Recibimos tu ${cfg.replyContextEs} · LV Branding`
     : `We received your ${cfg.replyContext} · LV Branding`;
 
+  // The same PDF goes to both: the prospect keeps their plan, and the rep can
+  // read it before the first call without opening the calculator.
+  const attachments = attachmentOf(l);
+
   try {
     await Promise.allSettled([
-      sendMail(NOTIFY_RECIPIENTS, `${cfg.emoji} New ${cfg.label} lead${isEs ? " 🇪🇸" : ""}: ${l.contact_name}${l.company ? ` (${l.company})` : ""}`, teamEmail(l, cfg, inserted.id, isEs), l.contact_email),
-      sendMail([{ email: l.contact_email, name: l.contact_name }], replySubject, replyEmail(l, cfg, isEs), FROM_EMAIL),
+      sendMail(NOTIFY_RECIPIENTS, `${cfg.emoji} New ${cfg.label} lead${isEs ? " 🇪🇸" : ""}: ${l.contact_name}${l.company ? ` (${l.company})` : ""}`, teamEmail(l, cfg, inserted.id, isEs), l.contact_email, attachments),
+      sendMail([{ email: l.contact_email, name: l.contact_name }], replySubject, replyEmail(l, cfg, isEs, attachments.length > 0), FROM_EMAIL, attachments),
     ]);
   } catch (e) {
     console.error("Email dispatch error:", e);

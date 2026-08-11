@@ -30,6 +30,7 @@ src/lib/campaign/
   validate.ts                           Step validation (pure; shared with persist)
   persist.ts                            localStorage + schema migration (key :v2)
   lead.ts                               Lead payload + CTA copy (pure)
+  pdf.ts                                Vector PDF of the plan (jsPDF, lazy)
   engine.test.ts                        Engine tests
   persist.test.ts                       Migration and restore-validation tests
 ```
@@ -287,6 +288,23 @@ from the report up to `<body>` adding `.cc-print-hidden` to every sibling, and
 it. `visibility: hidden` alone does not work here: hidden elements still occupy
 layout and would push the report past page one.
 
+**Two renderers, one report.** `PrintReport.tsx` draws it as HTML for the browser
+print dialog; `pdf.ts` draws the same sections with jsPDF for the emailed
+attachment and the download button. They must stay in step: if one gains a
+section, so should the other. The PDF is vector text (about 20KB, generated in
+roughly 120ms) rather than a rasterised screenshot, so it stays small and its
+text is selectable and searchable.
+
+jsPDF is imported dynamically, so it lands in its own chunk and never touches
+the initial bundle. `clean()` maps typographic characters (em dash, curly
+quotes, ellipsis) to WinAnsi equivalents, because jsPDF's built-in fonts cannot
+render anything outside that set.
+
+Layout gotchas already fixed, worth not reintroducing: headings reserve space
+for the lines that follow them (`ensure()`), or they strand themselves at the
+foot of a page; and table cells carry `CELL_PAD`, without which a right-aligned
+column's text runs straight into its neighbour.
+
 **Styling.** `.cc-report*` in `index.css`, deliberately its own namespace
 because `.printable-output*` belongs to the skills print output and is used by
 History and OutputDetail. The layout rules sit OUTSIDE `@media print` so the
@@ -349,6 +367,21 @@ plan. Both are covered by tests in `lead.test.ts`.
 
 Leads are tagged `Campaign Calculator Lead` so this source can be segmented and
 measured separately from the service landing forms.
+
+**The PDF attachment.** On submit the browser builds the plan PDF and sends it
+as `attachment: { filename, content_base64 }`. The edge function validates it
+(base64 shape, 6MB ceiling, filename reduced to a safe basename) before handing
+it to SendGrid, and attaches the same file to both the prospect's auto-reply and
+the team notification. It is stripped from `raw_data` before the CRM insert; a
+base64 PDF on every contact row would cost tens of kilobytes for nothing.
+
+Generation never blocks the lead. If the PDF fails to build, the submission
+still goes through, the success copy says the file was not attached, and the
+download button rebuilds it on demand.
+
+**The result stays ungated.** Print and Copy summary work before the form is
+ever touched. The download button is an addition after submitting, not a wall in
+front of the plan.
 
 ## Analytics
 
