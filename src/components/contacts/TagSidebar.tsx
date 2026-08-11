@@ -91,7 +91,7 @@ export default function TagSidebar({ contacts, selectedTag, onSelectTag }: Props
         )}
       >
         <Users size={14} className="shrink-0" />
-        <span className="flex-1 truncate">All Contacts</span>
+        <span className="flex-1">All Contacts</span>
         <span className="text-[10px] font-normal tabular-nums">{totalWithEmail}</span>
       </button>
 
@@ -163,7 +163,10 @@ export default function TagSidebar({ contacts, selectedTag, onSelectTag }: Props
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ background: def.color }}
             />
-            <span className={cn("flex-1 text-sm truncate", isActive ? "text-primary font-medium" : "text-foreground")}>
+            <span
+              className={cn("flex-1 text-sm leading-snug break-words", isActive ? "text-primary font-medium" : "text-foreground")}
+              title={def.name}
+            >
               {def.name}
             </span>
             <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{count}</span>
@@ -212,7 +215,7 @@ export default function TagSidebar({ contacts, selectedTag, onSelectTag }: Props
           )}
         >
           <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-slate-400" />
-          <span className="flex-1 truncate">{name}</span>
+          <span className="flex-1 leading-snug break-words text-left" title={name}>{name}</span>
           <span className="text-[10px] tabular-nums">{tagCounts.get(name) ?? 0}</span>
         </button>
       ))}

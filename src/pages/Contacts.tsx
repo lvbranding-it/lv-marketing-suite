@@ -35,7 +35,7 @@ import { useOrg } from "@/hooks/useOrg";
 import BranchSelect from "@/components/branches/BranchSelect";
 import { branchMatchesFilter, useAccessibleBranches, type BranchFilterValue } from "@/hooks/useBranches";
 
-type SortKey = "name" | "company" | "stage" | "contacted" | "followup" | "deal";
+type SortKey = "activity" | "name" | "company" | "stage" | "contacted" | "followup" | "deal";
 type SortDir = 1 | -1;
 type StageFilter = "all" | "none" | PipelineStage;
 
@@ -154,12 +154,29 @@ export default function Contacts() {
     return m;
   }, [tagDefs]);
 
+  // A contact added in the last two days is called out, so a lead that arrived
+  // overnight is obvious without reading timestamps.
+  const activityAt = (c: ImportedContact): string | null => {
+    // Array.prototype.at is ES2022; this project targets ES2020.
+    const stamps = ([c.updated_at, c.created_at].filter(Boolean) as string[]).sort();
+    return stamps.length ? stamps[stamps.length - 1] : null;
+  };
+
+  const isNew = (c: ImportedContact) => {
+    const at = activityAt(c);
+    return Boolean(at) && Date.now() - new Date(at as string).getTime() < 48 * 60 * 60 * 1000;
+  };
+
   // ── View state ──────────────────────────────────────────────────────────
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<StageFilter>("all");
   const [search, setSearch]   = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>(1);
+  // Most recent activity first. Not created_at: the lead endpoint upserts by
+  // email, so a returning prospect updates an existing contact and keeps its
+  // original created_at. Sorting by creation would hide exactly the submissions
+  // this page exists to surface.
+  const [sortKey, setSortKey] = useState<SortKey>("activity");
+  const [sortDir, setSortDir] = useState<SortDir>(-1);
   const [slideOverContact, setSlideOverContact] = useState<ImportedContact | null>(null);
   const [formOpen, setFormOpen]     = useState(false);
   const [editTarget, setEditTarget] = useState<ImportedContact | null>(null);
@@ -170,6 +187,7 @@ export default function Contacts() {
     const q = search.toLowerCase();
     const bySort = (a: ImportedContact, b: ImportedContact): number => {
       switch (sortKey) {
+        case "activity":  return (activityAt(a) ?? "").localeCompare(activityAt(b) ?? "");
         case "name":      return fullName(a).localeCompare(fullName(b));
         case "company":   return (a.company ?? "").localeCompare(b.company ?? "");
         case "stage": {
@@ -408,7 +426,7 @@ export default function Contacts() {
             <div className="flex gap-4 items-start">
 
               {/* Desktop tag sidebar */}
-              <div className="hidden lg:block w-48 shrink-0 sticky top-4">
+              <div className="hidden lg:block w-60 shrink-0 sticky top-4">
                 <div className="bg-card border border-border rounded-lg p-3 max-h-[80vh] overflow-y-auto">
                   <TagSidebar
                     contacts={contacts}
@@ -496,7 +514,7 @@ export default function Contacts() {
                       </button>
                     </div>
                     {([
-                      ["Name", "name"], ["Company", "company"], ["Stage", "stage"], ["Tags", null],
+                      ["Name", "name"], ["Activity", "activity"], ["Stage", "stage"], ["Tags", null],
                       ["Last contacted", "contacted"], ["Follow-up", "followup"], ["Deal", "deal"], ["", null],
                     ] as [string, SortKey | null][]).map(([col, sk], i) => (
                       <div
@@ -534,7 +552,7 @@ export default function Contacts() {
                             {/* Desktop row */}
                             <div
                               className={cn(
-                                "hidden md:grid grid-cols-[36px_1.4fr_1fr_0.8fr_1fr_0.8fr_0.8fr_0.6fr_96px] border-b border-border last:border-b-0 transition-colors group cursor-pointer",
+                                "hidden md:grid grid-cols-[36px_2.4fr_0.8fr_0.85fr_1.35fr_0.7fr_0.6fr_0.4fr_84px] border-b border-border last:border-b-0 transition-colors group cursor-pointer",
                                 isChecked ? "bg-primary/5" : "hover:bg-muted/40"
                               )}
                               onClick={() => setSlideOverContact(c)}
@@ -545,15 +563,38 @@ export default function Contacts() {
                                 </button>
                               </div>
 
-                              {/* Name + title */}
+                              {/* Name, with company or title beneath so the column
+                                  that used to hold company can show arrival time. */}
                               <div className="px-3 py-2.5 flex flex-col justify-center overflow-hidden">
-                                <span className="text-sm font-medium truncate">{fullName(c)}</span>
-                                {c.title && <span className="text-[10px] text-muted-foreground truncate">{c.title}</span>}
+                                <span className="text-sm font-medium truncate" title={fullName(c)}>
+                                  {isNew(c) && (
+                                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" aria-label="New" />
+                                  )}
+                                  {fullName(c)}
+                                </span>
+                                {(c.company || c.title) && (
+                                  <span className="text-[10px] truncate" title={c.company ?? c.title ?? undefined}>
+                                    <span className="text-sky-600">{c.company}</span>
+                                    {c.company && c.title && <span className="text-muted-foreground"> · </span>}
+                                    <span className="text-muted-foreground">{c.title}</span>
+                                  </span>
+                                )}
                               </div>
 
-                              {/* Company */}
-                              <div className="px-3 py-2.5 flex items-center overflow-hidden border-l border-border">
-                                <span className="truncate text-xs text-sky-600">{c.company ?? "—"}</span>
+                              {/* Activity: when anything last happened with this
+                                  contact, which for a lead is its submission. */}
+                              <div className="px-3 py-2.5 flex items-center border-l border-border">
+                                <span
+                                  className={cn("text-[10px] truncate", isNew(c) ? "text-primary font-semibold" : "text-muted-foreground")}
+                                  title={[
+                                    c.created_at ? `Added ${new Date(c.created_at).toLocaleString()}` : null,
+                                    c.updated_at ? `Updated ${new Date(c.updated_at).toLocaleString()}` : null,
+                                  ].filter(Boolean).join(" · ")}
+                                >
+                                  {activityAt(c)
+                                    ? formatDistanceToNow(new Date(activityAt(c) as string), { addSuffix: true })
+                                    : "—"}
+                                </span>
                               </div>
 
                               {/* Stage */}
@@ -572,8 +613,9 @@ export default function Contacts() {
                                 {(c.tags ?? []).slice(0, 2).map((t) => (
                                   <span
                                     key={t}
-                                    className="text-[9px] px-1.5 py-0.5 rounded-full font-medium text-white truncate max-w-[80px]"
+                                    className="text-[9px] px-1.5 py-0.5 rounded-full font-medium text-white truncate max-w-[130px] shrink-0"
                                     style={{ background: tagColorMap.get(t) ?? "#6366f1" }}
+                                    title={t}
                                   >{t}</span>
                                 ))}
                                 {(c.tags ?? []).length > 2 && (
