@@ -445,6 +445,68 @@ function CalculatorBody({ lang }: { lang: Lang }) {
       <style>{`
         :root { ${CATEGORIES.map((c) => `--cc-${c.key}: ${c.colorLight};`).join(" ")} }
         .dark { ${CATEGORIES.map((c) => `--cc-${c.key}: ${c.colorDark};`).join(" ")} }
+
+        /* Allocation sliders. The track is painted here rather than left to the
+           native accent-color, which derives the UNFILLED track from the accent's
+           luminance: the lighter category colours (green, orange, amber) produced
+           a near-black bar while the darker ones (blue, red, purple) produced a
+           light one. Same track for all six, filled portion in category colour.
+           --cc-accent and --cc-pct are set per slider in ResultsDashboard. */
+        .cc-range {
+          --cc-thumb-size: 14px;
+          --cc-track-size: 6px;
+          /* The thumb centre travels inset by half its width, so the fill has to
+             follow it rather than run to a flat percentage of the track. */
+          --cc-fill-to: calc(var(--cc-pct, 0) * (100% - var(--cc-thumb-size)) / 100 + var(--cc-thumb-size) / 2);
+          -webkit-appearance: none;
+          appearance: none;
+          background: transparent;
+        }
+        .cc-range::-webkit-slider-runnable-track {
+          height: var(--cc-track-size);
+          border-radius: 999px;
+          background: linear-gradient(to right,
+            var(--cc-accent) 0 var(--cc-fill-to),
+            hsl(var(--border)) var(--cc-fill-to) 100%);
+        }
+        .cc-range::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          height: var(--cc-thumb-size);
+          width: var(--cc-thumb-size);
+          margin-top: calc((var(--cc-track-size) - var(--cc-thumb-size)) / 2);
+          border-radius: 50%;
+          background: var(--cc-accent);
+          border: 2px solid hsl(var(--background));
+          box-shadow: 0 0 0 1px hsl(var(--border));
+        }
+        /* Firefox fills the track natively, so it gets a plain track plus progress. */
+        .cc-range::-moz-range-track {
+          height: var(--cc-track-size);
+          border-radius: 999px;
+          background: hsl(var(--border));
+        }
+        .cc-range::-moz-range-progress {
+          height: var(--cc-track-size);
+          border-radius: 999px;
+          background: var(--cc-accent);
+        }
+        .cc-range::-moz-range-thumb {
+          height: var(--cc-thumb-size);
+          width: var(--cc-thumb-size);
+          border-radius: 50%;
+          background: var(--cc-accent);
+          border: 2px solid hsl(var(--background));
+          box-shadow: 0 0 0 1px hsl(var(--border));
+        }
+        /* appearance:none drops the native focus ring; keyboard users keep one. */
+        .cc-range:focus-visible { outline: none; }
+        .cc-range:focus-visible::-webkit-slider-thumb {
+          box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+        }
+        .cc-range:focus-visible::-moz-range-thumb {
+          box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+        }
       `}</style>
     </div>
   );

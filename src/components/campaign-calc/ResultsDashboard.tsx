@@ -2,7 +2,7 @@
 // State lives in the page; this renders the interactive centrepiece. All math
 // comes from the engine; this file never computes an allocation itself.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { AlertTriangle, CheckCircle2, Copy, Check, HelpCircle, Lock, LockOpen, Printer, RotateCcw, SlidersHorizontal, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,9 @@ import { StatusBadge } from "./shared";
 
 /** Splices a standalone sentence into the middle of another one. */
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+/** No single category may be dragged past this share of the budget. */
+const SLIDER_MAX = 80;
 
 interface ResultsDashboardProps {
   answers:        CalculatorAnswers;
@@ -380,6 +383,12 @@ export default function ResultsDashboard({
             const status = shareStatus(share, rec);
             const isLocked = locked.includes(cat.key);
             const isActive = active === cat.key;
+            // The track is painted by .cc-range, so the filled portion has to be
+            // measured against this slider's own range rather than against 100.
+            const sliderMin = cat.key === "media" ? 0 : Math.max(1, floorPct);
+            const fillPct = sliderMin < SLIDER_MAX
+              ? Math.min(100, Math.max(0, ((pct - sliderMin) / (SLIDER_MAX - sliderMin)) * 100))
+              : 100;
             return (
               <div
                 key={cat.key}
@@ -414,7 +423,7 @@ export default function ResultsDashboard({
                 <div className="mt-1 flex items-center gap-3 pl-5">
                   <input
                     type="range"
-                    min={cat.key === "media" ? 0 : Math.max(1, floorPct)} max={80} step={1}
+                    min={sliderMin} max={SLIDER_MAX} step={1}
                     value={pct}
                     disabled={isLocked}
                     aria-label={`${cat.label} share of the budget`}
@@ -422,8 +431,11 @@ export default function ResultsDashboard({
                     onChange={(e) => onSharesChange(cat.key, Number(e.target.value) / 100)}
                     onFocus={() => setHovered(cat.key)}
                     onBlur={() => setHovered(null)}
-                    style={{ accentColor: `var(--cc-${cat.key})` }}
-                    className="h-6 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                    style={{
+                      "--cc-accent": `var(--cc-${cat.key})`,
+                      "--cc-pct": fillPct.toFixed(2),
+                    } as CSSProperties}
+                    className="cc-range h-6 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                   />
                   <span className="w-24 shrink-0 text-right text-xs font-semibold tabular-nums">
                     {formatMoney(amounts[cat.key])}
