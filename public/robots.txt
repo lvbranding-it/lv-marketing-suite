@@ -1,0 +1,51 @@
+# LV Marketing Suite
+#
+# This host is mostly a private application: 57 of its 78 routes sit behind
+# authentication, and several public ones carry a secret in the URL
+# (/review/<token>, /upload/<token>, /download/<token>, /share/<token>,
+# /intake/<org>). So the policy is deny by default and allow the marketing
+# pages explicitly, rather than the reverse.
+#
+# Consequence worth knowing: a new public page is NOT crawlable until it is
+# added here and to the sitemap. scripts/generate-sitemap.mjs builds the sitemap
+# from the same list, so add the route in one place there and mirror it here.
+
+User-agent: *
+Disallow: /
+
+# Service landing pages
+Allow: /av-event-production-houston
+Allow: /brand-strategy-identity-houston
+Allow: /commercial-photography-video-production-houston
+Allow: /creative-strategy-content-design-houston
+Allow: /digital-marketing-paid-media-houston
+Allow: /industry-web-solutions-web-app-development
+Allow: /ux-ui-web-design-user-experiences-web-development
+Allow: /es/av-event-production-houston
+Allow: /es/brand-strategy-identity-houston
+Allow: /es/commercial-photography-video-production-houston
+Allow: /es/creative-strategy-content-design-houston
+Allow: /es/digital-marketing-paid-media-houston
+Allow: /es/industry-web-solutions-web-app-development
+Allow: /es/ux-ui-web-design-user-experiences-web-development
+
+# Free public tools
+Allow: /campaign-investment-calculator
+Allow: /es/calculadora-de-inversion-en-campanas
+Allow: /en/tools/website-opportunity-audit
+Allow: /es/tools/auditoria-de-oportunidades-web
+Allow: /qr-generator
+Allow: /image-studio
+Allow: /email-signature-generator
+
+# A report URL carries an anonymous read capability in its fragment and is a
+# private share link, so the result and in-progress steps stay out of search
+# even though their parent tool is indexed.
+Disallow: /en/tools/website-opportunity-audit/context
+Disallow: /en/tools/website-opportunity-audit/analyzing
+Disallow: /en/tools/website-opportunity-audit/results
+Disallow: /es/tools/auditoria-de-oportunidades-web/contexto
+Disallow: /es/tools/auditoria-de-oportunidades-web/analizando
+Disallow: /es/tools/auditoria-de-oportunidades-web/resultados
+
+Sitemap: https://marketing.lvbranding.com/sitemap.xml

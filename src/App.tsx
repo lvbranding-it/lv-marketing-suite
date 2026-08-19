@@ -48,6 +48,7 @@ const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
 const CampaignCalculator     = lazy(() => import("@/pages/CampaignCalculator"));
 const CampaignCalculatorEs = lazy(() => import("@/pages/es/CampaignCalculatorEs"));
 const WebsiteOpportunityAudit = lazy(() => import("@/pages/WebsiteOpportunityAudit"));
+const NotFound               = lazy(() => import("@/pages/NotFound"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
@@ -381,7 +382,9 @@ function AppRoutes() {
       <Route path="/ccs/clients/:clientId" element={<ProtectedRoute><Suspense fallback={null}><CcsClientDetail /></Suspense></ProtectedRoute>} />
       <Route path="/ccs/projects" element={<ProtectedRoute><Suspense fallback={null}><CcsProjects /></Suspense></ProtectedRoute>} />
       <Route path="/ccs/projects/:projectId" element={<ProtectedRoute><Suspense fallback={null}><CcsProjectDetail /></Suspense></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Unmatched routes render a real not-found page. This used to redirect
+          to /dashboard, which sent every mistyped public URL to the login screen. */}
+      <Route path="*" element={<Suspense fallback={null}><NotFound /></Suspense>} />
     </Routes>
   );
 }
