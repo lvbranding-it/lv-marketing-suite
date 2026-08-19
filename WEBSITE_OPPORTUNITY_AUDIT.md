@@ -30,7 +30,9 @@ The current application remains a Vite SPA. Live page retrieval does not run in 
 - Postgres stores normalized signals and findings, not full fetched HTML.
 - `submit-av-lead` remains the established CRM/email integration. The audit gateway constructs its payload from the authorized stored audit; the browser cannot supply trusted scores, priority findings, or lead temperature.
 
-The current Edge Function completes the crawl in one request. It caps each fetch at 9 seconds, PageSpeed at 22 seconds, redirects at four, pages at five, and each HTML response at 1.5 MB. PageSpeed runs only for the submitted page in this MVP.
+The current Edge Function completes the crawl in one request. It caps each fetch at 9 seconds, PageSpeed at 22 seconds, redirects at four, and pages at five. PageSpeed runs only for the submitted page in this MVP.
+
+Response size is capped in two tiers: 8 MB for the submitted page and 2.5 MB for each representative page. The submitted page is fetched on its own, while the representative pages are fetched concurrently and each in-flight body is held twice while its chunks are joined, so the lower linked ceiling is what bounds peak worker memory. A single 1.5 MB cap was rejecting site-builder homepages, which commonly inline their content and ship 3 MB or more of HTML.
 
 The production build emits localized English and Spanish landing shells with title, description, canonical, hreflang, and index directives in the initial HTML. It also emits localized `noindex,nofollow` shells for context, analyzing, and result routes. Vercel routes those paths to the generated shells before the general SPA fallback; React keeps the metadata synchronized during client navigation.
 

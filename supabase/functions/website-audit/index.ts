@@ -48,7 +48,21 @@ const DRAIN_SECRET = Deno.env.get("AUDIT_DRAIN_SECRET") ?? "";
 
 const RULESET_VERSION = AUDIT_VERSION;
 const MAX_REDIRECTS = 4;
-const MAX_RESPONSE_BYTES = 1_500_000;
+/**
+ * Response size ceilings, split by how many run at once.
+ *
+ * 1.5 MB rejected a large share of real sites: site-builder homepages inline
+ * their content and routinely ship 3 MB or more of HTML, so the audit failed on
+ * exactly the sites most likely to need it.
+ *
+ * The submitted page is fetched alone, so it gets the generous ceiling. The
+ * representative pages are fetched four at a time, and each in-flight body is
+ * held twice while its chunks are joined, so peak memory tracks roughly
+ * `MAX_RESPONSE_BYTES + 8 x MAX_LINKED_RESPONSE_BYTES`. Keeping the linked
+ * ceiling lower is what stops a wide crawl from exhausting the worker.
+ */
+const MAX_RESPONSE_BYTES = 8_000_000;
+const MAX_LINKED_RESPONSE_BYTES = 2_500_000;
 const MAX_REQUEST_BYTES = 50_000;
 const FETCH_TIMEOUT_MS = 9_000;
 const DNS_TIMEOUT_MS = 2_500;
@@ -296,10 +310,10 @@ async function cancelBody(response: Response): Promise<void> {
   try { await response.body?.cancel(); } catch { /* the request is already being abandoned */ }
 }
 
-async function readLimitedBody(response: Response): Promise<string> {
+async function readLimitedBody(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) return "";
   const declared = Number(response.headers.get("content-length") || 0);
-  if (declared > MAX_RESPONSE_BYTES) {
+  if (declared > maxBytes) {
     await cancelBody(response);
     throw new AuditError("response_too_large", "The page response is too large to audit.", 422);
   }
@@ -310,7 +324,7 @@ async function readLimitedBody(response: Response): Promise<string> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_RESPONSE_BYTES) {
+    if (size > maxBytes) {
       await reader.cancel();
       throw new AuditError("response_too_large", "The page response is too large to audit.", 422);
     }
@@ -332,6 +346,7 @@ async function fetchPublicHtml(
   input: URL,
   deadline: number,
   admitDestination: (url: URL) => Promise<void>,
+  maxBytes: number = MAX_RESPONSE_BYTES,
 ): Promise<FetchedPage> {
   let current = new URL(input.toString());
   const requestedUrl = current.toString();
@@ -366,7 +381,7 @@ async function fetchPublicHtml(
         await cancelBody(response);
         throw new AuditError("content_unsupported", "The destination did not return a public HTML page.", 422);
       }
-      const html = await readLimitedBody(response);
+      const html = await readLimitedBody(response, maxBytes);
       return {
         requestedUrl,
         finalUrl: current.toString(),
@@ -1178,7 +1193,7 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
     const [representativeRows, lab] = await Promise.all([
       Promise.all(links.map(async (candidate) => {
         try {
-          const fetched = await fetchPublicHtml(candidate.url, deadline, admitDestination);
+          const fetched = await fetchPublicHtml(candidate.url, deadline, admitDestination, MAX_LINKED_RESPONSE_BYTES);
           if (normalizeHostname(new URL(fetched.finalUrl).hostname) !== finalDomain) {
             warnings.push(`${candidate.type}:redirect_off_domain`);
             return null;
