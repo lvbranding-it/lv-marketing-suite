@@ -591,6 +591,14 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Lead capture is temporarily unavailable." }, 503);
   }
 
+  // `event_date` is a date column, but it is fed by free-text fields across
+  // eight public funnels. Anything that is not an ISO date is dropped rather
+  // than sent to Postgres, which would reject the whole row and lose the lead.
+  const eventDate = /^\d{4}-\d{2}-\d{2}$/.test(l.event_date ?? "") ? l.event_date : null;
+  if (l.event_date && !eventDate) {
+    console.warn("submit-av-lead: dropping non-date event_date", source, String(l.event_date).slice(0, 60));
+  }
+
   const leadValues = {
     source,
     lang:            isEs ? "es" : "en",
@@ -598,7 +606,7 @@ Deno.serve(async (req: Request) => {
     services:        l.services,
     industry:        l.industry ?? null,
     event_timeframe: l.event_timeframe ?? null,
-    event_date:      l.event_date || null,
+    event_date:      eventDate,
     venue:           l.venue ?? null,
     attendees:       l.attendees ?? null,
     budget:          l.budget ?? null,

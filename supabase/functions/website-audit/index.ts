@@ -1533,7 +1533,11 @@ async function saveAuditLead(audit: Record<string, unknown>, body: Record<string
     services: topChecks.map((check) => copy.rules[check.ruleId].title),
     industry: businessLabel || null,
     event_timeframe: timelineLabel,
-    event_date: String(audit.id),
+    // `av_leads.event_date` is a date column. Sending the audit id here made
+    // every audit lead fail its insert with an invalid-date error, silently, so
+    // no audit lead ever reached the CRM. The id travels in `audit_summary` and
+    // in the message body instead, where it is readable and correctly typed.
+    event_date: null,
     venue: report.url,
     attendees: `${report.overallScore} / 100`,
     contact_name: name,
@@ -1543,6 +1547,7 @@ async function saveAuditLead(audit: Record<string, unknown>, body: Record<string
       `${copy.context.audience}: ${answers.audience}`,
       `${copy.lead.pathway}: ${routeCopy.label}`,
       context ? `${copy.lead.context}: ${context}` : null,
+      `Audit ID: ${audit.id}`,
       `Internal lead temperature: ${temperature}`,
     ].filter(Boolean).join("\n"),
     plan_summary: planSummary,
