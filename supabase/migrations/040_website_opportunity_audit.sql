@@ -426,7 +426,16 @@ begin
           headers := jsonb_build_object(
             'Content-Type', 'application/json',
             'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key' limit 1),
-            'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key' limit 1)
+            -- The drain authenticates with its own secret rather than the
+            -- service role key. Supabase injects SUPABASE_SERVICE_ROLE_KEY into
+            -- the function itself and may issue a different value than the one
+            -- stored here, which produced a silent 403 every minute in
+            -- production. Falls back to the service role key so an environment
+            -- without the drain secret keeps working.
+            'Authorization', 'Bearer ' || coalesce(
+              (select decrypted_secret from vault.decrypted_secrets where name = 'outbox_drain_secret' limit 1),
+              (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key' limit 1)
+            )
           ),
           body := jsonb_build_object('action', 'drain'),
           timeout_milliseconds := 25000

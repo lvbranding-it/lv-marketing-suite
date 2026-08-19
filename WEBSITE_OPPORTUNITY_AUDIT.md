@@ -68,9 +68,9 @@ Important production caveat: DNS validation followed by a hostname-based `fetch(
 
 No remote migration, secret change, function deployment, or Vercel deployment is performed by this implementation. To launch:
 
-1. Add `project_url` and `service_role_key` to Supabase Vault so migration 040 can install the independent one-minute outbox drain.
+1. Add `project_url`, `service_role_key`, and `outbox_drain_secret` to Supabase Vault so migration 040 can install the independent one-minute outbox drain. `outbox_drain_secret` must equal the function secret `AUDIT_DRAIN_SECRET`. Do not authenticate the drain with the service role key: Supabase injects `SUPABASE_SERVICE_ROLE_KEY` into the function itself and can issue a different value than the one stored in Vault, which returns 403 on every scheduled call while the rest of the function keeps working normally.
 2. Review and apply `supabase/migrations/040_website_opportunity_audit.sql` to the production Supabase project. If the Vault secrets were added afterward, install the documented `website-opportunity-audit-outbox` cron command from the migration manually.
-3. Set the server-only secret: `supabase secrets set PAGESPEED_API_KEY=...`.
+3. Set the server-only secrets: `supabase secrets set PAGESPEED_API_KEY=... AUDIT_DRAIN_SECRET=...`. `AUDIT_DRAIN_SECRET` must match the `outbox_drain_secret` Vault entry from step 1.
 4. Deploy the updated `submit-av-lead` function so `website-audit` is a recognized source. Its public route has bounded input, durable abuse limits, and service-only audit payloads.
 5. Deploy `website-audit`. Its `verify_jwt = false` setting is intentional because audit access is protected by the per-report bearer token, not a user account.
 6. Deploy the Vite application.

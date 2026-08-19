@@ -34,6 +34,17 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PAGESPEED_API_KEY = Deno.env.get("PAGESPEED_API_KEY") ?? "";
+/**
+ * Credential for the scheduled outbox drain, held by this function and by the
+ * cron job in Vault.
+ *
+ * The drain originally authenticated with the service role key, which broke in
+ * production: Supabase injects `SUPABASE_SERVICE_ROLE_KEY` itself and can issue
+ * a different value than the one an operator copied into Vault, so the cron got
+ * a 403 every minute while every other code path kept working. A secret owned
+ * by this feature has no such second source of truth.
+ */
+const DRAIN_SECRET = Deno.env.get("AUDIT_DRAIN_SECRET") ?? "";
 
 const RULESET_VERSION = AUDIT_VERSION;
 const MAX_REDIRECTS = 4;
@@ -899,6 +910,39 @@ async function hashToken(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Compares two secrets without leaking their contents through timing.
+ *
+ * Both sides are hashed first so the loop always runs over 64 hex characters:
+ * comparing the raw strings would return early on the first differing byte and
+ * would also reveal the expected length.
+ */
+async function secretsMatch(provided: string, expected: string): Promise<boolean> {
+  if (!provided || !expected) return false;
+  const [a, b] = await Promise.all([hashToken(provided), hashToken(expected)]);
+  let difference = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+/**
+ * Authorizes the scheduled outbox drain.
+ *
+ * `AUDIT_DRAIN_SECRET` is the supported credential. The service role key is
+ * still accepted so an already-scheduled cron keeps draining across the deploy
+ * that introduces the new secret; once the schedule sends the drain secret, the
+ * service role branch can be dropped.
+ */
+async function authorizedDrain(req: Request): Promise<boolean> {
+  const header = req.headers.get("authorization") ?? "";
+  if (!header.startsWith("Bearer ")) return false;
+  const provided = header.slice("Bearer ".length);
+  return (await secretsMatch(provided, DRAIN_SECRET)) ||
+    (await secretsMatch(provided, SERVICE_ROLE_KEY));
+}
+
 function safeAnswers(value: unknown): AuditAnswers {
   const answers = emptyAuditAnswers();
   if (!value || typeof value !== "object" || Array.isArray(value)) return answers;
@@ -1481,7 +1525,7 @@ Deno.serve(async (req: Request) => {
   try {
     await sweepExpiredAudits();
     if (action === "drain") {
-      if (!SERVICE_ROLE_KEY || req.headers.get("authorization") !== `Bearer ${SERVICE_ROLE_KEY}`) {
+      if (!await authorizedDrain(req)) {
         return json({ error: "Forbidden" }, 403);
       }
       await drainAuditLeadOutbox();
