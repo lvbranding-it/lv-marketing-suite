@@ -306,6 +306,24 @@ interface FetchedPage {
   html: string;
 }
 
+/**
+ * Retrieval is restricted to the two document kinds this service understands.
+ * Sitemaps go through the same redirect and SSRF gate as pages; only the
+ * accepted content type differs, so there is one vetted fetch path rather than
+ * a second one that could drift out of step with it.
+ */
+type ContentKind = "html" | "xml";
+
+const ACCEPT_HEADER: Record<ContentKind, string> = {
+  html: "text/html,application/xhtml+xml;q=0.9",
+  xml: "application/xml,text/xml;q=0.9",
+};
+
+const CONTENT_TYPE_PATTERN: Record<ContentKind, RegExp> = {
+  html: /text\/html|application\/xhtml\+xml/i,
+  xml: /(?:text|application)\/xml|application\/[\w.+-]*\+xml/i,
+};
+
 async function cancelBody(response: Response): Promise<void> {
   try { await response.body?.cancel(); } catch { /* the request is already being abandoned */ }
 }
@@ -347,6 +365,7 @@ async function fetchPublicHtml(
   deadline: number,
   admitDestination: (url: URL) => Promise<void>,
   maxBytes: number = MAX_RESPONSE_BYTES,
+  accepts: ContentKind = "html",
 ): Promise<FetchedPage> {
   let current = new URL(input.toString());
   const requestedUrl = current.toString();
@@ -363,7 +382,7 @@ async function fetchPublicHtml(
         signal: controller.signal,
         headers: {
           "User-Agent": "LVWebsiteOpportunityAudit/1.0 (+https://www.lvbranding.com)",
-          Accept: "text/html,application/xhtml+xml;q=0.9",
+          Accept: ACCEPT_HEADER[accepts],
         },
       });
 
@@ -377,7 +396,7 @@ async function fetchPublicHtml(
       }
 
       const contentType = response.headers.get("content-type") || "";
-      if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+      if (!CONTENT_TYPE_PATTERN[accepts].test(contentType)) {
         await cancelBody(response);
         throw new AuditError("content_unsupported", "The destination did not return a public HTML page.", 422);
       }
@@ -847,10 +866,31 @@ function discoverRepresentativeLinks(html: string, baseUrl: URL): { url: URL; ty
     } catch { /* ignore malformed destinations */ }
   }
 
+  return selectRepresentative(candidates, baseUrl);
+}
+
+/** Identity of a page for de-duplication: origin plus path, ignoring a trailing slash. */
+function pageKey(url: URL): string {
+  return `${url.origin}${url.pathname.replace(/\/$/, "") || "/"}`;
+}
+
+/**
+ * Reduces candidates to at most one page per type, in the order that makes a
+ * report most useful, and never re-audits the submitted page.
+ *
+ * Shared by in-page link discovery and the sitemap fallback so both produce the
+ * same shape of report; a second copy of this ranking would eventually disagree
+ * with the first.
+ */
+function selectRepresentative(
+  candidates: { url: URL; type: Exclude<PageType, "submitted"> }[],
+  baseUrl: URL,
+  exclude: Set<string> = new Set(),
+): { url: URL; type: Exclude<PageType, "submitted"> }[] {
   const unique = new Map<string, (typeof candidates)[number]>();
   for (const candidate of candidates) {
-    const key = `${candidate.url.origin}${candidate.url.pathname.replace(/\/$/, "") || "/"}`;
-    if (key !== `${baseUrl.origin}${baseUrl.pathname.replace(/\/$/, "") || "/"}` && !unique.has(key)) unique.set(key, candidate);
+    const key = pageKey(candidate.url);
+    if (key !== pageKey(baseUrl) && !exclude.has(key) && !unique.has(key)) unique.set(key, candidate);
   }
   const rows = [...unique.values()];
   const selected: (typeof rows)[number][] = [];
@@ -859,6 +899,110 @@ function discoverRepresentativeLinks(html: string, baseUrl: URL): { url: URL; ty
     if (match && selected.length < MAX_PAGES - 1) selected.push(match);
   }
   return selected.map(({ url, type }) => ({ url, type }));
+}
+
+/**
+ * Sitemap fallback for representative pages.
+ *
+ * Site builders render navigation with JavaScript, so a homepage can arrive with
+ * no crawlable same-domain anchors at all and the audit reduces to a single
+ * page. `sitemap.xml` is the one place those sites still publish their structure
+ * in plain markup.
+ *
+ * Bounded on purpose: it runs only when in-page discovery found nothing, tries
+ * two well-known filenames, and follows a sitemap index one level deep, so it
+ * adds at most three requests to an audit that would otherwise have had one
+ * page to show.
+ */
+const SITEMAP_CANDIDATES = ["/sitemap.xml", "/sitemap_index.xml"] as const;
+const MAX_SITEMAP_LOCATIONS = 2_000;
+const MAX_SITEMAP_CHILDREN = 2;
+/**
+ * A sitemap index is split by content type and the general pages are rarely the
+ * first entry. On a Wix index the pages sitemap sits behind bookings, blog
+ * posts and eleven per-collection dynamic sitemaps, so taking document order
+ * would read a bookings feed and conclude the site has no pages.
+ */
+const PAGE_SITEMAP_HINT = /(^|\/)pages?[_-]?sitemap|sitemap[_-]?pages?/i;
+
+function sitemapLocations(xml: string): string[] {
+  const locations: string[] = [];
+  const pattern = /<loc>\s*([^<\s][^<]*?)\s*<\/loc>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(xml)) !== null && locations.length < MAX_SITEMAP_LOCATIONS) {
+    locations.push(decodeEntities(match[1]));
+  }
+  return locations;
+}
+
+const isSitemapIndex = (xml: string): boolean => /<sitemapindex[\s>]/i.test(xml);
+
+async function fetchSitemap(
+  url: URL,
+  deadline: number,
+  admitDestination: (url: URL) => Promise<void>,
+): Promise<string | null> {
+  try {
+    const fetched = await fetchPublicHtml(url, deadline, admitDestination, MAX_LINKED_RESPONSE_BYTES, "xml");
+    return fetched.status >= 200 && fetched.status < 300 ? fetched.html : null;
+  } catch {
+    // A missing or unparseable sitemap is the normal case, not an audit failure.
+    return null;
+  }
+}
+
+async function discoverSitemapLinks(
+  baseUrl: URL,
+  deadline: number,
+  admitDestination: (url: URL) => Promise<void>,
+): Promise<{ url: URL; type: Exclude<PageType, "submitted"> }[]> {
+  const domain = normalizeHostname(baseUrl.hostname);
+  let xml: string | null = null;
+  for (const candidate of SITEMAP_CANDIDATES) {
+    xml = await fetchSitemap(new URL(candidate, baseUrl), deadline, admitDestination);
+    if (xml) break;
+  }
+  if (!xml) return [];
+
+  const documents: string[] = [];
+  if (isSitemapIndex(xml)) {
+    const children = sitemapLocations(xml).filter((location) => {
+      try { return normalizeHostname(new URL(location).hostname) === domain; } catch { return false; }
+    });
+    const ranked = [
+      ...children.filter((child) => PAGE_SITEMAP_HINT.test(child)),
+      ...children.filter((child) => !PAGE_SITEMAP_HINT.test(child)),
+    ];
+    for (const child of ranked.slice(0, MAX_SITEMAP_CHILDREN)) {
+      const body = await fetchSitemap(new URL(child), deadline, admitDestination);
+      if (!body) continue;
+      documents.push(body);
+      // One page-bearing sitemap is normally the whole story; stop rather than
+      // spend another request inside the audit deadline.
+      if (sitemapLocations(body).length >= MAX_PAGES) break;
+    }
+    if (documents.length === 0) return [];
+  } else {
+    documents.push(xml);
+  }
+
+  const candidates: { url: URL; type: Exclude<PageType, "submitted"> }[] = [];
+  for (const location of documents.flatMap(sitemapLocations)) {
+    try {
+      const url = new URL(location);
+      url.hash = "";
+      // The same exclusions in-page discovery applies, so the two paths cannot
+      // disagree about what counts as an auditable page.
+      if (!/^https?:$/.test(url.protocol) || normalizeHostname(url.hostname) !== domain) continue;
+      if (/\.(pdf|jpe?g|png|gif|webp|svg|zip|docx?|xlsx?)$/i.test(url.pathname)) continue;
+      if (/\b(logout|log-out|signout|sign-out|delete|remove|unsubscribe|wp-admin|admin|cart|checkout)\b/i.test(`${url.pathname} ${url.search}`)) continue;
+      const type = classifyPage(url);
+      if (type === "other") continue;
+      candidates.push({ url, type });
+    } catch { /* ignore malformed sitemap entries */ }
+  }
+
+  return selectRepresentative(candidates, baseUrl);
 }
 
 const noLab = (): LabSignals => ({
@@ -1188,8 +1332,19 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
     const primary = analyzeHtml(primaryFetched, classifyPage(primaryUrl) === "home" ? "home" : "submitted");
     if (primary.status < 200 || primary.status >= 400) throw new AuditError("response_unhealthy", `The submitted page returned HTTP ${primary.status}.`, 422);
     const finalDomain = normalizeHostname(new URL(primary.finalUrl).hostname);
-    const links = discoverRepresentativeLinks(primaryFetched.html, new URL(primaryFetched.finalUrl));
+    let links = discoverRepresentativeLinks(primaryFetched.html, primaryUrl);
     const warnings: string[] = [];
+    // Only when the page yielded nothing. Sites whose navigation is already in
+    // the markup keep their existing behaviour and pay no extra request, which
+    // matters because this runs inside the same audit deadline.
+    if (links.length === 0) {
+      links = await discoverSitemapLinks(primaryUrl, deadline, admitDestination);
+      // Only a genuine miss is a warning. The report renders one amber notice
+      // for any non-PageSpeed warning, so flagging a successful sitemap
+      // discovery would tell the visitor their scope was incomplete at exactly
+      // the moment it was recovered.
+      if (links.length === 0) warnings.push("no_representative_pages");
+    }
     const [representativeRows, lab] = await Promise.all([
       Promise.all(links.map(async (candidate) => {
         try {
