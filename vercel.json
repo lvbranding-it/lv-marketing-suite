@@ -3,6 +3,14 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/en/tools/website-opportunity-audit/results/(.*)", "destination": "/website-audit-private-en.html" },
+    { "source": "/en/tools/website-opportunity-audit/context", "destination": "/website-audit-private-en.html" },
+    { "source": "/en/tools/website-opportunity-audit/analyzing", "destination": "/website-audit-private-en.html" },
+    { "source": "/es/tools/auditoria-de-oportunidades-web/resultados/(.*)", "destination": "/website-audit-private-es.html" },
+    { "source": "/es/tools/auditoria-de-oportunidades-web/contexto", "destination": "/website-audit-private-es.html" },
+    { "source": "/es/tools/auditoria-de-oportunidades-web/analizando", "destination": "/website-audit-private-es.html" },
+    { "source": "/en/tools/website-opportunity-audit", "destination": "/website-audit-en.html" },
+    { "source": "/es/tools/auditoria-de-oportunidades-web", "destination": "/website-audit-es.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

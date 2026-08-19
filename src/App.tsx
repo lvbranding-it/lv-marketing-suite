@@ -47,6 +47,7 @@ const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
 const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
 const CampaignCalculator     = lazy(() => import("@/pages/CampaignCalculator"));
 const CampaignCalculatorEs = lazy(() => import("@/pages/es/CampaignCalculatorEs"));
+const WebsiteOpportunityAudit = lazy(() => import("@/pages/WebsiteOpportunityAudit"));
 const AvEventProduction      = lazy(() => import("@/pages/AvEventProduction"));
 const WebSolutionsLead       = lazy(() => import("@/pages/WebSolutionsLead"));
 const UxUiDesignLead         = lazy(() => import("@/pages/UxUiDesignLead"));
@@ -88,6 +89,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) return null;
   if (!session) return <Navigate to="/auth" replace />;
   return <>{children}</>;
+}
+
+function WebsiteAuditLocaleRedirectRoute() {
+  let language = "en";
+  try {
+    const stored = localStorage.getItem("lv-website-opportunity-audit:language");
+    language = stored === "es" || (!stored && navigator.language.toLowerCase().startsWith("es")) ? "es" : "en";
+  } catch { /* English is the safe default */ }
+  const landing = language === "es" ? "/es/tools/auditoria-de-oportunidades-web" : "/en/tools/website-opportunity-audit";
+  return <Navigate to={`${landing}${window.location.search}`} replace />;
 }
 
 function AppRoutes() {
@@ -276,6 +287,16 @@ function AppRoutes() {
       <Route path="/email-signature-generator" element={<Suspense fallback={null}><SignatureGenerator /></Suspense>} />
       {/* Campaign Investment Calculator — public planning tool (no auth) */}
       <Route path="/campaign-investment-calculator" element={<Suspense fallback={null}><CampaignCalculator /></Suspense>} />
+      {/* Website Opportunity Audit — public bilingual tool (no auth) */}
+      <Route path="/tools/website-opportunity-audit" element={<WebsiteAuditLocaleRedirectRoute />} />
+      <Route path="/en/tools/website-opportunity-audit" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="en" phase="landing" /></Suspense>} />
+      <Route path="/en/tools/website-opportunity-audit/context" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="en" phase="context" /></Suspense>} />
+      <Route path="/en/tools/website-opportunity-audit/analyzing" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="en" phase="analyzing" /></Suspense>} />
+      <Route path="/en/tools/website-opportunity-audit/results/:auditId" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="en" phase="results" /></Suspense>} />
+      <Route path="/es/tools/auditoria-de-oportunidades-web" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="es" phase="landing" /></Suspense>} />
+      <Route path="/es/tools/auditoria-de-oportunidades-web/contexto" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="es" phase="context" /></Suspense>} />
+      <Route path="/es/tools/auditoria-de-oportunidades-web/analizando" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="es" phase="analyzing" /></Suspense>} />
+      <Route path="/es/tools/auditoria-de-oportunidades-web/resultados/:auditId" element={<Suspense fallback={null}><WebsiteOpportunityAudit language="es" phase="results" /></Suspense>} />
       {/* Service lead wizards — public (no auth) */}
       <Route path="/av-event-production-houston" element={<Suspense fallback={null}><AvEventProduction /></Suspense>} />
       <Route path="/industry-web-solutions-web-app-development" element={<Suspense fallback={null}><WebSolutionsLead /></Suspense>} />

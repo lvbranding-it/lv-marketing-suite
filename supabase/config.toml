@@ -389,6 +389,12 @@ verify_jwt = false
 [functions.ccs-client]
 verify_jwt = false
 
+[functions.submit-av-lead]
+verify_jwt = false
+
+[functions.website-audit]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

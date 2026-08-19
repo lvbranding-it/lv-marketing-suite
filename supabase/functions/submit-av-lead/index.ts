@@ -2,7 +2,8 @@
  * submit-av-lead: public endpoint (no JWT required)
  * Shared lead-capture backend for the LV Branding service landing forms (EN + ES):
  *   av-landing · web-solutions · ux-ui-design · creative-content ·
- *   photo-video · brand-strategy · digital-marketing
+ *   photo-video · brand-strategy · digital-marketing ·
+ *   campaign-calculator · website-audit
  *
  *   1. Inserts the lead into public.av_leads (service role, bypasses RLS)
  *   2. Syncs the lead into the CRM (contacts pipeline) with a per-form tag
@@ -22,6 +23,8 @@ const LV_LOGO_URL = "https://lv-marketing-suite.vercel.app/lv-logo.png";
 const FROM_EMAIL  = "admin@lvbranding.com";
 const FROM_NAME   = "LV Branding";
 const BRAND       = "#CB2039";
+const MAX_REQUEST_BYTES = 3_000_000;
+const MAX_ATTACHMENT_BYTES = 2_000_000;
 
 const NOTIFY_RECIPIENTS = [
   { email: "luis@lvbranding.com", name: "Luis" },
@@ -87,6 +90,15 @@ const FORM_CONFIGS: Record<string, FormConfig> = {
     fields: { type: "Looking for", timeframe: "Campaign length", date: "Start date", venue: "Campaign destination", attendees: "Audience size" },
     servicesLabel: "Channels",
   },
+  // Sent only after someone has received the complete public Website Opportunity
+  // Audit and explicitly asks for help. `plan_summary` carries the score,
+  // dimensions, and priority plan in the visitor's selected language.
+  "website-audit": {
+    label: "Website Opportunity Audit", labelEs: "Auditoría de Oportunidades Web", emoji: "🧭", tag: "Website Audit Lead",
+    replyContext: "website audit follow-up request", replyContextEs: "solicitud de seguimiento de auditoría web",
+    fields: { type: "Preferred pathway", timeframe: "Timeline", date: "Audit ID", venue: "Website", attendees: "Opportunity score" },
+    servicesLabel: "Top opportunities",
+  },
 };
 
 const cors = {
@@ -95,7 +107,10 @@ const cors = {
 };
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
 
 const esc = (s: unknown) =>
@@ -121,11 +136,128 @@ interface LeadPayload {
   plan_summary?:    { label: string; value: string }[];
   /** Optional PDF built in the browser, attached to both emails. */
   attachment?:      { filename: string; content_base64: string };
+  /** Service-only downstream deduplication key supplied by the audit outbox. */
+  idempotency_key?: string;
+  /** Service-only stable audit context retained after the short-lived audit expires. */
+  audit_summary?: Record<string, unknown>;
+  consent_record?: Record<string, unknown>;
   hp?:              string;
 }
 
-/** SendGrid caps a message at 30MB. This stays well under it. */
-const MAX_ATTACHMENT_BYTES = 6_000_000;
+class LeadRequestError extends Error {
+  constructor(message: string, public status = 400) { super(message); }
+}
+
+async function readLimitedJson(req: Request): Promise<Record<string, unknown>> {
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) {
+    throw new LeadRequestError("Request too large", 413);
+  }
+  if (!req.body) throw new LeadRequestError("Invalid JSON");
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_REQUEST_BYTES) {
+      await reader.cancel();
+      throw new LeadRequestError("Request too large", 413);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  let parsed: unknown;
+  try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new LeadRequestError("Invalid JSON"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new LeadRequestError("Invalid JSON");
+  return parsed as Record<string, unknown>;
+}
+
+function field(value: unknown, maximum: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maximum) : "";
+}
+
+function nullableField(value: unknown, maximum: number): string | null {
+  const result = field(value, maximum);
+  return result || null;
+}
+
+function normalizedLead(raw: Record<string, unknown>): LeadPayload {
+  const attachment = raw.attachment && typeof raw.attachment === "object" && !Array.isArray(raw.attachment)
+    ? raw.attachment as Record<string, unknown>
+    : null;
+  return {
+    source: field(raw.source, 80) || undefined,
+    lang: raw.lang === "es" ? "es" : "en",
+    event_type: field(raw.event_type, 200),
+    services: Array.isArray(raw.services)
+      ? raw.services.filter((value): value is string => typeof value === "string").slice(0, 20).map((value) => value.trim().slice(0, 160)).filter(Boolean)
+      : [],
+    industry: nullableField(raw.industry, 200),
+    event_timeframe: nullableField(raw.event_timeframe, 160),
+    event_date: nullableField(raw.event_date, 160),
+    venue: nullableField(raw.venue, 500),
+    attendees: nullableField(raw.attendees, 160),
+    budget: nullableField(raw.budget, 160),
+    contact_name: field(raw.contact_name, 160),
+    contact_email: field(raw.contact_email, 254).toLowerCase(),
+    contact_phone: nullableField(raw.contact_phone, 80),
+    company: nullableField(raw.company, 200),
+    message: nullableField(raw.message, 4_000),
+    plan_summary: Array.isArray(raw.plan_summary) ? raw.plan_summary as { label: string; value: string }[] : undefined,
+    attachment: attachment
+      ? { filename: field(attachment.filename, 180), content_base64: field(attachment.content_base64, MAX_REQUEST_BYTES) }
+      : undefined,
+    idempotency_key: field(raw.idempotency_key, 100) || undefined,
+    audit_summary: raw.audit_summary && typeof raw.audit_summary === "object" && !Array.isArray(raw.audit_summary)
+      ? raw.audit_summary as Record<string, unknown> : undefined,
+    consent_record: raw.consent_record && typeof raw.consent_record === "object" && !Array.isArray(raw.consent_record)
+      ? raw.consent_record as Record<string, unknown> : undefined,
+    hp: field(raw.hp, 200) || undefined,
+  };
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const recentPublicRequests = new Map<string, number[]>();
+
+function enforceWorkerLimit(key: string, limit: number): void {
+  const now = Date.now();
+  const since = now - 10 * 60_000;
+  if (recentPublicRequests.size > 5_000) {
+    for (const [candidate, times] of recentPublicRequests) {
+      if (times.every((time) => time < since)) recentPublicRequests.delete(candidate);
+      if (recentPublicRequests.size <= 4_000) break;
+    }
+    while (recentPublicRequests.size > 5_000) recentPublicRequests.delete(recentPublicRequests.keys().next().value as string);
+  }
+  const recent = (recentPublicRequests.get(key) ?? []).filter((time) => time >= since);
+  if (recent.length >= limit) throw new LeadRequestError("Too many requests. Try again later.", 429);
+  recent.push(now);
+  recentPublicRequests.set(key, recent);
+}
+
+// deno-lint-ignore no-explicit-any
+async function enforceDurableLimit(admin: any, scope: string, fingerprint: string, limit: number): Promise<void> {
+  const keyHash = await sha256(`${scope}:${fingerprint}`);
+  const { data, error } = await admin.rpc("consume_edge_rate_limit", {
+    p_scope: scope,
+    p_key_hash: keyHash,
+    p_limit: limit,
+    p_window_seconds: 600,
+  });
+  if (error) {
+    console.error("submit-av-lead durable rate limit failed", error.message);
+    throw new LeadRequestError("Lead capture is temporarily unavailable.", 503);
+  }
+  if (data !== true) throw new LeadRequestError("Too many requests. Try again later.", 429);
+}
 
 /**
  * Validates the client-supplied attachment. It arrives from a public endpoint,
@@ -137,20 +269,23 @@ function attachmentOf(l: LeadPayload): { content: string; filename: string; type
   if (!a || typeof a.content_base64 !== "string" || typeof a.filename !== "string") return [];
 
   const content = a.content_base64.replace(/\s/g, "");
-  if (!content || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
-    console.error("Attachment rejected: not base64");
-    return [];
+  if (!content || content.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
+    throw new LeadRequestError("Attachment must be a valid PDF.");
   }
   // 4 base64 chars encode 3 bytes.
-  const bytes = Math.floor(content.length * 3 / 4);
+  const padding = content.endsWith("==") ? 2 : content.endsWith("=") ? 1 : 0;
+  const bytes = Math.floor(content.length * 3 / 4) - padding;
   if (bytes > MAX_ATTACHMENT_BYTES) {
-    console.error("Attachment rejected: too large", bytes);
-    return [];
+    throw new LeadRequestError("Attachment is too large.", 413);
   }
 
   const filename = (a.filename.split(/[\\/]/).pop() ?? "")
     .replace(/[^\w\s.,()-]/g, "")
     .slice(0, 120) || "campaign-investment-plan.pdf";
+  if (!/\.pdf$/i.test(filename)) throw new LeadRequestError("Attachment must be a PDF.");
+  let signature = "";
+  try { signature = atob(content.slice(0, 12)); } catch { throw new LeadRequestError("Attachment must be a valid PDF."); }
+  if (!signature.startsWith("%PDF-")) throw new LeadRequestError("Attachment must be a valid PDF.");
 
   return [{ content, filename, type: "application/pdf", disposition: "attachment" }];
 }
@@ -275,15 +410,17 @@ function replyEmail(l: LeadPayload, cfg: FormConfig, isEs: boolean, hasPdf = fal
 }
 
 // deno-lint-ignore no-explicit-any
-async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: string, isEs: boolean) {
+async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: string, isEs: boolean): Promise<boolean> {
   try {
-    const email = l.contact_email.trim();
+    const email = l.contact_email.trim().toLowerCase();
     const parts = l.contact_name.trim().split(/\s+/);
     const first = parts[0] || l.contact_name.trim();
     const last  = parts.slice(1).join(" ") || null;
 
     const plan = planLines(l);
+    const deliveryMarker = `[Lead delivery: ${leadId}]`;
     const note = [
+      deliveryMarker,
       `${cfg.label} lead (website form${isEs ? " · Spanish" : ""})`,
       l.event_type       ? `${cfg.fields.type}: ${l.event_type}` : null,
       l.services?.length ? `${cfg.servicesLabel ?? "Services"}: ${l.services.join(", ")}` : null,
@@ -299,24 +436,27 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
 
     const baseTags = isEs ? [cfg.tag, "Website", "Español"] : [cfg.tag, "Website"];
 
-    const { data: existing } = await admin
+    const { data: existing, error: lookupError } = await admin
       .from("contacts")
       .select("id, crm_notes, tags, phone, company")
       .eq("org_id", CRM_ORG_ID)
-      .ilike("email", email)
+      .eq("email", email)
       .maybeSingle();
+    if (lookupError) throw new Error(lookupError.message);
 
     if (existing) {
+      if (typeof existing.crm_notes === "string" && existing.crm_notes.includes(deliveryMarker)) return true;
       const tags = Array.from(new Set([...(existing.tags ?? []), ...baseTags]));
-      await admin.from("contacts").update({
+      const { error } = await admin.from("contacts").update({
         crm_notes: `${note}\n\n${existing.crm_notes ?? ""}`.trim(),
         tags,
         phone:     existing.phone   || l.contact_phone || null,
         company:   existing.company || l.company       || null,
         updated_at: new Date().toISOString(),
       }).eq("id", existing.id);
+      if (error) throw new Error(error.message);
     } else {
-      await admin.from("contacts").insert({
+      const { error } = await admin.from("contacts").insert({
         org_id:         CRM_ORG_ID,
         first_name:     first,
         last_name:      last,
@@ -332,9 +472,12 @@ async function syncToCrm(admin: any, l: LeadPayload, cfg: FormConfig, leadId: st
         // of kilobytes to every contact row for no retrievable benefit.
         raw_data:       { ...l, attachment: undefined } as unknown as Record<string, unknown>,
       });
+      if (error) throw new Error(error.message);
     }
+    return true;
   } catch (e) {
     console.error("CRM sync error:", e);
+    return false;
   }
 }
 
@@ -346,30 +489,83 @@ async function sendMail(
   html: string,
   replyTo?: string,
   attachments: Attachment[] = [],
-) {
-  if (!SENDGRID_API_KEY) { console.error("SENDGRID_API_KEY not set, skipping email"); return; }
-  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method:  "POST",
-    headers: { Authorization: `Bearer ${SENDGRID_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      personalizations: [{ to }],
-      from:    { email: FROM_EMAIL, name: FROM_NAME },
-      ...(replyTo ? { reply_to: { email: replyTo } } : {}),
-      subject,
-      content: [{ type: "text/html", value: html }],
-      ...(attachments.length > 0 ? { attachments } : {}),
-    }),
-  });
-  if (res.status !== 202) console.error("SendGrid error:", res.status, await res.text());
+): Promise<boolean> {
+  if (!SENDGRID_API_KEY) { console.error("SENDGRID_API_KEY not set, skipping email"); return false; }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method:  "POST",
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        personalizations: [{ to }],
+        from:    { email: FROM_EMAIL, name: FROM_NAME },
+        ...(replyTo ? { reply_to: { email: replyTo } } : {}),
+        subject,
+        content: [{ type: "text/html", value: html }],
+        ...(attachments.length > 0 ? { attachments } : {}),
+      }),
+    });
+    if (res.status === 202) return true;
+    console.error("SendGrid error:", res.status, (await res.text()).slice(0, 500));
+    return false;
+  } catch (error) {
+    console.error("SendGrid request error:", error);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (!(req.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) {
+    return json({ error: "Content-Type must be application/json" }, 415);
+  }
 
   let l: LeadPayload;
-  try { l = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  try {
+    l = normalizedLead(await readLimitedJson(req));
+  } catch (error) {
+    if (error instanceof LeadRequestError) return json({ error: error.message }, error.status);
+    return json({ error: "Invalid JSON" }, 400);
+  }
 
+  const source = l.source || "av-landing";
+  // Website-audit summaries contain trusted scores and internal routing data.
+  // Only the audit gateway may use this source; a browser's public key cannot
+  // impersonate a completed audit or inject a fabricated CRM brief.
+  const trustedAudit = Boolean(SERVICE_ROLE_KEY) && source === "website-audit" &&
+    req.headers.get("authorization") === `Bearer ${SERVICE_ROLE_KEY}`;
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  if (!trustedAudit) {
+    const clientFingerprint = (
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0] ||
+      req.headers.get("x-real-ip") ||
+      `unknown:${(req.headers.get("user-agent") || "unknown").slice(0, 160)}`
+    ).trim().slice(0, 200);
+    try {
+      enforceWorkerLimit(`client:${clientFingerprint}`, 10);
+      await enforceDurableLimit(admin, "submit-av-lead-client", clientFingerprint, 10);
+    } catch (error) {
+      if (error instanceof LeadRequestError) return json({ error: error.message }, error.status);
+      console.error("submit-av-lead client admission failed", error);
+      return json({ error: "Lead capture is temporarily unavailable." }, 503);
+    }
+  }
   if (l.hp) return json({ ok: true });
+  if (!Object.prototype.hasOwnProperty.call(FORM_CONFIGS, source)) {
+    return json({ error: "Unsupported lead source" }, 400);
+  }
+  if (source === "website-audit" && !trustedAudit) {
+    return json({ error: "Use the authorized website audit lead endpoint." }, 403);
+  }
+  if (trustedAudit && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(l.idempotency_key || "")) {
+    return json({ error: "Missing audit delivery key" }, 400);
+  }
 
   if (!l.contact_name?.trim() || !l.contact_email?.trim() || !l.event_type?.trim()) {
     return json({ error: "Missing required fields" }, 400);
@@ -379,54 +575,130 @@ Deno.serve(async (req: Request) => {
   }
 
   const isEs = l.lang === "es";
-  const cfg = FORM_CONFIGS[l.source ?? "av-landing"] ?? FORM_CONFIGS["av-landing"];
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const cfg = FORM_CONFIGS[source];
+  let attachments: Attachment[];
+  try {
+    if (!trustedAudit) {
+      await enforceDurableLimit(admin, "submit-av-lead-email", l.contact_email, 4);
+    }
+    if (l.attachment && source !== "campaign-calculator") {
+      throw new LeadRequestError("Attachments are not supported for this form.");
+    }
+    attachments = attachmentOf(l);
+  } catch (error) {
+    if (error instanceof LeadRequestError) return json({ error: error.message }, error.status);
+    console.error("submit-av-lead admission failed", error);
+    return json({ error: "Lead capture is temporarily unavailable." }, 503);
+  }
 
-  const { data: inserted, error } = await admin
-    .from("av_leads")
-    .insert({
-      source:          l.source ?? "av-landing",
-      lang:            isEs ? "es" : "en",
-      event_type:      l.event_type.trim(),
-      services:        Array.isArray(l.services) ? l.services : [],
-      industry:        l.industry ?? null,
-      event_timeframe: l.event_timeframe ?? null,
-      event_date:      l.event_date || null,
-      venue:           l.venue ?? null,
-      attendees:       l.attendees ?? null,
-      budget:          l.budget ?? null,
-      contact_name:    l.contact_name.trim(),
-      contact_email:   l.contact_email.trim(),
-      contact_phone:   l.contact_phone ?? null,
-      company:         l.company ?? null,
-      message:         l.message ?? null,
-    })
-    .select("id")
-    .single();
+  const leadValues = {
+    source,
+    lang:            isEs ? "es" : "en",
+    event_type:      l.event_type,
+    services:        l.services,
+    industry:        l.industry ?? null,
+    event_timeframe: l.event_timeframe ?? null,
+    event_date:      l.event_date || null,
+    venue:           l.venue ?? null,
+    attendees:       l.attendees ?? null,
+    budget:          l.budget ?? null,
+    contact_name:    l.contact_name,
+    contact_email:   l.contact_email,
+    contact_phone:   l.contact_phone ?? null,
+    company:         l.company ?? null,
+    message:         l.message ?? null,
+    ...(trustedAudit ? {
+      idempotency_key: l.idempotency_key,
+      audit_summary: l.audit_summary ?? {},
+      consent_record: l.consent_record ?? {},
+    } : {}),
+  };
+  const insertResult = trustedAudit
+    ? await admin.from("av_leads")
+      .upsert(leadValues, { onConflict: "idempotency_key", ignoreDuplicates: true })
+      .select("id,crm_synced_at,team_email_sent_at,prospect_email_sent_at")
+      .maybeSingle()
+    : await admin.from("av_leads").insert(leadValues)
+      .select("id,crm_synced_at,team_email_sent_at,prospect_email_sent_at")
+      .single();
+  type DeliveryLeadRow = {
+    id: string;
+    crm_synced_at: string | null;
+    team_email_sent_at: string | null;
+    prospect_email_sent_at: string | null;
+  };
+  let inserted = insertResult.data as DeliveryLeadRow | null;
+  const error = insertResult.error;
 
-  if (error || !inserted) {
+  if (error) {
     console.error("Insert error:", error);
     return json({ error: "Could not save your request. Please try again." }, 500);
   }
-
-  await syncToCrm(admin, l, cfg, inserted.id, isEs);
+  if (!inserted && trustedAudit) {
+    const existing = await admin.from("av_leads")
+      .select("id,crm_synced_at,team_email_sent_at,prospect_email_sent_at")
+      .eq("idempotency_key", l.idempotency_key)
+      .maybeSingle();
+    if (existing.error || !existing.data) {
+      console.error("Idempotent lead lookup error:", existing.error);
+      return json({ error: "Could not save your request. Please try again." }, 500);
+    }
+    inserted = existing.data as DeliveryLeadRow;
+  }
+  if (!inserted) return json({ error: "Could not save your request. Please try again." }, 500);
 
   const replySubject = isEs
     ? `Recibimos tu ${cfg.replyContextEs} · LV Branding`
     : `We received your ${cfg.replyContext} · LV Branding`;
 
-  // The same PDF goes to both: the prospect keeps their plan, and the rep can
-  // read it before the first call without opening the calculator.
-  const attachments = attachmentOf(l);
+  const teamSubject = `${cfg.emoji} New ${cfg.label} lead${isEs ? " 🇪🇸" : ""}: ${l.contact_name}${l.company ? ` (${l.company})` : ""}`;
 
-  try {
-    await Promise.allSettled([
-      sendMail(NOTIFY_RECIPIENTS, `${cfg.emoji} New ${cfg.label} lead${isEs ? " 🇪🇸" : ""}: ${l.contact_name}${l.company ? ` (${l.company})` : ""}`, teamEmail(l, cfg, inserted.id, isEs), l.contact_email, attachments),
-      sendMail([{ email: l.contact_email, name: l.contact_name }], replySubject, replyEmail(l, cfg, isEs, attachments.length > 0), FROM_EMAIL, attachments),
+  if (trustedAudit) {
+    const failures: string[] = [];
+    const markStep = async (column: "crm_synced_at" | "team_email_sent_at" | "prospect_email_sent_at"): Promise<boolean> => {
+      const { error } = await admin.from("av_leads").update({
+        [column]: new Date().toISOString(),
+        delivery_updated_at: new Date().toISOString(),
+      }).eq("id", inserted!.id);
+      if (error) console.error(`Lead delivery ${column} update failed:`, error.message);
+      return !error;
+    };
+
+    if (!inserted.crm_synced_at) {
+      if (!(await syncToCrm(admin, l, cfg, inserted.id, isEs)) || !(await markStep("crm_synced_at"))) {
+        failures.push("crm");
+      }
+    }
+
+    const [teamSent, prospectSent] = await Promise.all([
+      inserted.team_email_sent_at
+        ? Promise.resolve(true)
+        : sendMail(NOTIFY_RECIPIENTS, teamSubject, teamEmail(l, cfg, inserted.id, isEs), l.contact_email, attachments),
+      inserted.prospect_email_sent_at
+        ? Promise.resolve(true)
+        : sendMail([{ email: l.contact_email, name: l.contact_name }], replySubject, replyEmail(l, cfg, isEs, attachments.length > 0), FROM_EMAIL, attachments),
     ]);
-  } catch (e) {
-    console.error("Email dispatch error:", e);
+    if (!inserted.team_email_sent_at && (!teamSent || !(await markStep("team_email_sent_at")))) failures.push("team_email");
+    if (!inserted.prospect_email_sent_at && (!prospectSent || !(await markStep("prospect_email_sent_at")))) failures.push("prospect_email");
+
+    if (failures.length) {
+      await admin.from("av_leads").update({
+        delivery_last_error: `Incomplete steps: ${failures.join(", ")}`,
+        delivery_updated_at: new Date().toISOString(),
+      }).eq("id", inserted.id);
+      return json({ error: "Lead saved; delivery will retry.", accepted: true, id: inserted.id }, 502);
+    }
+    await admin.from("av_leads").update({ delivery_last_error: null, delivery_updated_at: new Date().toISOString() }).eq("id", inserted.id);
+    return json({ ok: true, id: inserted.id });
   }
+
+  // Existing public forms keep their best-effort behavior; the audit bridge is
+  // stricter because its upstream outbox retries any incomplete step.
+  await syncToCrm(admin, l, cfg, inserted.id, isEs);
+  await Promise.allSettled([
+    sendMail(NOTIFY_RECIPIENTS, teamSubject, teamEmail(l, cfg, inserted.id, isEs), l.contact_email, attachments),
+    sendMail([{ email: l.contact_email, name: l.contact_name }], replySubject, replyEmail(l, cfg, isEs, attachments.length > 0), FROM_EMAIL, attachments),
+  ]);
 
   return json({ ok: true, id: inserted.id });
 });

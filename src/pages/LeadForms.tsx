@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 
 // ── Public lead sources ─────────────────────────────────────────────────────────
-// Seven service intake wizards plus the campaign calculator. They all post to the
+// Seven service intake wizards plus the two public planning tools. They all post to the
 // same `submit-av-lead` endpoint and land in Contacts, so one stats shape covers
 // all of them.
 
@@ -84,6 +84,15 @@ const FORMS: FormMeta[] = [
     // Spanish keyword slug rather than the English one, so it earns Spanish search.
     esPath: "/es/calculadora-de-inversion-en-campanas",
     badge:  "Free tool",
+  },
+  {
+    source: "website-audit",
+    emoji:  "🧭",
+    title:  "Website Opportunity Audit",
+    desc:   "A bilingual public audit that turns representative website evidence into a prioritized opportunity plan and qualified follow-up.",
+    path:   "/en/tools/website-opportunity-audit",
+    esPath: "/es/tools/auditoria-de-oportunidades-web",
+    badge:  "Audit tool",
   },
 ];
 
