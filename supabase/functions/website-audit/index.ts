@@ -66,10 +66,10 @@ const MAX_LINKED_RESPONSE_BYTES = 2_500_000;
 const MAX_REQUEST_BYTES = 50_000;
 const FETCH_TIMEOUT_MS = 9_000;
 const DNS_TIMEOUT_MS = 2_500;
-const PAGESPEED_TIMEOUT_MS = 22_000;
-const AUDIT_TIMEOUT_MS = 45_000;
+const PAGESPEED_TIMEOUT_MS = 35_000;
+const AUDIT_TIMEOUT_MS = 50_000;
 const MAX_PAGES = 5;
-const CRAWLER_VERSION = "lv-website-crawler-v1";
+const CRAWLER_VERSION = "lv-website-crawler-v2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -1032,7 +1032,11 @@ async function runPageSpeed(url: string, deadline: number): Promise<LabSignals> 
   try {
     const response = await fetch(endpoint, { signal: controller.signal });
     if (!response.ok) {
-      await cancelBody(response);
+      // A quota error, a key that is not enabled for this API, and a rejected
+      // URL are all recoverable and all look identical from the report. Record
+      // which one happened so it can be diagnosed without another deploy.
+      const detail = await response.text().catch(() => "");
+      console.error("pagespeed request failed", response.status, detail.slice(0, 300).replace(/\s+/g, " "));
       return noLab();
     }
     const data = await response.json() as Record<string, unknown>;
@@ -1056,7 +1060,9 @@ async function runPageSpeed(url: string, deadline: number): Promise<LabSignals> 
       screenshotDataUrl,
       source: "pagespeed",
     };
-  } catch {
+  } catch (error) {
+    const aborted = (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
+    console.error("pagespeed request failed", aborted ? `timeout after ${timeoutMs}ms` : (error instanceof Error ? error.message : String(error)));
     return noLab();
   } finally {
     clearTimeout(timeout);
