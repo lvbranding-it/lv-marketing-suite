@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   QrCode,
   ImageIcon,
+  Palette,
   Signature,
   Calculator,
 } from "lucide-react";
@@ -200,6 +201,21 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <a
+                      href="/motion-palette"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center w-full p-2 rounded-md transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    >
+                      <Palette size={18} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Motion Palette</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
                       href="/email-signature-generator"
                       target="_blank"
                       rel="noopener noreferrer"
@@ -307,6 +323,16 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               >
                 <ImageIcon size={16} />
                 Image Studio
+                <ExternalLink size={11} className="ml-auto opacity-50" />
+              </a>
+              <a
+                href="/motion-palette"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <Palette size={16} />
+                Motion Palette
                 <ExternalLink size={11} className="ml-auto opacity-50" />
               </a>
               <a

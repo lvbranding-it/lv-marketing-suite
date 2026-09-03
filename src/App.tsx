@@ -43,6 +43,7 @@ const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration")
 const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
 const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
 const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
+const MotionPalette          = lazy(() => import("@/pages/MotionPalette"));
 const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
 const SignatureGenerator     = lazy(() => import("@/pages/SignatureGenerator"));
 const CampaignCalculator     = lazy(() => import("@/pages/CampaignCalculator"));
@@ -279,6 +280,15 @@ function AppRoutes() {
       <Route
         path="/download/:token"
         element={<Suspense fallback={null}><FileDownload /></Suspense>}
+      />
+      {/* Motion Palette — internal Lottie recoloring tool (protected) */}
+      <Route
+        path="/motion-palette"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><MotionPalette /></Suspense>
+          </ProtectedRoute>
+        }
       />
       {/* Image Studio — public in-browser image framing tool (no auth) */}
       <Route path="/image-studio" element={<Suspense fallback={null}><ImageStudio /></Suspense>} />
