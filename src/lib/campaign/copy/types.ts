@@ -33,7 +33,10 @@ export interface CalcCopy {
     pageDescription: string;
     /** Shown in the app header and on the report masthead. */
     productName:     string;
+    /** Full sentence, used by the PDF, the print report and the results view. */
     tagline:         string;
+    /** Short attribution shown beside the product name in the header. */
+    byline:          string;
     slogan:          string;
     site:            string;
   };
@@ -46,6 +49,19 @@ export interface CalcCopy {
     reassurance: string;
     resumeLead:  string;
     resumeLink:  string;
+    /**
+     * Landing-page anatomy, mirroring the Website Opportunity Audit so the two
+     * public tools read as one product rather than two experiments.
+     */
+    eyebrow:          string;
+    headingEmphasis:  string;
+    cards:            { title: string; body: string }[];
+    categoriesEyebrow: string;
+    categoriesHeading: string;
+    categoriesBody:    string;
+    stepsHeading:     string;
+    steps:            { number: string; title: string; body: string }[];
+    badges:           string[];
   };
 
   nav: {

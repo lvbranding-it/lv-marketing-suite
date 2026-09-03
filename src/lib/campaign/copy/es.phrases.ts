@@ -64,23 +64,23 @@ export const esPhrases: CalcCopy["phrases"] = {
 export const esCta: CalcCopy["cta"] = {
   byStatus: {
     "preparation-only": {
-      heading: "¿Quieres que te ayudemos a que esta primera fase de planificación se convierta en una campaña exitosa?",
-      body: "Saber el número real antes de gastarlo es la parte difícil, y ya lo tienes. Con gusto vemos contigo qué cubriría una fase de preparación enfocada y qué deja listo para lo que sigue.",
+      heading: "¿Quiere que le ayudemos a que esta primera fase de planificación se convierta en una campaña exitosa?",
+      body: "Saber el número real antes de gastarlo es la parte difícil, y ya lo tiene. Con gusto vemos con usted qué cubriría una fase de preparación enfocada y qué deja listo para lo que sigue.",
       action: "Hablemos de la primera fase",
     },
     "campaign-preparation": {
-      heading: "¿Te ayudamos a ordenar las dos fases?",
-      body: "Tienes con qué construir la base ahora y activar medios después. Podemos definir contigo qué va en cada fase, para que nada se tenga que construir dos veces.",
+      heading: "¿Le ayudamos a ordenar las dos fases?",
+      body: "Tiene con qué construir la base ahora y activar medios después. Podemos definir con usted qué va en cada fase, para que nada se tenga que construir dos veces.",
       action: "Planeemos ambas fases",
     },
     "focused-pilot": {
-      heading: "¿Tienes preguntas para nosotros antes de invertir?",
-      body: "Un piloto enfocado se ve viable aquí. Con gusto revisamos contigo la elección de canal, la creatividad que necesita y el reparto de medios antes de arrancar.",
+      heading: "¿Tiene preguntas para nosotros antes de invertir?",
+      body: "Un piloto enfocado se ve viable aquí. Con gusto revisamos con usted la elección de canal, la creatividad que necesita y el reparto de medios antes de arrancar.",
       action: "Revisemos este piloto",
     },
     "scope-supported": {
       heading: "Cuando quieras, arrancamos.",
-      body: "Tu inversión cubre el alcance que seleccionaste. Aun así recorreríamos contigo la estrategia, los requerimientos creativos y la estructura de medios antes de que algo salga al aire.",
+      body: "Su inversión cubre el alcance que seleccionó. Aun así recorreríamos con usted la estrategia, los requerimientos creativos y la estructura de medios antes de que algo salga al aire.",
       action: "Empecemos la conversación",
     },
   },
@@ -89,12 +89,12 @@ export const esCta: CalcCopy["cta"] = {
     {
       key: "second-opinion",
       label: "Una segunda opinión sobre estos números",
-      hint: "Revisamos el plan contigo y te decimos en qué coincidimos y en qué no.",
+      hint: "Revisamos el plan con usted y le decimos en qué coincidimos y en qué no.",
     },
     {
       key: "build-missing",
       label: "Ayuda para construir lo que falta",
-      hint: "Cotizamos las piezas que tu plan indica que aún no están listas.",
+      hint: "Cotizamos las piezas que su plan indica que aún no están listas.",
     },
     {
       key: "quote",
@@ -104,34 +104,34 @@ export const esCta: CalcCopy["cta"] = {
     {
       key: "send-plan",
       label: "Solo envíenme el plan por ahora",
-      hint: "Te mandamos una copia y el siguiente paso lo decides tú.",
+      hint: "Le mandamos una copia y el siguiente paso lo decide usted.",
     },
   ],
 
-  name: "Tu nombre",
+  name: "Su nombre",
   email: "Correo electrónico",
   phone: "Teléfono",
   optional: "(opcional)",
-  intentQuestion: "¿Qué te ayudaría más en este momento?",
-  disclosure: "Tu plan va con esto en PDF. Mira exactamente qué recibimos.",
-  plusLine: "tu objetivo, canales, mercado y las respuestas detrás del plan.",
-  submitting: "Preparando tu plan",
-  reassurance: "Te enviamos el PDF y también puedes descargarlo aquí. Sin compromiso, y el plan es tuyo de cualquier forma.",
+  intentQuestion: "¿Qué le ayudaría más en este momento?",
+  disclosure: "Su plan va con esto en PDF. Mire exactamente qué recibimos.",
+  plusLine: "su objetivo, canales, mercado y las respuestas detrás del plan.",
+  submitting: "Preparando su plan",
+  reassurance: "Le enviamos el PDF y también puede descargarlo aquí. Sin compromiso, y el plan es suyo de cualquier forma.",
 
-  errorName: "Por favor escribe tu nombre.",
-  errorEmail: "Por favor escribe tu correo.",
+  errorName: "Por favor escriba su nombre.",
+  errorEmail: "Por favor escriba su correo.",
   errorEmailInvalid: "Ese correo no se ve bien.",
   submitFailed: "No se pudo enviar. Inténtalo de nuevo o escríbenos a",
 
-  successHeading: (firstName) => `Listo, ${firstName}. Tu plan va en camino.`,
+  successHeading: (firstName) => `Listo, ${firstName}. Su plan va en camino.`,
   successEmailed: (email) =>
-    `Tu plan va en camino a ${email} en PDF, y llegó a nuestro equipo con todo lo que armaste aquí.`,
+    `Su plan va en camino a ${email} en PDF, y llegó a nuestro equipo con todo lo que armó aquí.`,
   successNotEmailed:
-    "Llegó a nuestro equipo con todo lo que armaste aquí. El PDF resultó demasiado grande para enviarlo por correo, así que descárgalo abajo y es tuyo.",
+    "Llegó a nuestro equipo con todo lo que armó aquí. El PDF resultó demasiado grande para enviarlo por correo, así que descárgalo abajo y es suyo.",
   successFollowUp:
-    "Alguien te contactará en un día hábil, y va a llegar con el plan ya leído.",
-  successUnchanged: "Nada en esta página cambió. Puedes imprimirla o copiar el resumen cuando quieras.",
-  download: "Descargar tu plan (PDF)",
+    "Alguien lo contactará en un día hábil, y va a llegar con el plan ya leído.",
+  successUnchanged: "Nada en esta página cambió. Puede imprimirla o copiar el resumen cuando quieras.",
+  download: "Descargar su plan (PDF)",
 };
 
 export const esBrief: CalcCopy["brief"] = {

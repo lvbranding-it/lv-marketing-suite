@@ -1,5 +1,6 @@
 // ── Spanish: keyed metadata ─────────────────────────────────────────────────────
-// Neutral Latin American Spanish, addressing the reader as "tú" to match the
+// Neutral Latin American Spanish, addressing the reader as "usted": the formal
+// register is deliberate, and reads as a considered service rather than an app.
 // existing /es/ landing pages. Terminology follows what a Houston-market
 // Spanish-speaking business owner would actually say: "medios pagados" rather
 // than "media", "clientes potenciales" rather than "leads" in prose (though
@@ -21,7 +22,7 @@ export const esCategories: CalcCopy["categories"] = {
     label: "Marca y creatividad",
     short: "Creatividad",
     why: "El mensaje y las piezas que lo transmiten. La pauta amplifica lo que ya existe; la creatividad fuerte es lo que se amplifica.",
-    covers: "Desarrollo de concepto, piezas visuales, fotografía, video, gráficos publicitarios y textos de anuncios para los canales que elegiste.",
+    covers: "Desarrollo de concepto, piezas visuales, fotografía, video, gráficos publicitarios y textos de anuncios para los canales que eligió.",
   },
   digital: {
     label: "Experiencia digital",
@@ -32,8 +33,8 @@ export const esCategories: CalcCopy["categories"] = {
   media: {
     label: "Medios pagados",
     short: "Medios",
-    why: "El presupuesto de distribución publicitaria: lo que cobran las plataformas o medios por poner tu mensaje frente a la audiencia que elegiste.",
-    covers: "Inversión publicitaria en los canales que elegiste, incluyendo presupuesto de pruebas de audiencia dentro de cada plataforma.",
+    why: "El presupuesto de distribución publicitaria: lo que cobran las plataformas o medios por poner su mensaje frente a la audiencia que eligió.",
+    covers: "Inversión publicitaria en los canales que eligió, incluyendo presupuesto de pruebas de audiencia dentro de cada plataforma.",
   },
   management: {
     label: "Gestión de campaña",
@@ -52,7 +53,7 @@ export const esCategories: CalcCopy["categories"] = {
 export const esObjectives: CalcCopy["objectives"] = {
   awareness: {
     label: "Lograr presencia y reconocimiento de marca",
-    hint: "Que la gente que no conoce tu oferta, la vea y se identifique con ella y/o que más gente sepa acerca de tu marca o producto",
+    hint: "Que la gente que no conoce su oferta, la vea y se identifique con ella y/o que más gente sepa acerca de su marca o producto",
     unitNoun: "personas alcanzadas",
     unitSingular: "persona alcanzada",
   },
@@ -69,13 +70,13 @@ export const esObjectives: CalcCopy["objectives"] = {
     unitSingular: "venta",
   },
   visits: {
-    label: "Visitas a tu tienda en línea",
-    hint: "Llevar gente a tu local",
+    label: "Visitas a su tienda en línea",
+    hint: "Llevar gente a su local",
     unitNoun: "visitas",
     unitSingular: "visita",
   },
   event: {
-    label: "Asistencia a tu evento",
+    label: "Asistencia a su evento",
     hint: "Llenar un evento o actividad",
     unitNoun: "registros",
     unitSingular: "registro",
@@ -105,7 +106,7 @@ export const esScenarios: CalcCopy["scenarios"] = {
     label: "Crecimiento",
     tagline: "El plan equilibrado",
     description: "Un plan equilibrado con creatividad más sólida, pruebas reales y margen para seguir mejorando en un conjunto acotado de canales.",
-    limitations: "Este recurso está pensado para campañas que corren un buen tiempo. Asume que puedes comprometerte con toda la duración y actuar según lo que digan las pruebas.",
+    limitations: "Este recurso está pensado para campañas que corren un buen tiempo. Asume que puede comprometerte con toda la duración y actuar según lo que digan las pruebas.",
   },
   expansion: {
     label: "Expansión",
@@ -131,28 +132,28 @@ export const esChannels: CalcCopy["channels"] = {
 export const esDestinations: CalcCopy["destinations"] = {
   "landing-page":       "Visitar una página establecida (Landing Page)",
   "lead-form":          "Llenar un formulario de contacto",
-  "buy-online":         "Comprar en tu tienda en línea",
-  "physical-location":  "Visitar tu local o establecimiento físico",
-  "event-registration": "Registrarse a tu evento",
-  "call-message":       "Llamar o escribir a tu negocio",
+  "buy-online":         "Comprar en su tienda en línea",
+  "physical-location":  "Visitar su local o establecimiento físico",
+  "event-registration": "Registrarse a su evento",
+  "call-message":       "Llamar o escribir a su negocio",
   none:                 "Por ahora, ninguna acción directa; es una campaña de reconocimiento de marca",
 };
 
 export const esReadinessGroups: CalcCopy["readinessGroups"] = {
   foundation:  { label: "Estado base de la campaña",       blurb: "La estrategia sobre la que se construye todo lo demás." },
-  creative:    { label: "Piezas creativas",         blurb: "Lo que necesitan mostrar los canales que elegiste." },
+  creative:    { label: "Piezas creativas",         blurb: "Lo que necesitan mostrar los canales que eligió." },
   destination: { label: "Destino de la campaña",    blurb: "A dónde envía la campaña a las personas." },
-  measurement: { label: "Medición y optimización",  blurb: "Esta herramienta es fundamental, es la que podrás usar para medir y determinar que tu campaña funcionó." },
+  measurement: { label: "Medición y optimización",  blurb: "Esta herramienta es fundamental, es la que podrás usar para medir y determinar que su campaña funcionó." },
 };
 
 export const esReadinessItems: CalcCopy["readinessItems"] = {
-  positioning:    { label: "Tienes una audiencia y posicionamiento claros",        hint: "Ya sabes a quién le hablas y por qué elegirían tu marca en vez de otra" },
-  objectiveOffer: { label: "Objetivo de campaña y respuesta esperada",   hint: "Qué quieres lograr y qué debe hacer la gente" },
+  positioning:    { label: "Tiene una audiencia y posicionamiento claros",        hint: "Ya sabe a quién le hablas y por qué elegirían su marca en vez de otra" },
+  objectiveOffer: { label: "Objetivo de campaña y respuesta esperada",   hint: "Qué quiere lograr y qué debe hacer la gente" },
   message:        { label: "Mensaje de campaña",                        hint: "Cual es la idea central que llevará la campaña" },
   channelStrategy:{ label: "Estrategia de canales",                     hint: "En qué plataformas debes competir y por qué" },
   campaignPlan:   { label: "Plan de campaña",                           hint: "Calendario, fases y responsables" },
   visualIdentity: { label: "Identidad de marca y dirección visual",     hint: "Logotipo, colores, tipografías y estilo" },
-  photography:    { label: "Fotografía",                                hint: "Ya tienes imágenes propias listas para usar" },
+  photography:    { label: "Fotografía",                                hint: "Ya tiene imágenes propias listas para usar" },
   video:          { label: "Video",                                     hint: "Piezas en video para los canales que lo requieren" },
   graphics:       { label: "Gráficos de campaña",                       hint: "Piezas para anuncios en cada formato" },
   adCopy:         { label: "Textos publicitarios",                      hint: "Titulares y descripciones de los anuncios" },
@@ -161,7 +162,7 @@ export const esReadinessItems: CalcCopy["readinessItems"] = {
   checkoutFlow:   { label: "Ecommerce o proceso de compra",             hint: "El camino completo hasta el pago" },
   eventPage:      { label: "Página de registro al evento",              hint: "Donde la gente reserva su lugar" },
   tracking:       { label: "Seguimiento de conversiones",               hint: "Saber qué anuncio generó qué resultado" },
-  analytics:      { label: "Analítica",                                 hint: "Medición del comportamiento en tu sitio" },
+  analytics:      { label: "Analítica",                                 hint: "Medición del comportamiento en su sitio" },
   pixels:         { label: "Píxeles o etiquetas de las plataformas",    hint: "El código que cada plataforma necesita" },
   successMetrics: { label: "Métricas de éxito definidas",               hint: "En qué números se acuerda que funcionó" },
 };
@@ -176,15 +177,15 @@ export const esReadinessStates: CalcCopy["readinessStates"] = {
 export const esReadinessBands: CalcCopy["readinessBands"] = {
   scale: {
     label: "Listo para escalar",
-    summary: "Estás en muy buena forma. La base está hecha, así que la mayor parte de tu inversión puede ir a llegar a más gente y a mejorar sobre la marcha.",
+    summary: "Está en muy buena forma. La base está hecha, así que la mayor parte de su inversión puede ir a llegar a más gente y a mejorar sobre la marcha.",
   },
   ready: {
     label: "Listo para arrancar",
-    summary: "Tienes lo esencial. Un poco de pulido mantiene todo afilado, y tu inversión puede concentrarse en poner la campaña frente a la gente.",
+    summary: "Tiene lo esencial. Un poco de pulido mantiene todo afilado, y su inversión puede concentrarse en poner la campaña frente a la gente.",
   },
   partial: {
-    label: "Vas a medio camino",
-    summary: "Algunas piezas están listas y otras no, lo cual es completamente normal. Tu plan reserva inversión para las piezas que aún necesitan atención antes de gastar más en alcance.",
+    label: "Va a medio camino",
+    summary: "Algunas piezas están listas y otras no, lo cual es completamente normal. Su plan reserva inversión para las piezas que aún necesitan atención antes de gastar más en alcance.",
   },
   foundation: {
     label: "Apenas empezando",
@@ -201,19 +202,19 @@ export const esRelevance: CalcCopy["relevance"] = {
 
 export const esFeasibilityBands: CalcCopy["feasibilityBands"] = {
   "scope-supported": {
-    label: "Tu plan está financiado",
-    short: "Tu inversión cubre el alcance que seleccionaste. Aun así revisaríamos los detalles contigo antes de que algo salga al aire.",
+    label: "Su plan está financiado",
+    short: "Su inversión cubre el alcance que seleccionó. Aun así revisaríamos los detalles con usted antes de que algo salga al aire.",
   },
   "focused-pilot": {
-    label: "Empieza enfocado",
+    label: "Empiece enfocado",
     short: "Una campaña enfocada en un solo canal se ve viable. Abajo encontrarás exactamente qué incluye, qué reutiliza y qué queda para una fase posterior.",
   },
   "campaign-preparation": {
     label: "Primero la base",
-    short: "Puedes construir la base ahora. Todavía no alcanza para pautar como se debe, así que activaríamos medios en una fase siguiente.",
+    short: "Puede construir la base ahora. Todavía no alcanza para pautar como se debe, así que activaríamos medios en una fase siguiente.",
   },
   "preparation-only": {
-    label: "Empieza por la preparación",
+    label: "Empiece por la preparación",
     short: "Esta inversión queda por debajo de lo que una campaña necesita para correr con responsabilidad, y saberlo ahora es genuinamente útil. Puede financiar un arranque enfocado de estrategia y configuración, que es un primer paso sólido más que una campaña completa.",
   },
 };
@@ -266,8 +267,8 @@ export const esLists: CalcCopy["lists"] = {
     "Un canal, un objetivo y una audiencia principal",
     "Un concepto creativo, adaptado al formato del canal",
     "Textos y gráficos limitados, sin producción de foto o video a la medida",
-    "Se reutiliza tu identidad de marca actual",
-    "Se reutiliza tu sitio web o tienda actual",
+    "Se reutiliza su identidad de marca actual",
+    "Se reutiliza su sitio web o tienda actual",
     "Seguimiento básico de conversiones y analítica",
     "Gestión y optimización durante la duración de la campaña",
   ],
@@ -279,7 +280,7 @@ export const esLists: CalcCopy["lists"] = {
     "Traducción y adaptación cultural a otros idiomas",
   ],
   scopeLevers: [
-    "Usar piezas que ya tienes",
+    "Usar piezas que ya tiene",
     "Quitar el video",
     "Reducir las variaciones creativas",
     "Quitar canales",
@@ -320,7 +321,7 @@ export const esIndustries: string[] = [
   "Otro",
 ];
 
-/** Clause fragments folded into "Definido por tus respuestas: …". */
+/** Clause fragments folded into "Definido por sus respuestas: …". */
 export const esReadinessClauses: Record<string, string> = {
   positioning:     "la audiencia y el posicionamiento aún están por definir",
   objectiveOffer:  "el objetivo de campaña y la respuesta esperada aún están por definir",

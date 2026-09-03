@@ -4,15 +4,18 @@
 // Progress persists to localStorage; the engine in src/lib/campaign does the math.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Calculator, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calculator, CheckCircle2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import AuditLottie from "@/components/website-audit/AuditLottie";
 import LVLogo from "@/components/LVLogo";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/campaign/config";
+import { categories } from "@/lib/campaign/localized";
 import {
   buildTextSummary, calculate, rebalanceShares,
 } from "@/lib/campaign/engine";
@@ -294,8 +297,10 @@ function CalculatorBody({ lang }: { lang: Lang }) {
         <div className="flex items-center gap-3 mr-auto min-w-0">
           <LVLogo size={34} className="shrink-0" />
           <div className="leading-tight min-w-0">
-            <h1 className="text-base font-bold text-foreground">{t.meta.productName}</h1>
-            <p className="text-xs text-muted-foreground">{t.meta.tagline}</p>
+            <h1 className="text-base font-bold text-foreground">
+              {t.meta.productName}{" "}
+              <span className="font-light text-muted-foreground">{t.meta.byline}</span>
+            </h1>
           </div>
         </div>
         {phase !== "intro" && (
@@ -305,40 +310,125 @@ function CalculatorBody({ lang }: { lang: Lang }) {
         )}
       </header>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto p-3 sm:p-6">
+      <main className={cn("w-full flex-1", phase === "intro" ? "" : "mx-auto max-w-5xl p-3 sm:p-6")}>
         {/* ── Intro ── */}
         {phase === "intro" && (
-          <div className="mx-auto max-w-2xl py-8 sm:py-16 text-center">
-            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <Calculator size={26} aria-hidden="true" />
-            </div>
-            <h2 className="text-2xl font-bold leading-tight sm:text-3xl">
-              {t.intro.heading}
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              {t.intro.body}
-            </p>
-            <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed">
-              {t.intro.emphasis}
-            </p>
-            <Button size="lg" className="mt-7 gap-2" onClick={() => { setPhase("steps"); setStep(0); }}>
-              {t.intro.cta} <ArrowRight size={16} aria-hidden="true" />
-            </Button>
-            <p className="mt-4 text-[11px] text-muted-foreground">
-              {t.intro.reassurance}
-            </p>
-            {restored.current && restored.current.phase !== "intro" && (
-              <p className="mt-6 text-xs text-muted-foreground">
-                {t.intro.resumeLead}{" "}
-                <button
-                  type="button"
-                  className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                  onClick={() => { setPhase(restored.current?.phase === "results" ? "results" : "steps"); setStep(restored.current?.step ?? 0); setMaxVisited(restored.current?.step ?? 0); }}
-                >
-                  {t.intro.resumeLink}
-                </button>.
-              </p>
-            )}
+          <div className="overflow-hidden bg-white">
+            {/* ── Hero, matching the Website Opportunity Audit ── */}
+            <section className="relative bg-white text-lv-charcoal">
+              <div className="audit-grid-light absolute inset-0 opacity-70" aria-hidden="true" />
+              <div className="absolute -right-28 -top-28 h-96 w-96 rounded-full border border-black/[0.07]" aria-hidden="true" />
+              <div className="absolute -right-12 top-0 h-64 w-64 rounded-full border border-primary/25" aria-hidden="true" />
+
+              <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-20 pt-14 sm:px-6 sm:pb-24 sm:pt-20 lg:grid-cols-[1.065fr_.935fr] lg:items-center lg:px-8 lg:pt-24">
+                <div className="max-w-3xl">
+                  <p className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-lv-charcoal/60">
+                    <span className="h-px w-8 bg-primary" /> {t.intro.eyebrow}
+                  </p>
+                  <h1 className="text-[2.2rem] font-bold leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-[3.5rem]">
+                    {t.intro.heading}{" "}
+                    <span className="text-primary">{t.intro.headingEmphasis}</span>
+                  </h1>
+                  <p className="mt-6 max-w-2xl text-base leading-7 text-lv-charcoal/70 sm:text-lg">
+                    {t.intro.body}
+                  </p>
+                  <p className="mt-4 max-w-2xl text-sm font-bold leading-6">{t.intro.emphasis}</p>
+
+                  <Button size="lg" className="mt-8 gap-2" onClick={() => { setPhase("steps"); setStep(0); }}>
+                    {t.intro.cta} <ArrowRight size={16} aria-hidden="true" />
+                  </Button>
+                  <p className="mt-4 text-[11px] text-muted-foreground">{t.intro.reassurance}</p>
+
+                  {restored.current && restored.current.phase !== "intro" && (
+                    <p className="mt-6 text-xs text-muted-foreground">
+                      {t.intro.resumeLead}{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                        onClick={() => { setPhase(restored.current?.phase === "results" ? "results" : "steps"); setStep(restored.current?.step ?? 0); setMaxVisited(restored.current?.step ?? 0); }}
+                      >
+                        {t.intro.resumeLink}
+                      </button>.
+                    </p>
+                  )}
+                </div>
+
+                {/*
+                  The illustration slot. `AuditLottie` renders nothing when the
+                  file is absent, so this stays empty and the layout closes up
+                  until the animation is dropped in at this path.
+                */}
+                <div className="relative hidden min-h-[360px] items-center justify-center lg:flex">
+                  <AuditLottie src="/campaign-calculator-hero.json" className="max-w-[560px]" />
+                </div>
+              </div>
+            </section>
+
+            {/* ── Three reasons to trust the number ── */}
+            <section className="mx-auto w-full max-w-6xl px-4 pb-4 sm:px-6 lg:px-8">
+              <div className="grid gap-px overflow-hidden rounded-2xl border border-black/10 bg-black/10 sm:grid-cols-3">
+                {t.intro.cards.map((card) => (
+                  <article key={card.title} className="bg-white p-5 sm:p-6">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <CheckCircle2 size={17} aria-hidden="true" />
+                    </span>
+                    <h2 className="mt-4 text-sm font-bold">{card.title}</h2>
+                    <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{card.body}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            {/* ── Where the money goes: the six funded categories ── */}
+            <section className="mt-16 bg-[#faf9f8] py-16 sm:mt-20 sm:py-20">
+              <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[.85fr_1.15fr] lg:items-start lg:px-8">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.17em] text-primary">{t.intro.categoriesEyebrow}</p>
+                  <h2 className="mt-4 text-3xl font-bold leading-tight tracking-[-0.03em] sm:text-4xl">{t.intro.categoriesHeading}</h2>
+                  <p className="mt-5 text-sm leading-7 text-muted-foreground">{t.intro.categoriesBody}</p>
+                </div>
+                <div className="grid gap-px overflow-hidden rounded-2xl border border-black/10 bg-black/10 sm:grid-cols-2">
+                  {categories(lang).map((entry) => (
+                    <article key={entry.key} className="flex gap-3 bg-white p-5">
+                      <span
+                        className="mt-0.5 h-9 w-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: entry.colorLight }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0">
+                        <h3 className="text-sm font-bold">{entry.label}</h3>
+                        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{entry.why}</p>
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* ── What happens next ── */}
+            <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+              <h2 className="max-w-xl text-2xl font-bold tracking-[-0.025em] text-primary sm:text-3xl">{t.intro.stepsHeading}</h2>
+              <div className="mt-10 grid gap-8 md:grid-cols-3">
+                {t.intro.steps.map((entry, index) => (
+                  <div key={entry.number} className="border-t border-black/10 pt-5">
+                    <span className="text-xs font-bold tracking-[0.18em] text-primary">{entry.number}</span>
+                    <h3 className="mt-4 flex items-center gap-2 text-base font-bold">
+                      {entry.title}
+                      {index < 2 && <ArrowRight size={15} className="hidden text-muted-foreground md:block" aria-hidden="true" />}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{entry.body}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 rounded-xl border border-primary/15 bg-primary/[0.035] px-5 py-4 text-xs text-muted-foreground">
+                {t.intro.badges.map((badge) => (
+                  <span key={badge} className="flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-primary" /> {badge}
+                  </span>
+                ))}
+              </div>
+            </section>
           </div>
         )}
 

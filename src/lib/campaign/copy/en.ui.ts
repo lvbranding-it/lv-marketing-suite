@@ -10,6 +10,7 @@ export const enMeta: CalcCopy["meta"] = {
   pageDescription: "Estimate how to distribute your campaign investment across strategy, branding, creative production, digital experience, paid media, management, and testing.",
   productName:     "Campaign Investment Calculator",
   tagline:         "A free planning tool by LV Branding",
+  byline:          "by LV Branding",
   slogan:          "STRATEGY FIRST. ALWAYS.",
   site:            "www.lvbranding.com",
 };
@@ -22,6 +23,32 @@ export const enIntro: CalcCopy["intro"] = {
   reassurance: "Six short steps · about 3 minutes · no account, and the full result is yours to keep",
   resumeLead: "You have a plan in progress.",
   resumeLink: "pick up where you left off",
+  eyebrow: "Free campaign investment planner",
+  headingEmphasis: "Before you spend the first dollar.",
+  cards: [
+    {
+      title: "Built on your inputs, not averages",
+      body: "Every figure comes from your objective, market, timing, channels and the brand assets you already have. Not from an industry benchmark that was never about you.",
+    },
+    {
+      title: "It will tell you when the answer is no",
+      body: "If the budget cannot responsibly carry the campaign you described, the tool says so and shows what a sensible first phase looks like instead.",
+    },
+    {
+      title: "A plan, not a percentage",
+      body: "You leave with an allocation across six categories, three scenarios, and the reasoning behind every number.",
+    },
+  ],
+  categoriesEyebrow: "One budget. Six places it goes.",
+  categoriesHeading: "More useful than a percentage rule.",
+  categoriesBody: "The plan splits your investment across six categories and explains why each one is funded. It is a planning estimate you can adjust, not a quote and not a promise of results.",
+  stepsHeading: "What happens after you start",
+  steps: [
+    { number: "01", title: "Answer six short questions", body: "Your objective, market, timing, channels, and the brand assets you can already use." },
+    { number: "02", title: "We build the allocation", body: "Your budget is distributed across the six categories, with anything underfunded called out." },
+    { number: "03", title: "Take the plan with you", body: "The full breakdown, three scenarios, and a PDF you keep whether or not you ever talk to us." },
+  ],
+  badges: ["No account", "Result without email", "English + Espanol"],
 };
 
 export const enNav: CalcCopy["nav"] = {
