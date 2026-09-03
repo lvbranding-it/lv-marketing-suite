@@ -9,9 +9,12 @@ import {
   Info,
   Layers3,
   LockKeyhole,
+  Maximize2,
   Palette,
   Pause,
   Play,
+  ZoomIn,
+  ZoomOut,
   Redo2,
   Repeat2,
   RotateCcw,
@@ -42,6 +45,7 @@ import {
   type LottieAnimation,
   type LottieValidationIssue,
 } from "@/lib/lottie";
+import { createLottieSvgFrameExport } from "@/lib/lottie-svg";
 import { loadSchemes, type PaletteScheme } from "@/lib/lottie-schemes";
 import {
   canRedoEditorHistory,
@@ -104,12 +108,14 @@ export default function MotionPalette() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [previewReady, setPreviewReady] = useState(false);
   const [playing, setPlaying] = useState(true);
   const [loop, setLoop] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [frame, setFrame] = useState(0);
   const [background, setBackground] = useState("#231F20");
   const [transparent, setTransparent] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(100);
   const [comparison, setComparison] = useState<"original" | "recolored">("recolored");
   const [schemes, setSchemes] = useState<PaletteScheme[]>(() => loadSchemes());
   const [schemeDialog, setSchemeDialog] = useState<{ open: boolean; mode: "manage" | "save" }>({
@@ -215,8 +221,10 @@ export default function MotionPalette() {
       setHistory(createEditorHistory(replacements));
       setPlaying(true);
       setFrame(0);
+      setPreviewZoom(100);
       setComparison("recolored");
       setRenderError(null);
+      setPreviewReady(false);
       setLoadError(null);
       notify(
         `Found ${result.analysis.editableColorCount} editable color${result.analysis.editableColorCount === 1 ? "" : "s"} across ${result.analysis.editableOccurrenceCount} occurrences.`,
@@ -304,6 +312,37 @@ export default function MotionPalette() {
     }
   }, [editedAnimation, loaded, notify]);
 
+  const downloadSvgFrame = useCallback(() => {
+    if (!loaded) return;
+    const preview = previewRef.current;
+    const svgElement = preview?.getSvgElement();
+    if (!preview || !svgElement) {
+      notify("The SVG preview is still rendering. Try again in a moment.", true);
+      return;
+    }
+
+    try {
+      const currentFrame = preview.getCurrentFrame();
+      const result = createLottieSvgFrameExport(svgElement, loaded.filename, {
+        variant: comparison,
+        frame: currentFrame,
+        width: loaded.analysis.metadata.width ?? undefined,
+        height: loaded.analysis.metadata.height ?? undefined,
+      });
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      notify(`Downloaded ${result.filename} as a static ${comparison} frame.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The SVG frame could not be downloaded.", true);
+    }
+  }, [comparison, loaded, notify]);
+
   const metadata = loaded?.analysis.metadata;
   const unsupported = loaded?.analysis.unsupportedFeatures.map((feature) => ({
     type: feature.label,
@@ -313,8 +352,8 @@ export default function MotionPalette() {
 
   return (
     <div className="min-h-screen bg-[#100f0f] text-white">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#151414]/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1800px] items-center gap-3 px-4 sm:px-6">
+      <header className="sticky top-0 z-30 h-16 border-b border-white/10 bg-[#151414]/95 backdrop-blur">
+        <div className="mx-auto flex h-full max-w-[1800px] items-center gap-3 px-4 sm:px-6">
           <Link
             to="/dashboard"
             className="mr-1 grid h-9 w-9 place-items-center rounded-md text-white/55 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CB2039]"
@@ -340,9 +379,9 @@ export default function MotionPalette() {
         </div>
       </header>
 
-      <main className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-[1800px] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_410px]">
-        <section className="flex min-w-0 flex-col border-white/10 p-4 sm:p-6 lg:border-r lg:p-7">
-          <div className="mb-4 flex min-h-10 flex-wrap items-center gap-x-5 gap-y-2">
+      <main className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-[1800px] grid-cols-1 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_410px]">
+        <section className="flex min-w-0 flex-col border-white/10 p-4 sm:p-6 lg:min-h-0 lg:overflow-hidden lg:border-r lg:p-7">
+          <div className="mb-4 flex min-h-10 shrink-0 flex-wrap items-center gap-x-5 gap-y-2">
             {loaded && metadata ? (
               <>
                 <div className="flex min-w-0 items-center gap-2">
@@ -376,7 +415,7 @@ export default function MotionPalette() {
             <LottieUploader onFile={handleFile} disabled={loading} />
           ) : (
             <>
-              <div className="relative flex min-h-[360px] flex-1">
+              <div className="relative flex min-h-[360px] flex-1 lg:min-h-0">
                 {previewAnimation && (
                   <AnimationPreview
                     ref={previewRef}
@@ -386,8 +425,10 @@ export default function MotionPalette() {
                     speed={speed}
                     background={background}
                     transparent={transparent}
+                    zoom={previewZoom}
                     onFrameChange={setFrame}
                     onPlaybackChange={setPlaying}
+                    onReadyChange={setPreviewReady}
                     onRenderError={setRenderError}
                   />
                 )}
@@ -396,7 +437,7 @@ export default function MotionPalette() {
                     {renderError}
                   </div>
                 )}
-                <div className="absolute left-3 top-3 flex rounded-lg border border-black/20 bg-black/60 p-1 shadow-lg backdrop-blur">
+                <div className="absolute left-3 top-3 z-10 flex rounded-lg border border-black/20 bg-black/60 p-1 shadow-lg backdrop-blur">
                   <button
                     type="button"
                     onClick={() => setComparison("original")}
@@ -420,9 +461,45 @@ export default function MotionPalette() {
                     Recolored
                   </button>
                 </div>
+                <div className="absolute right-3 top-3 z-10 flex items-center rounded-lg border border-black/20 bg-black/60 p-1 shadow-lg backdrop-blur">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((value) => Math.max(50, value - 10))}
+                    disabled={previewZoom <= 50}
+                    className="grid h-8 w-8 place-items-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CB2039] disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Zoom preview out"
+                    title="Zoom out"
+                  >
+                    <ZoomOut className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <output className="w-11 text-center font-mono text-[10px] tabular-nums text-white/70" aria-live="polite">
+                    {previewZoom}%
+                  </output>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom((value) => Math.min(150, value + 10))}
+                    disabled={previewZoom >= 150}
+                    className="grid h-8 w-8 place-items-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CB2039] disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label="Zoom preview in"
+                    title="Zoom in"
+                  >
+                    <ZoomIn className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoom(100)}
+                    disabled={previewZoom === 100}
+                    className="ml-0.5 flex h-8 items-center gap-1 rounded-md px-2 text-[10px] font-medium text-white/55 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CB2039] disabled:opacity-35"
+                    aria-label="Fit animation to preview"
+                    title="Fit to preview"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">Fit</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-white/10 bg-[#181717] px-3 py-3 sm:px-4">
+              <div className="mt-3 shrink-0 rounded-xl border border-white/10 bg-[#181717] px-3 py-3 sm:px-4">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <Button
                     type="button"
@@ -521,7 +598,7 @@ export default function MotionPalette() {
                     <Switch checked={transparent} onCheckedChange={setTransparent} aria-label="Use transparent preview background" className="data-[state=checked]:bg-[#CB2039] data-[state=unchecked]:bg-white/15" />
                   </label>
                   <span className="ml-auto hidden items-center gap-1.5 text-[10px] text-white/25 sm:flex">
-                    <Info className="h-3 w-3" aria-hidden="true" /> Not included in download
+                    <Info className="h-3 w-3" aria-hidden="true" /> Preview only · SVG exports transparent
                   </span>
                 </div>
               </div>
@@ -529,7 +606,7 @@ export default function MotionPalette() {
           )}
         </section>
 
-        <aside className="flex min-h-[500px] flex-col bg-[#141313] lg:max-h-[calc(100vh-4rem)]">
+        <aside className="flex min-h-[500px] flex-col bg-[#141313] lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className="border-b border-white/10 px-4 py-4 sm:px-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -609,17 +686,32 @@ export default function MotionPalette() {
                 <Save aria-hidden="true" /> Save scheme
               </Button>
             </div>
-            <Button
-              type="button"
-              onClick={download}
-              disabled={!loaded || !editedAnimation || Boolean(renderError)}
-              className="mt-2 w-full bg-[#CB2039] hover:bg-[#b51c33]"
-            >
-              <Download aria-hidden="true" /> Download recolored JSON
-            </Button>
+            <div className="mt-2 grid grid-cols-2 gap-2" aria-label="Animation exports">
+              <Button
+                type="button"
+                onClick={download}
+                disabled={!loaded || !editedAnimation || Boolean(renderError)}
+                className="bg-[#CB2039] px-3 hover:bg-[#b51c33]"
+                aria-label="Download recolored animation as Lottie JSON"
+              >
+                <Download aria-hidden="true" /> Lottie JSON
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={downloadSvgFrame}
+                disabled={!loaded || !previewReady || Boolean(renderError)}
+                className="border-white/15 bg-white/5 px-3 text-white hover:bg-white/10 hover:text-white"
+                aria-label={`Download current ${comparison} frame as SVG`}
+              >
+                <Download aria-hidden="true" /> SVG frame
+              </Button>
+            </div>
             <div className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-white/30">
               {loaded && !renderError ? <CheckCircle2 className="h-3 w-3 text-emerald-400/70" aria-hidden="true" /> : <LockKeyhole className="h-3 w-3" aria-hidden="true" />}
-              {loaded && !renderError ? "Validated locally before download" : "Files never leave your browser"}
+              {loaded && !renderError
+                ? `${comparison === "recolored" ? "Recolored" : "Original"} · frame ${Math.round(frame)} of ${totalFrames} · SVG is static`
+                : "Files never leave your browser"}
             </div>
           </div>
         </aside>

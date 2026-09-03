@@ -10,6 +10,8 @@ import lottie, { type AnimationItem } from "lottie-web/build/player/lottie_light
 export interface AnimationPreviewHandle {
   restart: () => void;
   seek: (frame: number) => void;
+  getCurrentFrame: () => number;
+  getSvgElement: () => SVGSVGElement | null;
 }
 
 interface AnimationPreviewProps {
@@ -19,8 +21,10 @@ interface AnimationPreviewProps {
   speed: number;
   background: string;
   transparent: boolean;
+  zoom: number;
   onFrameChange: (frame: number) => void;
   onPlaybackChange: (playing: boolean) => void;
+  onReadyChange: (ready: boolean) => void;
   onRenderError: (message: string | null) => void;
 }
 
@@ -58,8 +62,10 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
       speed,
       background,
       transparent,
+      zoom,
       onFrameChange,
       onPlaybackChange,
+      onReadyChange,
       onRenderError,
     },
     ref,
@@ -88,6 +94,12 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
         onFrameChange(frame);
         if (playingRef.current) animation.play();
       },
+      getCurrentFrame() {
+        return animationRef.current?.currentFrame ?? lastFrameRef.current;
+      },
+      getSvgElement() {
+        return containerRef.current?.querySelector("svg") ?? null;
+      },
     }), [onFrameChange]);
 
     useLayoutEffect(() => {
@@ -97,6 +109,7 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
       let animation: AnimationItem | null = null;
       let disposed = false;
       const retainedFrame = lastFrameRef.current;
+      onReadyChange(false);
       onRenderError(null);
 
       try {
@@ -123,6 +136,7 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
           const maxFrame = Math.max(0, animation.totalFrames - 1);
           const nextFrame = Math.min(retainedFrame, maxFrame);
           animation.goToAndStop(nextFrame, true);
+          onReadyChange(true);
           if (playingRef.current) animation.play();
         };
         const onEnterFrame = (event: { currentTime: number }) => {
@@ -133,6 +147,7 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
           if (!loop) onPlaybackChange(false);
         };
         const onError = () => {
+          onReadyChange(false);
           onRenderError("This file parsed correctly, but the preview renderer could not display it.");
         };
 
@@ -142,6 +157,7 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
         animation.addEventListener("error", onError);
         animation.addEventListener("data_failed", onError);
       } catch (error) {
+        onReadyChange(false);
         onRenderError(error instanceof Error ? error.message : "Unable to render this animation.");
       }
 
@@ -179,14 +195,17 @@ const AnimationPreview = forwardRef<AnimationPreviewHandle, AnimationPreviewProp
 
     return (
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]"
+        className="relative flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] sm:min-h-[420px] lg:min-h-0"
         style={checkerboard}
       >
-        <div
-          ref={containerRef}
-          className="h-full min-h-[280px] w-full p-5 sm:min-h-[420px] sm:p-8 lg:min-h-[520px] [&>svg]:!h-full [&>svg]:!w-full"
-          aria-label="Lottie animation preview"
-        />
+        <div className="absolute inset-0 flex items-center justify-center p-5 sm:p-8">
+          <div
+            ref={containerRef}
+            className="h-full w-full transition-transform duration-150 ease-out [&>svg]:!h-full [&>svg]:!w-full"
+            style={{ transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
+            aria-label="Lottie animation preview"
+          />
+        </div>
       </div>
     );
   },
