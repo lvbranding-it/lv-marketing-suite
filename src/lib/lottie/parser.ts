@@ -12,9 +12,12 @@ import type {
   LottieColorKind,
   LottieColorOccurrence,
   LottieColorReplacements,
+  LottieGradientRamp,
   LottieMetadata,
   LottiePathSegment,
   LottieRecolorResult,
+  LottieShapeType,
+  RgbColor,
   LottieUnsupportedFeature,
   LottieUnsupportedFeatureCode,
   LottieUnsupportedIssue,
@@ -36,10 +39,6 @@ const UNSUPPORTED_FEATURE_COPY: Record<
   "gradient-stroke": {
     label: "Gradient strokes",
     message: "Gradient strokes are preserved but cannot be recolored in this version.",
-  },
-  "animated-color": {
-    label: "Animated colors",
-    message: "Animated color keyframes are preserved but cannot be recolored in this version.",
   },
   "raster-asset": {
     label: "Raster assets",
@@ -101,9 +100,18 @@ function isDirectItemIn(path: readonly LottiePathSegment[], property: string): b
   );
 }
 
+/** One recolourable keyframe inside an animated colour property. */
+interface AnimatedColorKeyframe {
+  index: number;
+  time: number | null;
+  color: NonNullable<ReturnType<typeof normalizeLottieColor>>;
+  /** True when the keyframe also carries a legacy `e` end value to keep in step. */
+  hasEndValue: boolean;
+}
+
 function classifyShapeColor(shape: JsonRecord):
   | { status: "editable"; color: NonNullable<ReturnType<typeof normalizeLottieColor>> }
-  | { status: "animated" }
+  | { status: "animated"; keyframes: AnimatedColorKeyframe[] }
   | { status: "expression" }
   | { status: "malformed"; reason: string } {
   const colorProperty = shape.c;
@@ -111,14 +119,45 @@ function classifyShapeColor(shape: JsonRecord):
     return { status: "malformed", reason: "The shape has no static color property." };
   }
 
+  // An expression governs the value regardless of what the baked keyframes say,
+  // so it is checked before them. Rewriting the keyframes under an expression
+  // would change the file without changing what renders.
+  if (typeof colorProperty.x === "string") return { status: "expression" };
+
   const animatedFlag = colorProperty.a;
   const keyframes = colorProperty.k;
   const looksLikeKeyframes =
     Array.isArray(keyframes) &&
     keyframes.some((entry) => isRecord(entry) && ("s" in entry || "e" in entry || "t" in entry));
 
-  if (animatedFlag === 1 || looksLikeKeyframes) return { status: "animated" };
-  if (typeof colorProperty.x === "string") return { status: "expression" };
+  if (animatedFlag === 1 || looksLikeKeyframes) {
+    if (!Array.isArray(keyframes)) {
+      return { status: "malformed", reason: "The animated color has no keyframe array." };
+    }
+
+    const parsed: AnimatedColorKeyframe[] = [];
+    for (const [index, frame] of keyframes.entries()) {
+      if (!isRecord(frame)) continue;
+      const color = normalizeLottieColor(frame.s);
+      if (!color) continue;
+      parsed.push({
+        index,
+        time: typeof frame.t === "number" ? frame.t : null,
+        color,
+        hasEndValue: normalizeLottieColor(frame.e) !== null,
+      });
+    }
+
+    if (parsed.length === 0) {
+      return {
+        status: "malformed",
+        reason: "No keyframe carried a readable RGB or RGBA value.",
+      };
+    }
+
+    return { status: "animated", keyframes: parsed };
+  }
+
   if (animatedFlag !== undefined && animatedFlag !== 0) {
     return { status: "malformed", reason: "The color animation flag is invalid." };
   }
@@ -132,6 +171,94 @@ function classifyShapeColor(shape: JsonRecord):
   }
 
   return { status: "editable", color };
+}
+
+/** One colour stop inside a gradient ramp. */
+interface GradientStop {
+  stopIndex: number;
+  /** Position along the ramp, 0 to 1. */
+  offset: number;
+  /** Index of this stop's red channel inside the flat ramp array. */
+  redIndex: number;
+  color: NonNullable<ReturnType<typeof normalizeLottieColor>>;
+}
+
+/**
+ * Reads the colour stops out of a Lottie gradient ramp.
+ *
+ * The ramp is one flat, untagged array: `stopCount` groups of
+ * `[offset, r, g, b]`, optionally followed by `[offset, alpha]` opacity pairs.
+ * Nothing in the array marks where the colours end, so `stopCount` is the only
+ * boundary. If it disagrees with the array length the ramp is rejected outright
+ * rather than read past the colours, because writing into the opacity pairs
+ * turns a gradient invisible instead of merely miscolouring it.
+ */
+function readGradientStops(ramp: unknown, stopCount: unknown): GradientStop[] | null {
+  if (!Array.isArray(ramp)) return null;
+  if (typeof stopCount !== "number" || !Number.isInteger(stopCount) || stopCount <= 0) return null;
+  if (ramp.length < stopCount * 4) return null;
+
+  const stops: GradientStop[] = [];
+  for (let index = 0; index < stopCount; index += 1) {
+    const redIndex = index * 4 + 1;
+    const color = normalizeLottieColor([ramp[redIndex], ramp[redIndex + 1], ramp[redIndex + 2]]);
+    if (!color) return null;
+    const offset = ramp[redIndex - 1];
+    if (typeof offset !== "number" || !Number.isFinite(offset)) return null;
+    stops.push({ stopIndex: index, offset, redIndex, color });
+  }
+  return stops;
+}
+
+/**
+ * Classifies a gradient fill or stroke.
+ *
+ * `shape.g.p` is the stop count and `shape.g.k` is the ramp property, which
+ * follows the same static-or-keyframed shape as a solid colour.
+ */
+function classifyGradientColor(shape: JsonRecord):
+  | { status: "static"; stops: GradientStop[] }
+  | { status: "animated"; keyframes: Array<{ index: number; time: number | null; stops: GradientStop[] }> }
+  | { status: "expression" }
+  | { status: "malformed"; reason: string } {
+  const gradient = shape.g;
+  if (!isRecord(gradient)) return { status: "malformed", reason: "The gradient has no ramp." };
+
+  const ramp = gradient.k;
+  if (!isRecord(ramp)) return { status: "malformed", reason: "The gradient ramp is not a property." };
+  if (typeof ramp.x === "string") return { status: "expression" };
+
+  const stopCount = gradient.p;
+
+  if (ramp.a === 1 || (Array.isArray(ramp.k) && ramp.k.some((entry) => isRecord(entry)))) {
+    if (!Array.isArray(ramp.k)) {
+      return { status: "malformed", reason: "The animated gradient has no keyframe array." };
+    }
+    const keyframes: Array<{ index: number; time: number | null; stops: GradientStop[] }> = [];
+    for (const [index, frame] of ramp.k.entries()) {
+      if (!isRecord(frame)) continue;
+      const stops = readGradientStops(frame.s, stopCount);
+      if (!stops) continue;
+      keyframes.push({
+        index,
+        time: typeof frame.t === "number" ? frame.t : null,
+        stops,
+      });
+    }
+    if (keyframes.length === 0) {
+      return { status: "malformed", reason: "No gradient keyframe held a readable ramp." };
+    }
+    return { status: "animated", keyframes };
+  }
+
+  const stops = readGradientStops(ramp.k, stopCount);
+  if (!stops) {
+    return {
+      status: "malformed",
+      reason: "The gradient ramp did not match its declared stop count.",
+    };
+  }
+  return { status: "static", stops };
 }
 
 function addUnsupportedIssue(
@@ -228,6 +355,7 @@ export function getLottieMetadata(value: unknown): LottieMetadata {
 
 export function analyzeLottie(value: unknown): LottieAnalysis {
   const palette = new Map<HexColor, DetectedLottieColor>();
+  const ramps = new Map<string, LottieGradientRamp>();
   const unsupportedIssues: LottieUnsupportedIssue[] = [];
   let fillCount = 0;
   let strokeCount = 0;
@@ -235,65 +363,35 @@ export function analyzeLottie(value: unknown): LottieAnalysis {
   walkJson(value, (entry, path) => {
     if (!isRecord(entry)) return;
 
-    if (typeof entry.x === "string") {
-      addUnsupportedIssue(unsupportedIssues, "expression", [...path, "x"]);
-    }
-
     if (isDirectItemIn(path, "assets") && typeof entry.p === "string" && entry.p.length > 0) {
       addUnsupportedIssue(unsupportedIssues, "raster-asset", path);
     }
 
-    if (entry.ty === "gf") {
-      addUnsupportedIssue(unsupportedIssues, "gradient-fill", path);
-      return;
-    }
-    if (entry.ty === "gs") {
-      addUnsupportedIssue(unsupportedIssues, "gradient-stroke", path);
-      return;
-    }
-    if (entry.ty !== "fl" && entry.ty !== "st") return;
+    const isGradient = entry.ty === "gf" || entry.ty === "gs";
+    if (entry.ty !== "fl" && entry.ty !== "st" && !isGradient) return;
 
-    const kind: LottieColorKind = entry.ty === "fl" ? "fill" : "stroke";
-    const classification = classifyShapeColor(entry);
+    const kind: LottieColorKind =
+      entry.ty === "fl" || entry.ty === "gf" ? "fill" : "stroke";
+    const shapeName = typeof entry.nm === "string" ? entry.nm : null;
 
-    if (classification.status === "animated") {
-      addUnsupportedIssue(unsupportedIssues, "animated-color", [...path, "c"]);
-      return;
-    }
-    if (classification.status === "malformed") {
-      addUnsupportedIssue(
-        unsupportedIssues,
-        "malformed-color",
-        [...path, "c"],
-        classification.reason,
-      );
-      return;
-    }
-    if (classification.status === "expression") return;
+    const register = (occurrence: LottieColorOccurrence, color: {
+      hex: HexColor;
+      rgb: RgbColor;
+    }): void => {
+      const existing = palette.get(color.hex);
+      if (existing) {
+        existing.occurrences.push(occurrence);
+        existing.occurrenceCount += 1;
+        if (occurrence.animated) existing.animatedCount += 1;
+        if (occurrence.gradientStopIndex !== null) existing.gradientCount += 1;
+        if (kind === "fill") existing.fillCount += 1;
+        else existing.strokeCount += 1;
+        existing.usage = existing.fillCount > 0 && existing.strokeCount > 0
+          ? "both"
+          : kind;
+        return;
+      }
 
-    const { color } = classification;
-    const occurrence: LottieColorOccurrence = {
-      path: [...path, "c", "k"],
-      jsonPath: formatLottiePath([...path, "c", "k"]),
-      kind,
-      shapeType: entry.ty,
-      name: typeof entry.nm === "string" ? entry.nm : null,
-      sourceColor: color.sourceColor,
-      alpha: color.alpha,
-    };
-
-    const existing = palette.get(color.hex);
-    if (existing) {
-      existing.occurrences.push(occurrence);
-      existing.occurrenceCount += 1;
-      if (kind === "fill") existing.fillCount += 1;
-      else existing.strokeCount += 1;
-      existing.usage = existing.fillCount > 0 && existing.strokeCount > 0
-        ? "both"
-        : existing.fillCount > 0
-          ? "fill"
-          : "stroke";
-    } else {
       palette.set(color.hex, {
         key: color.hex,
         originalHex: color.hex,
@@ -303,9 +401,164 @@ export function analyzeLottie(value: unknown): LottieAnalysis {
         fillCount: kind === "fill" ? 1 : 0,
         strokeCount: kind === "stroke" ? 1 : 0,
         usage: kind,
+        animatedCount: occurrence.animated ? 1 : 0,
+        gradientCount: occurrence.gradientStopIndex !== null ? 1 : 0,
         occurrences: [occurrence],
       });
+    };
+
+    if (isGradient) {
+      const gradient = classifyGradientColor(entry);
+
+      if (gradient.status === "expression") {
+        addUnsupportedIssue(unsupportedIssues, "expression", [...path, "g", "k", "x"]);
+        return;
+      }
+      if (gradient.status === "malformed") {
+        addUnsupportedIssue(
+          unsupportedIssues,
+          entry.ty === "gf" ? "gradient-fill" : "gradient-stroke",
+          [...path, "g"],
+          gradient.reason,
+        );
+        return;
+      }
+
+      const addStop = (
+        stop: GradientStop,
+        stopPath: LottiePathSegment[],
+        animated: boolean,
+        keyframeIndex: number | null,
+        keyframeTime: number | null,
+      ): void => {
+        register(
+          {
+            path: stopPath,
+            jsonPath: formatLottiePath(stopPath),
+            kind,
+            shapeType: entry.ty as "gf" | "gs",
+            name: shapeName,
+            sourceColor: stop.color.sourceColor,
+            alpha: stop.color.alpha,
+            animated,
+            keyframeIndex,
+            keyframeTime,
+            gradientStopIndex: stop.stopIndex,
+          },
+          stop.color,
+        );
+      };
+
+      if (gradient.status === "animated") {
+        for (const frame of gradient.keyframes) {
+          for (const stop of frame.stops) {
+            addStop(
+              stop,
+              [...path, "g", "k", "k", frame.index, "s", stop.redIndex],
+              true,
+              frame.index,
+              frame.time,
+            );
+          }
+        }
+      } else {
+        for (const stop of gradient.stops) {
+          addStop(stop, [...path, "g", "k", "k", stop.redIndex], false, null, null);
+        }
+      }
+
+      // Record the ramp itself so an editor can show its stops together. The
+      // first keyframe stands for an animated ramp: it is the shape of the
+      // gradient, and every keyframe shares that shape.
+      const rampStops = gradient.status === "animated"
+        ? gradient.keyframes[0].stops
+        : gradient.stops;
+      const rampId = rampStops
+        .map((stop) => `${stop.offset.toFixed(4)}:${stop.color.hex}`)
+        .join("|");
+      const existingRamp = ramps.get(rampId);
+      if (existingRamp) {
+        existingRamp.useCount += 1;
+        if (existingRamp.usage !== kind) existingRamp.usage = "both";
+      } else {
+        ramps.set(rampId, {
+          id: rampId,
+          stops: rampStops.map((stop) => ({
+            stopIndex: stop.stopIndex,
+            offset: stop.offset,
+            hex: stop.color.hex,
+          })),
+          useCount: 1,
+          usage: kind,
+          animated: gradient.status === "animated",
+        });
+      }
+
+      if (kind === "fill") fillCount += 1;
+      else strokeCount += 1;
+      return;
     }
+
+    const classification = classifyShapeColor(entry);
+
+    if (classification.status === "malformed") {
+      addUnsupportedIssue(
+        unsupportedIssues,
+        "malformed-color",
+        [...path, "c"],
+        classification.reason,
+      );
+      return;
+    }
+    // An expression drives this colour at render time, so the stored value is
+    // not what the viewer sees. This is the only expression a colour editor has
+    // any business reporting.
+    if (classification.status === "expression") {
+      addUnsupportedIssue(unsupportedIssues, "expression", [...path, "c", "x"]);
+      return;
+    }
+
+    if (classification.status === "animated") {
+      for (const frame of classification.keyframes) {
+        const framePath = [...path, "c", "k", frame.index, "s"];
+        register(
+          {
+            path: framePath,
+            jsonPath: formatLottiePath(framePath),
+            kind,
+            shapeType: entry.ty as LottieShapeType,
+            name: shapeName,
+            sourceColor: frame.color.sourceColor,
+            alpha: frame.color.alpha,
+            animated: true,
+            keyframeIndex: frame.index,
+            keyframeTime: frame.time,
+            gradientStopIndex: null,
+          },
+          frame.color,
+        );
+      }
+      if (kind === "fill") fillCount += 1;
+      else strokeCount += 1;
+      return;
+    }
+
+    const { color } = classification;
+    const occurrence: LottieColorOccurrence = {
+      path: [...path, "c", "k"],
+      jsonPath: formatLottiePath([...path, "c", "k"]),
+      kind,
+      shapeType: entry.ty as LottieShapeType,
+      name: shapeName,
+      sourceColor: color.sourceColor,
+      alpha: color.alpha,
+      animated: false,
+      keyframeIndex: null,
+      keyframeTime: null,
+      gradientStopIndex: null,
+    };
+
+    register(occurrence, color);
 
     if (kind === "fill") fillCount += 1;
     else strokeCount += 1;
@@ -318,9 +571,14 @@ export function analyzeLottie(value: unknown): LottieAnalysis {
     metadata: getLottieMetadata(value),
     colors,
     editableColorCount: colors.length,
-    editableOccurrenceCount: fillCount + strokeCount,
+    // Counted from the palette, not from shape totals: one animated property
+    // contributes a recolourable occurrence per keyframe, so summing shapes
+    // would under-report what the editor actually lets you change and disagree
+    // with the per-colour counts shown on each swatch.
+    editableOccurrenceCount: colors.reduce((total, color) => total + color.occurrenceCount, 0),
     fillCount,
     strokeCount,
+    gradients: [...ramps.values()],
     unsupportedIssues,
     unsupportedFeatures,
     hasUnsupportedFeatures: unsupportedIssues.length > 0,
@@ -528,10 +786,109 @@ export function recolorLottieWithReport<T>(
   let appliedOccurrenceCount = 0;
 
   walkJson(animation, (entry) => {
-    if (!isRecord(entry) || (entry.ty !== "fl" && entry.ty !== "st")) return;
+    if (!isRecord(entry)) return;
+    if (entry.ty !== "fl" && entry.ty !== "st" && entry.ty !== "gf" && entry.ty !== "gs") return;
+
+    const isGradient = entry.ty === "gf" || entry.ty === "gs";
+
+    /**
+     * Writes the replacement into an existing channel array in place.
+     *
+     * Only indices 0 to 2 are touched: index 3 is the alpha the animation
+     * author set, and on a keyframe the surrounding `i`, `o` and `t` fields are
+     * the easing and timing. Recolouring must not disturb either, or the motion
+     * changes along with the colour.
+     */
+    const applyTo = (channels: unknown, replacementHex: HexColor): boolean => {
+      if (!Array.isArray(channels)) return false;
+      const rgb = hexToRgb(replacementHex);
+      if (!rgb) return false;
+      const [red, green, blue] = rgbToLottieChannels(rgb);
+      channels[0] = red;
+      channels[1] = green;
+      channels[2] = blue;
+      return true;
+    };
+
+    if (isGradient) {
+      const gradient = classifyGradientColor(entry);
+      if (gradient.status === "malformed" || gradient.status === "expression") return;
+
+      /**
+       * Writes one stop's RGB into the flat ramp.
+       *
+       * Only the three channels after the stop's offset are touched. The offset
+       * itself positions the stop along the ramp, and the numbers past the last
+       * colour stop are the opacity pairs; writing into either would move or
+       * erase part of the gradient rather than recolour it.
+       */
+      const applyStop = (ramp: unknown, stop: GradientStop, replacementHex: HexColor): boolean => {
+        if (!Array.isArray(ramp)) return false;
+        const rgb = hexToRgb(replacementHex);
+        if (!rgb) return false;
+        const [red, green, blue] = rgbToLottieChannels(rgb);
+        ramp[stop.redIndex] = red;
+        ramp[stop.redIndex + 1] = green;
+        ramp[stop.redIndex + 2] = blue;
+        return true;
+      };
+
+      const rampProperty = (entry.g as JsonRecord).k as JsonRecord;
+
+      const recolorStops = (ramp: unknown, stops: GradientStop[]): void => {
+        for (const stop of stops) {
+          const originalHex = stop.color.hex;
+          const replacementHex = normalized.get(originalHex);
+          if (!replacementHex) continue;
+          matched.add(originalHex);
+          if (replacementHex === originalHex) continue;
+          if (!applyStop(ramp, stop, replacementHex)) continue;
+
+          appliedOccurrenceCount += 1;
+          appliedByOriginalColor[originalHex] = (appliedByOriginalColor[originalHex] ?? 0) + 1;
+        }
+      };
+
+      if (gradient.status === "animated") {
+        const keyframes = rampProperty.k as unknown[];
+        for (const frame of gradient.keyframes) {
+          const target = keyframes[frame.index];
+          if (!isRecord(target)) continue;
+          recolorStops(target.s, frame.stops);
+        }
+        return;
+      }
+
+      recolorStops(rampProperty.k, gradient.stops);
+      return;
+    }
 
     const classification = classifyShapeColor(entry);
-    if (classification.status !== "editable") return;
+    if (classification.status === "malformed" || classification.status === "expression") return;
+
+    const colorProperty = entry.c as JsonRecord;
+
+    if (classification.status === "animated") {
+      const keyframes = colorProperty.k as unknown[];
+      for (const frame of classification.keyframes) {
+        const originalHex = frame.color.hex;
+        const replacementHex = normalized.get(originalHex);
+        if (!replacementHex) continue;
+        matched.add(originalHex);
+        if (replacementHex === originalHex) continue;
+
+        const target = keyframes[frame.index];
+        if (!isRecord(target)) continue;
+        if (!applyTo(target.s, replacementHex)) continue;
+        // Older exports repeat the value as the previous keyframe's `e`. Leaving
+        // it behind would make the colour jump back for one interval.
+        if (frame.hasEndValue) applyTo(target.e, replacementHex);
+
+        appliedOccurrenceCount += 1;
+        appliedByOriginalColor[originalHex] = (appliedByOriginalColor[originalHex] ?? 0) + 1;
+      }
+      return;
+    }
 
     const originalHex = classification.color.hex;
     const replacementHex = normalized.get(originalHex);
@@ -539,14 +896,7 @@ export function recolorLottieWithReport<T>(
     matched.add(originalHex);
 
     if (replacementHex === originalHex) return;
-
-    const replacementRgb = hexToRgb(replacementHex);
-    const colorProperty = entry.c as JsonRecord;
-    const channels = colorProperty.k as number[];
-    const [red, green, blue] = rgbToLottieChannels(replacementRgb!);
-    channels[0] = red;
-    channels[1] = green;
-    channels[2] = blue;
+    if (!applyTo(colorProperty.k, replacementHex)) return;
 
     appliedOccurrenceCount += 1;
     appliedByOriginalColor[originalHex] = (appliedByOriginalColor[originalHex] ?? 0) + 1;

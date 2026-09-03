@@ -10,6 +10,10 @@ export interface PaletteColorView {
   count: number;
   fillCount: number;
   strokeCount: number;
+  /** Occurrences of this colour that sit on animation keyframes. */
+  animatedCount: number;
+  /** Occurrences of this colour that are stops inside a gradient ramp. */
+  gradientCount: number;
 }
 
 interface DetectedColorListProps {
@@ -125,7 +129,25 @@ function ColorEditor({
 
       <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-[11px] text-white/45">
         <span>{color.count} occurrence{color.count === 1 ? "" : "s"}</span>
-        <span className="rounded-full bg-white/[0.06] px-2 py-1 text-white/55">{usage}</span>
+        <span className="flex items-center gap-1.5">
+          {color.animatedCount > 0 && (
+            <span
+              className="rounded-full bg-[#CB2039]/15 px-2 py-1 text-[#F2879A]"
+              title={`${color.animatedCount} of these sit on animation keyframes and are recolored across the timeline.`}
+            >
+              {color.animatedCount} animated
+            </span>
+          )}
+          {color.gradientCount > 0 && (
+            <span
+              className="rounded-full bg-sky-400/15 px-2 py-1 text-sky-300"
+              title={`${color.gradientCount} of these are stops inside a gradient. Stop position and opacity are left untouched.`}
+            >
+              {color.gradientCount} gradient
+            </span>
+          )}
+          <span className="rounded-full bg-white/[0.06] px-2 py-1 text-white/55">{usage}</span>
+        </span>
       </div>
     </article>
   );

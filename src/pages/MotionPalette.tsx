@@ -27,6 +27,7 @@ import AnimationPreview, {
   type AnimationPreviewHandle,
 } from "@/components/motion-palette/AnimationPreview";
 import DetectedColorList from "@/components/motion-palette/DetectedColorList";
+import GradientRampList from "@/components/motion-palette/GradientRampList";
 import LottieUploader from "@/components/motion-palette/LottieUploader";
 import PaletteSchemeManager, {
   PaletteMappingDialog,
@@ -148,9 +149,45 @@ export default function MotionPalette() {
       count: color.occurrenceCount,
       fillCount: color.fillCount,
       strokeCount: color.strokeCount,
+      animatedCount: color.animatedCount,
+      gradientCount: color.gradientCount,
     })) ?? [],
     [loaded, replacements],
   );
+
+  const gradientRamps = useMemo(() => {
+    const colors = loaded?.analysis.colors ?? [];
+    // A stop is "shared" when the colour appears more often across the document
+    // than it does inside this one ramp. Editing it is still a global change,
+    // and the card says so rather than letting it surprise the user.
+    const totalUses = new Map(colors.map((color) => [color.originalHex, color.occurrenceCount]));
+
+    return (loaded?.analysis.gradients ?? []).map((ramp) => {
+      const usesInRamp = new Map<string, number>();
+      for (const stop of ramp.stops) {
+        usesInRamp.set(stop.hex, (usesInRamp.get(stop.hex) ?? 0) + 1);
+      }
+
+      return {
+        id: ramp.id,
+        useCount: ramp.useCount,
+        usage: ramp.usage,
+        animated: ramp.animated,
+        stops: ramp.stops.map((stop) => ({
+          stopIndex: stop.stopIndex,
+          offset: stop.offset,
+          originalHex: stop.hex,
+          currentHex: replacements[stop.hex] ?? stop.hex,
+        })),
+        sharedStopIndexes: ramp.stops
+          .filter((stop) => {
+            const total = totalUses.get(stop.hex) ?? 0;
+            return total > (usesInRamp.get(stop.hex) ?? 0) * ramp.useCount;
+          })
+          .map((stop) => stop.stopIndex),
+      };
+    });
+  }, [loaded, replacements]);
 
   const detectedOriginalColors = useMemo(
     () => loaded?.analysis.colors.map((color) => color.originalHex) ?? [],
@@ -653,6 +690,9 @@ export default function MotionPalette() {
                   </div>
                 )}
                 <UnsupportedFeaturesNotice issues={unsupported} />
+                {gradientRamps.length > 0 && (
+                  <GradientRampList ramps={gradientRamps} onChange={handleColorChange} />
+                )}
                 {paletteColors.length > 0 ? (
                   <DetectedColorList colors={paletteColors} onChange={handleColorChange} onReset={handleResetColor} />
                 ) : (

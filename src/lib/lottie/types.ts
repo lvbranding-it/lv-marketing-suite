@@ -23,19 +23,36 @@ export interface LottieAnimation {
 }
 
 export type LottieColorKind = "fill" | "stroke";
+/** `fl`/`st` are solid; `gf`/`gs` are the gradient equivalents. */
+export type LottieShapeType = "fl" | "st" | "gf" | "gs";
 export type LottieColorUsage = LottieColorKind | "both";
 
 export interface LottieColorOccurrence {
-  /** Path to the shape's `c.k` array. */
+  /**
+   * Path to the editable colour array: `c.k` for a static colour, and
+   * `c.k.<index>.s` for one keyframe of an animated colour.
+   */
   path: LottiePathSegment[];
   jsonPath: string;
   kind: LottieColorKind;
-  shapeType: "fl" | "st";
+  shapeType: LottieShapeType;
   name: string | null;
   /** A detached copy of the source RGB or RGBA array. */
   sourceColor: number[];
   /** The untouched alpha channel, or null when the source only supplied RGB. */
   alpha: number | null;
+  /** True when this colour is one keyframe of an animated property. */
+  animated: boolean;
+  /** Keyframe index within `c.k`, or null for a static colour. */
+  keyframeIndex: number | null;
+  /** Keyframe time in frames, for showing an editor when a colour changes. */
+  keyframeTime: number | null;
+  /**
+   * Position of this colour within a gradient ramp, or null for a solid shape.
+   * Gradient stops are stored in a flat, untagged array, so the index is what
+   * ties an occurrence back to the numbers it may rewrite.
+   */
+  gradientStopIndex: number | null;
 }
 
 export interface DetectedLottieColor {
@@ -48,13 +65,42 @@ export interface DetectedLottieColor {
   fillCount: number;
   strokeCount: number;
   usage: LottieColorUsage;
+  /** Occurrences that sit on animated keyframes rather than a static value. */
+  animatedCount: number;
+  /** Occurrences that are stops inside a gradient ramp. */
+  gradientCount: number;
   occurrences: LottieColorOccurrence[];
+}
+
+/** One stop of a gradient ramp, in ramp order. */
+export interface LottieGradientStop {
+  stopIndex: number;
+  /** Position along the ramp, 0 to 1. */
+  offset: number;
+  hex: HexColor;
+}
+
+/**
+ * A distinct gradient ramp.
+ *
+ * Keyed by the ordered stop sequence rather than by shape, because a file
+ * typically reuses a handful of ramps across many shapes: the sample this was
+ * built against has 19 gradient shapes drawing on 6 ramps.
+ */
+export interface LottieGradientRamp {
+  /** Stable identity: the ordered offset and colour sequence. */
+  id: string;
+  stops: LottieGradientStop[];
+  /** How many gradient shapes draw this exact ramp. */
+  useCount: number;
+  usage: LottieColorUsage;
+  /** True when the ramp is defined by keyframes rather than a single value. */
+  animated: boolean;
 }
 
 export type LottieUnsupportedFeatureCode =
   | "gradient-fill"
   | "gradient-stroke"
-  | "animated-color"
   | "raster-asset"
   | "expression"
   | "malformed-color";
@@ -99,6 +145,8 @@ export interface LottieAnalysis {
   editableOccurrenceCount: number;
   fillCount: number;
   strokeCount: number;
+  /** Distinct gradient ramps, so an editor can present a ramp as one unit. */
+  gradients: LottieGradientRamp[];
   unsupportedIssues: LottieUnsupportedIssue[];
   unsupportedFeatures: LottieUnsupportedFeature[];
   hasUnsupportedFeatures: boolean;
