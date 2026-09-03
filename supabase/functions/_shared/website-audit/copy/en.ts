@@ -541,5 +541,5 @@ export const enAuditCopy: AuditCopy = {
     resultUnavailable: "We could not load this result right now. Your private link may still be valid.",
     retryResult: "Try loading again",
   },
-  footer: "Made with care by LV Branding",
+  footer: "Made with love by LV Branding",
 };

@@ -4,7 +4,6 @@ import {
   Bot,
   CheckCircle2,
   Code2,
-  Compass,
   Gauge,
   Globe2,
   LayoutTemplate,
@@ -14,6 +13,7 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
+import AuditLottie from "@/components/website-audit/AuditLottie";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { auditCopyFor } from "@/lib/website-audit/copy";
@@ -56,44 +56,34 @@ export default function AuditLanding({ language, url, error, onUrlChange, onSubm
 
   return (
     <div className="overflow-hidden bg-white">
-      <section className="relative bg-lv-charcoal text-white">
-        <div className="audit-grid absolute inset-0 opacity-30" aria-hidden="true" />
-        <div className="absolute -right-28 -top-28 h-96 w-96 rounded-full border border-white/10" aria-hidden="true" />
-        <div className="absolute -right-12 top-0 h-64 w-64 rounded-full border border-primary/40" aria-hidden="true" />
+      <section className="relative bg-white text-lv-charcoal">
+        <div className="audit-grid-light absolute inset-0 opacity-70" aria-hidden="true" />
+        <div className="absolute -right-28 -top-28 h-96 w-96 rounded-full border border-black/[0.07]" aria-hidden="true" />
+        <div className="absolute -right-12 top-0 h-64 w-64 rounded-full border border-primary/25" aria-hidden="true" />
 
-        <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-28 pt-14 sm:px-6 sm:pb-32 sm:pt-20 lg:grid-cols-[1.15fr_.85fr] lg:items-center lg:px-8 lg:pb-36 lg:pt-24">
+        <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-28 pt-14 sm:px-6 sm:pb-32 sm:pt-20 lg:grid-cols-[1.065fr_.935fr] lg:items-center lg:px-8 lg:pb-36 lg:pt-24">
           <div className="max-w-3xl">
-            <p className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+            <p className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-lv-charcoal/60">
               <span className="h-px w-8 bg-primary" /> {copy.landing.eyebrow}
             </p>
-            <h1 className="text-[2.55rem] font-semibold leading-[1.03] tracking-[-0.04em] sm:text-6xl lg:text-[4.25rem]">
+            <h1 className="text-[2.55rem] font-bold leading-[1.03] tracking-[-0.04em] sm:text-6xl lg:text-[4.25rem]">
               {copy.landing.heading}{" "}
-              <span className="text-[#f16b7e]">{copy.landing.emphasis}</span>
+              <span className="text-primary">{copy.landing.emphasis}</span>
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-white/70 sm:text-lg">
+            <p className="mt-6 max-w-2xl text-base leading-7 text-lv-charcoal/70 sm:text-lg">
               {copy.landing.body}
             </p>
           </div>
 
-          <div className="relative hidden min-h-[360px] lg:block" aria-hidden="true">
-            <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10" />
-            <div className="absolute left-1/2 top-1/2 h-52 w-52 -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-white/20" />
-            <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-primary shadow-[0_0_70px_rgba(203,32,57,.34)]">
-              <Compass size={42} strokeWidth={1.5} />
-            </div>
-            {DIMENSIONS.map((dimension, index) => {
-              const positions = ["left-0 top-8", "right-0 top-16", "right-2 bottom-14", "left-8 bottom-5", "left-[-18px] top-[47%]"];
-              const Icon = dimensionIcons[dimension];
-              return (
-                <div key={dimension} className={`absolute ${positions[index]} flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-3 py-2 text-xs text-white/80 backdrop-blur`}>
-                  <Icon size={14} className="text-[#f16b7e]" /> {copy.dimensions[dimension].short}
-                </div>
-              );
-            })}
+          {/*
+            No surface of its own: the hero is white and the illustration's
+            linework is near-black, so it reads directly against the background.
+          */}
+          <div className="relative hidden min-h-[360px] items-center justify-center lg:flex">
+            <AuditLottie src="/website-audit-hero.json" className="max-w-[560px]" />
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-black/10" aria-hidden="true" />
       </section>
 
       <section className="relative z-10 mx-auto -mt-20 w-full max-w-5xl px-4 sm:-mt-24 sm:px-6">
@@ -186,7 +176,7 @@ export default function AuditLanding({ language, url, error, onUrlChange, onSubm
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[.85fr_1.15fr] lg:px-8 lg:py-24">
           <div className="max-w-lg">
             <p className="text-xs font-bold uppercase tracking-[0.17em] text-primary">{copy.landing.dimensionEyebrow}</p>
-            <h2 className="mt-4 text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-4xl">{copy.landing.dimensionHeading}</h2>
+            <h2 className="mt-4 text-3xl font-bold leading-tight tracking-[-0.03em] sm:text-4xl">{copy.landing.dimensionHeading}</h2>
             <p className="mt-5 text-sm leading-7 text-muted-foreground">{copy.landing.dimensionBody}</p>
           </div>
           <div className="grid gap-px overflow-hidden rounded-2xl border border-black/10 bg-black/10 sm:grid-cols-2">
@@ -195,7 +185,7 @@ export default function AuditLanding({ language, url, error, onUrlChange, onSubm
               return (
                 <article key={dimension} className={`bg-white p-5 sm:p-6 ${index === DIMENSIONS.length - 1 ? "sm:col-span-2" : ""}`}>
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lv-charcoal text-white"><Icon size={17} /></span>
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white"><Icon size={17} /></span>
                     <div>
                       <h3 className="text-sm font-bold">{copy.dimensions[dimension].label}</h3>
                       <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{copy.dimensions[dimension].description}</p>
@@ -209,7 +199,7 @@ export default function AuditLanding({ language, url, error, onUrlChange, onSubm
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
-        <h2 className="max-w-xl text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{copy.landing.stepsHeading}</h2>
+        <h2 className="max-w-xl text-2xl font-bold tracking-[-0.025em] text-primary sm:text-3xl">{copy.landing.stepsHeading}</h2>
         <div className="mt-10 grid gap-8 md:grid-cols-3">
           {copy.landing.steps.map((step, index) => (
             <article key={step.number} className="relative border-t border-black/20 pt-5">

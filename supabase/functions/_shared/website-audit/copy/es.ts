@@ -541,5 +541,5 @@ export const esAuditCopy: AuditCopy = {
     resultUnavailable: "No pudimos cargar este resultado ahora. Es posible que tu enlace privado siga vigente.",
     retryResult: "Intentar cargar de nuevo",
   },
-  footer: "Hecho con cuidado por LV Branding",
+  footer: "Hecho con amor por LV Branding",
 };

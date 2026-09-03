@@ -151,9 +151,9 @@ export default function AuditLeadCta({ language, report }: AuditLeadCtaProps) {
         <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="max-w-3xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[11px] font-semibold text-white/75">
-              <MessageSquareText size={13} className="text-[#f16b7e]" /> {recommended.label}
+              <MessageSquareText size={13} className="text-[#FF2D46]" /> {recommended.label}
             </span>
-            <h2 className="mt-5 text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{recommended.heading}</h2>
+            <h2 className="mt-5 text-2xl font-bold tracking-[-0.025em] sm:text-3xl">{recommended.heading}</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/65">{recommended.body}</p>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-white/85">{copy.lead.supporting}</p>
           </div>

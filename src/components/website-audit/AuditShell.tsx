@@ -121,7 +121,6 @@ export default function AuditShell({
               <span className="hidden text-sm font-bold tracking-[-0.01em] text-lv-charcoal sm:block">{copy.meta.productName}</span>
               <span className="hidden text-sm font-bold text-lv-charcoal min-[400px]:block sm:hidden">{copy.meta.shortName}</span>
               <span className="block text-xs font-bold text-lv-charcoal min-[400px]:hidden">{copy.meta.mobileName}</span>
-              <span className="mt-0.5 hidden text-[11px] text-muted-foreground md:block">{copy.meta.descriptor}</span>
             </span>
           </button>
 

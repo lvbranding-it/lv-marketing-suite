@@ -134,7 +134,7 @@ function PagePreview({ report, language }: { report: AuditReport; language: Audi
             <div className="absolute right-[-45px] top-[-55px] h-36 w-36 rounded-full bg-primary/[0.07]" />
             <div className="h-2 w-20 rounded-full bg-primary/80" />
             <p className="mt-5 max-w-md text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{primary.title || report.domain}</p>
-            <h3 className="mt-2 max-w-lg text-xl font-semibold leading-tight tracking-[-0.025em] text-lv-charcoal sm:text-2xl">
+            <h3 className="mt-2 max-w-lg text-xl font-bold leading-tight tracking-[-0.025em] text-lv-charcoal sm:text-2xl">
               {primary.h1Text || primary.title || report.domain}
             </h3>
             <div className="mt-4 h-2 w-[88%] max-w-md rounded-full bg-black/10" />
@@ -346,7 +346,7 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
       <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.17em] text-primary">{copy.results.eyebrow}</p>
-          <h1 className="mt-2 break-words text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">{copy.results.reportFor} <span className="text-muted-foreground">{report.domain}</span></h1>
+          <h1 className="mt-2 break-words text-2xl font-bold tracking-[-0.03em] sm:text-3xl">{copy.results.reportFor} <span className="text-muted-foreground">{report.domain}</span></h1>
         </div>
         <Button variant="outline" size="sm" onClick={onRunAnother} className="gap-2 self-start sm:self-auto">
           <Globe2 size={14} /> {copy.results.runAnother}
@@ -388,7 +388,7 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
 
       <section className="mt-12">
         <div className="max-w-3xl">
-          <h2 className="text-2xl font-semibold tracking-[-0.025em]">{copy.results.dimensionHeading}</h2>
+          <h2 className="text-2xl font-bold tracking-[-0.025em]">{copy.results.dimensionHeading}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.results.dimensionBody}</p>
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-6">
@@ -398,7 +398,7 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
 
       <section className="mt-14">
         <p className="text-xs font-bold uppercase tracking-[0.17em] text-primary">{copy.results.priorityEyebrow}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{hasPriorityIssue ? copy.results.priorityHeading : copy.results.priorityHeadingClear}</h2>
+        <h2 className="mt-3 text-2xl font-bold tracking-[-0.025em] sm:text-3xl">{hasPriorityIssue ? copy.results.priorityHeading : copy.results.priorityHeadingClear}</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{hasPriorityIssue ? copy.results.priorityBody : copy.results.priorityBodyClear}</p>
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {report.priorityPlan.fixNow && <PriorityCard check={report.priorityPlan.fixNow} title={copy.results.fixNow} hint={copy.results.fixNowHint} kind="fix" language={language} />}
@@ -448,7 +448,7 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
             <div className="audit-grid absolute inset-0 opacity-[0.08]" aria-hidden="true" />
             <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
               <div className="max-w-2xl">
-                <h2 className="text-2xl font-semibold tracking-[-0.025em]">{copy.results.sampleCtaHeading}</h2>
+                <h2 className="text-2xl font-bold tracking-[-0.025em]">{copy.results.sampleCtaHeading}</h2>
                 <p className="mt-3 text-sm leading-6 text-white/70">{copy.results.sampleCtaBody}</p>
               </div>
               <Button size="lg" onClick={onRunAnother} className="gap-2 lg:min-w-52">{copy.results.sampleCtaAction} <ArrowRight size={16} /></Button>

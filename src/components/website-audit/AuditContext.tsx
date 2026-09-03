@@ -146,7 +146,7 @@ export default function AuditContext({ language, url, answers, error, onChange, 
               <span className="max-w-[240px] truncate font-medium text-foreground sm:max-w-md">{displayUrl}</span>
               <ExternalLink size={11} aria-hidden="true" />
             </div>
-            <h1 className="mt-5 text-3xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">{copy.context.heading}</h1>
+            <h1 className="mt-5 text-3xl font-bold leading-tight tracking-[-0.035em] sm:text-4xl">{copy.context.heading}</h1>
             <p className="mt-4 text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">{copy.context.body}</p>
           </div>
           <div className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-lv-charcoal text-white sm:flex">
