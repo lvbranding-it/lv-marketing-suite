@@ -460,6 +460,7 @@ export const esAuditCopy: AuditCopy = {
     pageScope: "Alcance y cobertura de la auditoría",
     analyzed: "Páginas analizadas",
     labUnavailable: "PageSpeed no estuvo disponible. Las pruebas de rendimiento fueron excluidas del denominador.",
+    labPending: "Midiendo el rendimiento móvil. El resto del informe ya está completo; los índices técnicos aparecerán aquí en un momento.",
     pageScopeIncomplete: "No fue posible recuperar una o más páginas representativas. Esas ausencias redujeron la cobertura, no el índice.",
     aiDisclaimer: "La Preparación para Respuestas de IA evalúa accesibilidad y claridad de contenido. No predice ni garantiza aparecer en ningún producto de IA.",
     runAnother: "Auditar otro sitio",

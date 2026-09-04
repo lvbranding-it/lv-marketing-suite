@@ -460,6 +460,7 @@ export const enAuditCopy: AuditCopy = {
     pageScope: "Audit scope and coverage",
     analyzed: "Analyzed pages",
     labUnavailable: "PageSpeed data was not available for this run. Performance checks were excluded from the denominator.",
+    labPending: "Measuring mobile performance. The rest of the report is complete; the technical scores will appear here shortly.",
     pageScopeIncomplete: "One or more representative pages could not be retrieved. Those gaps reduced coverage instead of lowering the score.",
     aiDisclaimer: "AI Answer Readiness evaluates content accessibility and clarity. It does not predict or guarantee placement in any AI product.",
     runAnother: "Audit another website",

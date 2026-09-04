@@ -67,9 +67,15 @@ const MAX_REQUEST_BYTES = 50_000;
 const FETCH_TIMEOUT_MS = 9_000;
 const DNS_TIMEOUT_MS = 2_500;
 const PAGESPEED_TIMEOUT_MS = 35_000;
+/**
+ * Ceiling for the background lab measurement. No visitor is blocked on it, so
+ * it can outlast the request that started it and cover the slow tail that a
+ * foreground budget has to give up on.
+ */
+const PAGESPEED_BACKGROUND_MS = 110_000;
 const AUDIT_TIMEOUT_MS = 50_000;
 const MAX_PAGES = 5;
-const CRAWLER_VERSION = "lv-website-crawler-v2";
+const CRAWLER_VERSION = "lv-website-crawler-v3";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -158,6 +164,13 @@ interface Observation {
   detectedLanguage: DetectedLanguage;
   pages: PageSignals[];
   lab: LabSignals;
+  /**
+   * True while the lab measurement is still running in the background.
+   *
+   * NOTE: this interface duplicates `AuditObservation` in the shared types and
+   * has to be kept in step with it by hand.
+   */
+  labPending?: boolean;
   warnings: string[];
   discoveredPageCount?: number;
   failedPageCount?: number;
@@ -1018,7 +1031,11 @@ const noLab = (): LabSignals => ({
   source: "none",
 });
 
-async function runPageSpeed(url: string, deadline: number): Promise<LabSignals> {
+async function runPageSpeed(
+  url: string,
+  deadline: number,
+  maxMs: number = PAGESPEED_TIMEOUT_MS,
+): Promise<LabSignals> {
   if (!PAGESPEED_API_KEY) return noLab();
   const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed");
   endpoint.searchParams.set("url", url);
@@ -1027,7 +1044,7 @@ async function runPageSpeed(url: string, deadline: number): Promise<LabSignals> 
   for (const category of ["performance", "accessibility", "best-practices", "seo"]) endpoint.searchParams.append("category", category);
   const controller = new AbortController();
   let timeoutMs: number;
-  try { timeoutMs = remainingBudget(deadline, PAGESPEED_TIMEOUT_MS); } catch { return noLab(); }
+  try { timeoutMs = remainingBudget(deadline, maxMs); } catch { return noLab(); }
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(endpoint, { signal: controller.signal });
@@ -1163,6 +1180,9 @@ async function cachedObservation(requestedUrl: string): Promise<CachedObservatio
       provenance: { source: "live-crawl", crawlerVersion: CRAWLER_VERSION, rulesetVersion: RULESET_VERSION },
     })
     .in("status", ["completed", "partial"])
+    // An audit whose lab is still pending is not a finished result and must not
+    // be handed to the next visitor as one.
+    .not("observation->labPending", "eq", true)
     .gte("created_at", since)
     .not("observation", "is", null)
     .order("created_at", { ascending: false })
@@ -1180,6 +1200,7 @@ async function persistCompletedAudit(
   tokenHash: string,
   interfaceLanguage: InterfaceLanguage,
   cachedFrom: string | null = null,
+  recordEvent = true,
 ): Promise<void> {
   if (!admin) throw new AuditError("service_unavailable", "The audit service is not configured.", 503);
   const report = scoreAudit(observation, observation.answers ?? emptyAuditAnswers());
@@ -1248,7 +1269,57 @@ async function persistCompletedAudit(
   const { error: findingError } = await admin.from("website_audit_findings").upsert(findingRows, { onConflict: "audit_id,rule_id" });
   if (findingError) console.error("website_audit_findings persistence failed", findingError.message);
   await admin.from("website_audit_answers").upsert({ audit_id: observation.auditId, answers: observation.answers ?? {}, updated_at: new Date().toISOString() });
-  await admin.from("website_audit_events").insert({ audit_id: observation.auditId, event_name: "completed", detail: { pages: observation.pages.length, warnings: observation.warnings } });
+  if (recordEvent) {
+    await admin.from("website_audit_events").insert({ audit_id: observation.auditId, event_name: "completed", detail: { pages: observation.pages.length, warnings: observation.warnings } });
+  }
+}
+
+/**
+ * Measures the lab signals after the report has already been delivered.
+ *
+ * Runs detached from the request that started it, so it can spend far longer on
+ * PageSpeed than a waiting visitor would tolerate. When it finishes it reloads
+ * the stored audit, merges the result, clears `labPending` and re-scores, which
+ * is what the polling client is waiting to see.
+ *
+ * Failure is not an error state: the audit is already complete and useful
+ * without lab data. A failed measurement simply settles as unavailable.
+ */
+async function measureLabInBackground(
+  auditId: string,
+  finalUrl: string,
+  interfaceLanguage: InterfaceLanguage,
+): Promise<void> {
+  if (!admin) return;
+  const deadline = Date.now() + PAGESPEED_BACKGROUND_MS;
+  const lab = await runPageSpeed(finalUrl, deadline, PAGESPEED_BACKGROUND_MS);
+
+  const { data, error } = await admin.from("website_audits")
+    .select("observation,public_token_hash,interface_language")
+    .eq("id", auditId)
+    .maybeSingle();
+  if (error || !data?.observation) {
+    console.error("lab merge could not load the audit", error?.message ?? "row not found");
+    return;
+  }
+
+  const stored = data.observation as Observation;
+  const warnings = stored.warnings.filter((warning) => !warning.startsWith("pagespeed_"));
+  if (!lab.measured) warnings.push(PAGESPEED_API_KEY ? "pagespeed_unavailable" : "pagespeed_not_configured");
+  warnings.sort();
+
+  const merged: Observation = { ...stored, lab, labPending: false, warnings };
+  try {
+    await persistCompletedAudit(
+      merged,
+      String(data.public_token_hash),
+      (data.interface_language as InterfaceLanguage) ?? interfaceLanguage,
+      null,
+      false,
+    );
+  } catch (persistError) {
+    console.error("lab merge persistence failed", persistError instanceof Error ? persistError.message : String(persistError));
+  }
 }
 
 async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage: InterfaceLanguage, requestKey: string): Promise<Observation> {
@@ -1351,7 +1422,7 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
       // the moment it was recovered.
       if (links.length === 0) warnings.push("no_representative_pages");
     }
-    const [representativeRows, lab] = await Promise.all([
+    const [representativeRows] = await Promise.all([
       Promise.all(links.map(async (candidate) => {
         try {
           const fetched = await fetchPublicHtml(candidate.url, deadline, admitDestination, MAX_LINKED_RESPONSE_BYTES);
@@ -1366,9 +1437,7 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
           return null;
         }
       })),
-      runPageSpeed(primaryFetched.finalUrl, deadline),
     ]);
-    if (!lab.measured) warnings.push(PAGESPEED_API_KEY ? "pagespeed_unavailable" : "pagespeed_not_configured");
     warnings.sort();
     const seenFinalUrls = new Set([new URL(primary.finalUrl).toString()]);
     const representatives: PageSignals[] = [];
@@ -1397,8 +1466,11 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
       createdAt,
       detectedLanguage: visibleLanguage,
       pages,
-      lab,
-      warnings,
+      // The lab measurement runs after this response is sent. Until it lands the
+      // report is complete on everything the HTML analysis can answer.
+      lab: noLab(),
+      labPending: PAGESPEED_API_KEY ? true : false,
+      warnings: PAGESPEED_API_KEY ? warnings : [...warnings, "pagespeed_not_configured"].sort(),
       discoveredPageCount: Math.min(MAX_PAGES, pages.length + failedPageCount),
       failedPageCount,
       cached: false,
@@ -1407,6 +1479,9 @@ async function runAudit(rawUrl: unknown, rawAnswers: unknown, interfaceLanguage:
       provenance: { source: "live-crawl", crawlerVersion: CRAWLER_VERSION, rulesetVersion: RULESET_VERSION },
     };
     await persistCompletedAudit(observation, tokenHash, interfaceLanguage);
+    if (PAGESPEED_API_KEY) {
+      scheduleBackground(measureLabInBackground(auditId, primary.finalUrl, interfaceLanguage));
+    }
     return observation;
   } catch (error) {
     const failure = error instanceof AuditError ? error : new AuditError("audit_failed", "The audit could not be completed.", 500);

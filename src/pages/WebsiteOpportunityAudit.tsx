@@ -150,6 +150,45 @@ export default function WebsiteOpportunityAudit({ language = "en", phase = "land
     return () => { active = false; };
   }, [auditId, observation?.auditId, phase, remoteAttempt]);
 
+  /**
+   * Fills in the lab measurement after the report is already on screen.
+   *
+   * The audit returns without waiting for PageSpeed, which takes 25 to 40
+   * seconds on a real site, so the report arrives in about half the time and
+   * the technical scores follow. Polling stops as soon as the server settles
+   * `labPending`, whether the measurement succeeded or not, and gives up after
+   * the background budget has elapsed so a dead worker cannot poll forever.
+   */
+  useEffect(() => {
+    if (phase !== "results" || !observation?.labPending) return;
+    const token = observation.accessToken;
+    const id = observation.auditId;
+    if (!token || id === SAMPLE_OBSERVATION.auditId) return;
+
+    let active = true;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40;          // 40 x 3s covers the 110s background budget
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > MAX_ATTEMPTS) {
+        window.clearInterval(timer);
+        return;
+      }
+      void loadRemoteAudit(id, token)
+        .then((result) => {
+          if (!active || result.labPending) return;
+          window.clearInterval(timer);
+          setObservation(result);
+          saveAuditObservation(result);
+        })
+        // A failed poll is not worth surfacing: the report on screen is already
+        // complete, and the next tick will try again.
+        .catch(() => undefined);
+    }, 3000);
+
+    return () => { active = false; window.clearInterval(timer); };
+  }, [observation?.labPending, observation?.auditId, observation?.accessToken, phase]);
+
   useEffect(() => {
     if (phase !== "analyzing") return;
     if (!url || !isComplete(answers)) {

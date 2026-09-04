@@ -12,6 +12,7 @@ import {
   Eye,
   FileSearch,
   Gauge,
+  Loader2,
   Globe2,
   Hammer,
   Info,
@@ -415,7 +416,18 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
             <p className="mt-3 text-xs leading-5 text-muted-foreground">{copy.results.coverageBody}</p>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/[0.07]"><div className="h-full rounded-full bg-primary" style={{ width: `${report.coverage}%` }} /></div>
             <p className="mt-2 text-right text-xs font-bold tabular-nums">{report.coverage}%</p>
-            {!report.lab.measured && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">{copy.results.labUnavailable}</p>}
+            {!report.lab.measured && (
+              report.labPending ? (
+                // Still running in the background. Saying "unavailable" here would
+                // be wrong: nothing has failed yet.
+                <p className="mt-4 flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-[11px] leading-5 text-sky-900">
+                  <Loader2 size={13} className="mt-0.5 shrink-0 animate-spin" aria-hidden="true" />
+                  <span aria-live="polite">{copy.results.labPending}</span>
+                </p>
+              ) : (
+                <p className="mt-4 rounded-lg bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">{copy.results.labUnavailable}</p>
+              )
+            )}
             {report.warnings.some((warning) => !warning.startsWith("pagespeed_")) && (
               <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">{copy.results.pageScopeIncomplete}</p>
             )}

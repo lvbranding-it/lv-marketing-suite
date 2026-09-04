@@ -383,6 +383,7 @@ export function scoreAudit(observation: AuditObservation, answers: AuditAnswers)
     detectedLanguage: observation.detectedLanguage,
     pages: observation.pages,
     lab: observation.lab,
+    labPending: observation.labPending,
     warnings: observation.warnings,
     sample: Boolean(observation.sample),
     overallScore,

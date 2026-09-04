@@ -170,6 +170,15 @@ export interface AuditObservation {
   detectedLanguage: DetectedLanguage;
   pages: PageSignals[];
   lab: LabSignals;
+  /**
+   * True while the lab measurement is still running in the background.
+   *
+   * PageSpeed needs 25 to 40 seconds on a real site, which is longer than a
+   * visitor should wait for a report that is already complete without it. The
+   * audit returns as soon as the HTML analysis is done and fills the lab in
+   * afterwards; the client polls while this is true.
+   */
+  labPending?: boolean;
   warnings: string[];
   /** Includes the submitted page; used to distinguish sparse navigation from fetch failures. */
   discoveredPageCount?: number;
@@ -228,6 +237,8 @@ export interface AuditReport {
   detectedLanguage: DetectedLanguage;
   pages: PageSignals[];
   lab: LabSignals;
+  /** True while the lab measurement is still running; see Observation.labPending. */
+  labPending?: boolean;
   warnings: string[];
   sample: boolean;
   overallScore: number;

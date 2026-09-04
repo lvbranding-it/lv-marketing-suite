@@ -153,6 +153,7 @@ export interface AuditCopy {
     pageScope: string;
     analyzed: string;
     labUnavailable: string;
+    labPending: string;
     pageScopeIncomplete: string;
     aiDisclaimer: string;
     runAnother: string;
