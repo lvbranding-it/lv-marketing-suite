@@ -107,7 +107,7 @@ const MAX_REPORT_SENDS_PER_AUDIT = 3;
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -1858,9 +1858,18 @@ function reportUrlFor(language: InterfaceLanguage, auditId: string, accessToken:
   return `${PUBLIC_SITE_URL}${path}/${auditId}#access_token=${encodeURIComponent(accessToken)}`;
 }
 
-/** The one-click stop link carried by every report email. */
-const stopUrlFor = (sendId: string): string =>
-  `${SUPABASE_URL}/functions/v1/website-audit?stop=${encodeURIComponent(sendId)}`;
+/**
+ * The one-click stop link carried by every report email.
+ *
+ * It points at the site rather than at this function for two reasons: Edge
+ * Functions on `*.supabase.co` are not permitted to serve `text/html` (the
+ * platform rewrites the content type to `text/plain`, so a page served from here
+ * reaches the reader as raw markup), and a link whose domain matches the sending
+ * domain is a better deliverability signal. The page then calls back in with the
+ * `stop` action, the same shape the campaign unsubscribe page already uses.
+ */
+const stopUrlFor = (sendId: string, language: InterfaceLanguage): string =>
+  `${PUBLIC_SITE_URL}/unsubscribe?s=${encodeURIComponent(sendId)}&lang=${language}`;
 
 /**
  * Files the address as a contact that is deliberately not a lead.
@@ -2092,7 +2101,7 @@ async function emailAuditReport(audit: Record<string, unknown>, body: Record<str
         copy.bands[report.band].label,
         rows,
         reportUrlFor(language, auditId, accessToken),
-        stopUrlFor(sendId),
+        stopUrlFor(sendId, language),
       ),
     );
   } catch (error) {
@@ -2125,35 +2134,18 @@ async function emailAuditReport(audit: Record<string, unknown>, body: Record<str
   }
 }
 
-/** The page behind the stop link in a report email. */
-function stopResponse(language: InterfaceLanguage, ok: boolean): Response {
-  const t = auditCopyFor(language).reportEmail;
-  const html = `<!DOCTYPE html><html lang="${language}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
-<title>${escapeHtml(ok ? t.stopHeading : t.stopInvalid)}</title></head>
-<body style="margin:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-  <div style="max-width:460px;margin:14vh auto;padding:32px;background:#fff;border:1px solid #e4e4e7;border-radius:14px;">
-    <h1 style="margin:0 0 10px;font-size:18px;color:#111827;">${escapeHtml(ok ? t.stopHeading : t.stopInvalid)}</h1>
-    ${ok ? `<p style="margin:0;font-size:14px;line-height:1.65;color:#374151;">${escapeHtml(t.stopBody)}</p>` : ""}
-  </div>
-</body></html>`;
-  return new Response(html, {
-    status: ok ? 200 : 404,
-    headers: { ...cors, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-  });
-}
-
 /**
  * Honors the stop link. The send id is an unguessable UUID that only reaches the
  * inbox that received the mail, so possessing it is the authorization.
  */
-async function handleStopRequest(sendId: string): Promise<Response> {
-  if (!admin || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sendId)) {
-    return stopResponse("en", false);
+async function handleStopRequest(sendId: unknown): Promise<Response> {
+  if (!admin || typeof sendId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sendId)) {
+    return json({ error: "This link is no longer valid.", code: "stop_invalid" }, 404);
   }
   const { data, error } = await admin.from("website_audit_report_sends")
     .select("email, interface_language").eq("id", sendId).maybeSingle();
-  if (error || !data?.email) return stopResponse("en", false);
+  if (error || !data?.email) return json({ error: "This link is no longer valid.", code: "stop_invalid" }, 404);
   const language: InterfaceLanguage = data.interface_language === "es" ? "es" : "en";
   // `reason` is constrained to ('unsubscribed','bounced','spam','invalid'), and
   // this is an unsubscribe. Adding the row here also removes the address from
@@ -2166,20 +2158,13 @@ async function handleStopRequest(sendId: string): Promise<Response> {
     }, { onConflict: "org_id,email" });
   if (suppressError) {
     console.error("website audit suppression failed", suppressError.message);
-    return stopResponse(language, false);
+    return json({ error: "The request could not be completed.", code: "stop_failed" }, 500);
   }
-  return stopResponse(language, true);
+  return json({ ok: true, language });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  // The stop link is followed from an email client, so it has to be a plain GET
-  // with no key and no JSON body.
-  if (req.method === "GET") {
-    const stop = new URL(req.url).searchParams.get("stop");
-    if (stop) return await handleStopRequest(stop);
-    return json({ error: "Method not allowed" }, 405);
-  }
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   let body: Record<string, unknown>;
   try {
@@ -2245,6 +2230,9 @@ Deno.serve(async (req: Request) => {
       await saveAuditLead(audit, body);
       return json({ ok: true });
     }
+    // Followed from a report email. The unguessable send id is the credential,
+    // so there is no audit token to present here.
+    if (action === "stop") return await handleStopRequest(body.sendId);
     if (action === "email_report") {
       if (textField(body.hp, 200)) return json({ ok: true });
       const audit = await authorizedAudit(body.auditId, body.accessToken);
