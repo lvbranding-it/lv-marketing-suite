@@ -1031,12 +1031,20 @@ const noLab = (): LabSignals => ({
   source: "none",
 });
 
-async function runPageSpeed(
+/**
+ * One PageSpeed attempt.
+ *
+ * Returns `retryable` when the failure is Google's rather than ours. Lighthouse
+ * intermittently answers 500 "Something went wrong" for a page it will analyse
+ * perfectly well seconds later, and that has been the single most common
+ * failure here. A 4xx is not retried: a quota error, a key that is not enabled,
+ * and a rejected URL will all fail again the same way.
+ */
+async function attemptPageSpeed(
   url: string,
   deadline: number,
-  maxMs: number = PAGESPEED_TIMEOUT_MS,
-): Promise<LabSignals> {
-  if (!PAGESPEED_API_KEY) return noLab();
+  maxMs: number,
+): Promise<{ lab: LabSignals | null; retryable: boolean }> {
   const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed");
   endpoint.searchParams.set("url", url);
   endpoint.searchParams.set("strategy", "mobile");
@@ -1044,17 +1052,16 @@ async function runPageSpeed(
   for (const category of ["performance", "accessibility", "best-practices", "seo"]) endpoint.searchParams.append("category", category);
   const controller = new AbortController();
   let timeoutMs: number;
-  try { timeoutMs = remainingBudget(deadline, maxMs); } catch { return noLab(); }
+  try { timeoutMs = remainingBudget(deadline, maxMs); } catch { return { lab: null, retryable: false }; }
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(endpoint, { signal: controller.signal });
     if (!response.ok) {
-      // A quota error, a key that is not enabled for this API, and a rejected
-      // URL are all recoverable and all look identical from the report. Record
-      // which one happened so it can be diagnosed without another deploy.
+      // Recording the status keeps a quota error, a disabled key and a rejected
+      // URL distinguishable from each other without another deploy.
       const detail = await response.text().catch(() => "");
       console.error("pagespeed request failed", response.status, detail.slice(0, 300).replace(/\s+/g, " "));
-      return noLab();
+      return { lab: null, retryable: response.status >= 500 };
     }
     const data = await response.json() as Record<string, unknown>;
     const lighthouse = data.lighthouseResult as Record<string, unknown> | undefined;
@@ -1065,7 +1072,7 @@ async function runPageSpeed(
     const rawScreenshot = audits?.["final-screenshot"]?.details?.data;
     const screenshotDataUrl = typeof rawScreenshot === "string" && rawScreenshot.length <= 500_000 &&
       /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(rawScreenshot) ? rawScreenshot : null;
-    return {
+    const measured: LabSignals = {
       measured: true,
       performanceScore: score("performance"),
       accessibilityScore: score("accessibility"),
@@ -1077,13 +1084,51 @@ async function runPageSpeed(
       screenshotDataUrl,
       source: "pagespeed",
     };
+    return { lab: measured, retryable: false };
   } catch (error) {
     const aborted = (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
     console.error("pagespeed request failed", aborted ? `timeout after ${timeoutMs}ms` : (error instanceof Error ? error.message : String(error)));
-    return noLab();
+    // A timeout has already spent the budget, so trying again inside the same
+    // deadline would only fail again. A transport error is worth one retry.
+    return { lab: null, retryable: !aborted };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+const PAGESPEED_ATTEMPTS = 2;
+const PAGESPEED_RETRY_PAUSE_MS = 2_000;
+
+/**
+ * Measures a page, retrying once when Google fails on its own side.
+ *
+ * The retry only runs when the remaining budget can actually accommodate
+ * another attempt, so a foreground call cannot overrun the audit deadline
+ * trying twice.
+ */
+async function runPageSpeed(
+  url: string,
+  deadline: number,
+  maxMs: number = PAGESPEED_TIMEOUT_MS,
+): Promise<LabSignals> {
+  if (!PAGESPEED_API_KEY) return noLab();
+
+  for (let attempt = 1; attempt <= PAGESPEED_ATTEMPTS; attempt += 1) {
+    const { lab, retryable } = await attemptPageSpeed(url, deadline, maxMs);
+    if (lab) return lab;
+    if (!retryable || attempt === PAGESPEED_ATTEMPTS) break;
+
+    // Only retry with enough budget left for the pause and a real attempt.
+    const remaining = deadline - Date.now();
+    if (remaining < PAGESPEED_RETRY_PAUSE_MS + 10_000) {
+      console.error("pagespeed retry skipped", `${remaining}ms left`);
+      break;
+    }
+    console.error("pagespeed retrying after a server-side failure");
+    await new Promise((resolve) => setTimeout(resolve, PAGESPEED_RETRY_PAUSE_MS));
+  }
+
+  return noLab();
 }
 
 async function hashToken(value: string): Promise<string> {
