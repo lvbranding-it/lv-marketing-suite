@@ -97,9 +97,13 @@ export function useEventBySlug(slug: string | undefined) {
         .select("*")
         .eq("slug", slug)
         .eq("status", "active")
-        .single();
+        // maybeSingle, not single: a slug that is unknown, mistyped, or belongs
+        // to an event that is no longer active is an ordinary empty result. With
+        // `.single()` PostgREST answers 406 and the caller sees a thrown error
+        // for a case that is not a failure.
+        .maybeSingle();
       if (error) throw error;
-      return data as LVEvent;
+      return (data as LVEvent | null) ?? null;
     },
   });
 }

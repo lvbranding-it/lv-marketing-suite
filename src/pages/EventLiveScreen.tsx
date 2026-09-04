@@ -216,7 +216,7 @@ function QRPanel({
 
 export default function EventLiveScreen() {
   const { eventSlug }                  = useParams<{ eventSlug: string }>();
-  const { data: event }                = useEventBySlug(eventSlug);
+  const { data: event, isLoading }      = useEventBySlug(eventSlug);
   const { data: photos = [], refetch } = useApprovedEventPhotos(event?.id);
 
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -270,10 +270,28 @@ export default function EventLiveScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (!event) {
+  if (isLoading) {
     return (
       <div className="w-screen h-screen bg-black flex items-center justify-center text-white/30 text-xl select-none">
         Loading…
+      </div>
+    );
+  }
+
+  // Reached when the slug is unknown or the event is no longer active. This is
+  // a screen projected in a room, so it has to say what is wrong: an empty black
+  // display reads as broken hardware and someone goes looking for a loose cable.
+  if (!event) {
+    return (
+      <div className="w-screen h-screen bg-black flex flex-col items-center justify-center gap-4 px-8 text-center select-none">
+        <p className="text-3xl font-bold text-white/70">This event is not live right now.</p>
+        <p className="max-w-xl text-lg leading-relaxed text-white/35">
+          The live screen shows photos only while an event is active. Set it to
+          active in Event Experiences, then refresh this page.
+        </p>
+        {eventSlug && (
+          <p className="mt-2 font-mono text-sm text-white/20">{eventSlug}</p>
+        )}
       </div>
     );
   }
