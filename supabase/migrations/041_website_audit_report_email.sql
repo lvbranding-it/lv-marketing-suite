@@ -7,26 +7,17 @@
 -- a lead. Asking for a copy of your own report is not a sales enquiry, and
 -- filing it as one would corrupt the leads pipeline and overstate intent.
 --
--- Anonymous visitors never read or write these tables. The public Edge Function
+-- Anonymous visitors never read or write this table. The public Edge Function
 -- proves possession of the audit access token and persists with the service
 -- role, exactly as it does for audits, events and leads.
 
--- ---------------------------------------------------------------------------
--- Suppression list
--- ---------------------------------------------------------------------------
-
--- Addresses that asked never to be written to again. Stored as a SHA-256 digest
--- and nothing else: a suppression list in plain text is an address list, and
--- protecting the people in it is the entire reason the table exists. The Edge
--- Function hashes the incoming address and looks for a match, so it never needs
--- to read an address back out.
-create table if not exists public.email_suppressions (
-  email_hash text primary key,
-  reason text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.email_suppressions enable row level security;
+-- Suppression is deliberately NOT a new table. `public.email_suppressions` from
+-- 008_campaigns.sql is already this sender's stop list: `send-campaign` reads it
+-- to decide who not to write to, and `email-webhook` and `email-unsubscribe`
+-- write to it on unsubscribe, bounce and spam reports. The audit tool honors and
+-- extends that one list, so a person who unsubscribed from a campaign is not
+-- mailed an audit report, and a person who clicks stop on an audit report is not
+-- mailed a campaign. Two lists would mean a stop request that only half works.
 
 -- ---------------------------------------------------------------------------
 -- Report sends

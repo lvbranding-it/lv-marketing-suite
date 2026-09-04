@@ -2042,10 +2042,10 @@ async function emailAuditReport(audit: Record<string, unknown>, body: Record<str
   await consumePersistentRateLimit("website-audit-report-email", auditId, 6);
 
   // Someone who has asked us to stop is never written to again, whoever types
-  // their address and for whatever reason.
-  const emailHash = await hashToken(`email:${email}`);
+  // their address and for whatever reason. This is the same list `send-campaign`
+  // honors, so a campaign unsubscribe silences the audit tool too.
   const { data: suppressed } = await admin.from("email_suppressions")
-    .select("email_hash").eq("email_hash", emailHash).maybeSingle();
+    .select("email").eq("org_id", CRM_ORG_ID).eq("email", email).maybeSingle();
   if (suppressed) {
     // Reported as success. Telling the sender that this specific address has
     // opted out would turn the endpoint into a way to test whether it has.
@@ -2155,9 +2155,15 @@ async function handleStopRequest(sendId: string): Promise<Response> {
     .select("email, interface_language").eq("id", sendId).maybeSingle();
   if (error || !data?.email) return stopResponse("en", false);
   const language: InterfaceLanguage = data.interface_language === "es" ? "es" : "en";
-  const emailHash = await hashToken(`email:${String(data.email).toLowerCase()}`);
+  // `reason` is constrained to ('unsubscribed','bounced','spam','invalid'), and
+  // this is an unsubscribe. Adding the row here also removes the address from
+  // campaign sends, which is what a stop request should mean.
   const { error: suppressError } = await admin.from("email_suppressions")
-    .upsert({ email_hash: emailHash, reason: "website-audit-report" }, { onConflict: "email_hash" });
+    .upsert({
+      org_id: CRM_ORG_ID,
+      email: String(data.email).toLowerCase(),
+      reason: "unsubscribed",
+    }, { onConflict: "org_id,email" });
   if (suppressError) {
     console.error("website audit suppression failed", suppressError.message);
     return stopResponse(language, false);
