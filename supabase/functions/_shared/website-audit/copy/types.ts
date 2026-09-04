@@ -202,6 +202,40 @@ export interface AuditCopy {
     invalidEmail: string;
     timelines: Choice<"now" | "one-three" | "three-six" | "exploring">[];
   };
+  /**
+   * The optional "keep this report" capture. Everything the browser renders and
+   * everything the outgoing email says lives here together, so the two can never
+   * drift into promising different things.
+   */
+  reportEmail: {
+    heading: string;
+    body: string;
+    email: string;
+    placeholder: string;
+    submit: string;
+    submitting: string;
+    successHeading: string;
+    successBody: string;
+    disclosure: string;
+    required: string;
+    invalidEmail: string;
+    error: string;
+    limitReached: string;
+    /** Sent copy. `emailSubject` and `emailIntro` take the audited domain. */
+    emailSubject: (domain: string) => string;
+    emailHeading: string;
+    emailIntro: (domain: string) => string;
+    emailScoreLabel: string;
+    emailPriorityHeading: string;
+    emailCta: string;
+    emailExpiry: string;
+    emailWhy: string;
+    emailStop: string;
+    /** The page rendered when someone follows the "stop" link in that email. */
+    stopHeading: string;
+    stopBody: string;
+    stopInvalid: string;
+  };
   errors: {
     urlRequired: string;
     urlInvalid: string;

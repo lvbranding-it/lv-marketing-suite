@@ -77,10 +77,37 @@ const AUDIT_TIMEOUT_MS = 50_000;
 const MAX_PAGES = 5;
 const CRAWLER_VERSION = "lv-website-crawler-v3";
 
+/**
+ * "Email me my report" delivery.
+ *
+ * This is the only mail this function sends itself. Leads still travel through
+ * the durable outbox to `submit-av-lead`, because a lost lead costs money and a
+ * lost copy of a report costs one retry by someone who is still looking at the
+ * report on screen.
+ *
+ * `SENDGRID_API_KEY` is a project-level Edge secret, already provisioned for
+ * `submit-av-lead`; no new secret is needed. If it is ever missing the send
+ * fails loudly rather than reporting a success that never left the building.
+ */
+const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY") ?? "";
+const REPORT_FROM_EMAIL = "admin@lvbranding.com";
+const REPORT_FROM_NAME = "LV Branding";
+const PUBLIC_SITE_URL = (Deno.env.get("PUBLIC_SITE_URL") ?? "https://marketing.lvbranding.com").replace(/\/+$/, "");
+const LV_LOGO_URL = `${PUBLIC_SITE_URL}/lv-logo.png`;
+const BRAND_RED = "#CB2039";
+const CRM_ORG_ID = Deno.env.get("AV_LEAD_ORG_ID") ?? "0122121e-5dec-446e-92b3-4e85b145910a";
+/**
+ * How many distinct addresses one audit may be used to mail. Holding the access
+ * token proves you ran the audit, but not that the address you typed is yours,
+ * so this ceiling is what stops the endpoint from becoming a way to send
+ * LV Branding-branded mail to strangers.
+ */
+const MAX_REPORT_SENDS_PER_AUDIT = 3;
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -1811,8 +1838,342 @@ function scheduleOutboxSweep(): void {
   scheduleBackground(drainAuditLeadOutbox());
 }
 
+// ---------------------------------------------------------------------------
+// "Email me my report"
+// ---------------------------------------------------------------------------
+
+const escapeHtml = (value: unknown): string =>
+  String(value ?? "").replace(/[&<>"']/g, (character) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] as string);
+
+/**
+ * The portable result link. The access token rides in the URL fragment, which
+ * browsers never put on the wire, so it stays out of server logs, proxies, and
+ * the `Referer` header of anything the reader clicks next.
+ */
+function reportUrlFor(language: InterfaceLanguage, auditId: string, accessToken: string): string {
+  const path = language === "es"
+    ? "/es/tools/auditoria-de-oportunidades-web/resultados"
+    : "/en/tools/website-opportunity-audit/results";
+  return `${PUBLIC_SITE_URL}${path}/${auditId}#access_token=${encodeURIComponent(accessToken)}`;
+}
+
+/** The one-click stop link carried by every report email. */
+const stopUrlFor = (sendId: string): string =>
+  `${SUPABASE_URL}/functions/v1/website-audit?stop=${encodeURIComponent(sendId)}`;
+
+/**
+ * Files the address as a contact that is deliberately not a lead.
+ *
+ * The tag is its own (`Website Audit Report Sent`, never `Website Audit Lead`),
+ * so lead reporting and follow-up queues never silently absorb people whose only
+ * action was to save a document about their own website. `pipeline_stage` stays
+ * at the schema default: the CRM pipeline board renders one column per known
+ * stage and filters contacts into it, so inventing a stage here would file these
+ * contacts into a column that does not exist and make them invisible.
+ *
+ * The marker in the note makes a repeat send idempotent rather than appending
+ * the same paragraph to a contact every time.
+ */
+async function syncReportContactToCrm(
+  email: string,
+  domain: string,
+  score: number,
+  sendId: string,
+  language: InterfaceLanguage,
+): Promise<void> {
+  if (!admin) throw new Error("CRM client unavailable");
+  const marker = `[Audit report emailed: ${sendId}]`;
+  const note = [
+    marker,
+    `Website Opportunity Audit report emailed${language === "es" ? " (Spanish)" : ""}`,
+    `Website: ${domain}`,
+    `Opportunity score: ${score} / 100`,
+    "Asked for a copy of their own report. This is not a service enquiry.",
+  ].join("\n");
+  const tags = language === "es"
+    ? ["Website Audit Report Sent", "Website", "Español"]
+    : ["Website Audit Report Sent", "Website"];
+
+  const { data: existing, error: lookupError } = await admin.from("contacts")
+    .select("id, crm_notes, tags, website")
+    .eq("org_id", CRM_ORG_ID)
+    .eq("email", email)
+    .maybeSingle();
+  if (lookupError) throw new Error(lookupError.message);
+
+  if (existing) {
+    if (typeof existing.crm_notes === "string" && existing.crm_notes.includes(marker)) return;
+    // An existing contact keeps its stage and its website. Someone already in
+    // the pipeline must not be rewritten because they saved a report.
+    const { error } = await admin.from("contacts").update({
+      crm_notes: `${note}\n\n${existing.crm_notes ?? ""}`.trim(),
+      tags: Array.from(new Set([...(existing.tags ?? []), ...tags])),
+      website: existing.website || domain,
+      updated_at: new Date().toISOString(),
+    }).eq("id", existing.id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await admin.from("contacts").insert({
+    org_id: CRM_ORG_ID,
+    // No name is collected: the whole point of this form is that it asks for one
+    // field. The local part keeps the contact readable in a list view.
+    first_name: email.split("@")[0].slice(0, 80),
+    email,
+    website: domain,
+    source: "manual",
+    source_id: sendId,
+    tags,
+    crm_notes: note,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Renders one label/value line in the emailed summary. */
+const reportRow = (label: string, value: string): string => `
+  <tr>
+    <td style="padding:9px 0;border-bottom:1px solid #ececec;font-size:12px;color:#6B7280;">${escapeHtml(label)}</td>
+    <td style="padding:9px 0;border-bottom:1px solid #ececec;font-size:12px;font-weight:700;color:#111827;text-align:right;">${escapeHtml(value)}</td>
+  </tr>`;
+
+/**
+ * The report email.
+ *
+ * Nothing the visitor typed is echoed back into the body. The only variable
+ * content is the audited domain, which the crawler already validated and
+ * fetched, and numbers this function computed. That is what keeps an endpoint
+ * that mails arbitrary addresses from being usable to deliver arbitrary text.
+ */
+function reportEmailHtml(
+  copy: ReturnType<typeof auditCopyFor>,
+  domain: string,
+  score: number,
+  bandLabel: string,
+  rows: { label: string; value: string }[],
+  reportUrl: string,
+  stopUrl: string,
+): string {
+  const t = copy.reportEmail;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:32px 16px 0;">
+    <table role="presentation" style="max-width:560px;width:100%;" cellpadding="0" cellspacing="0">
+      <tr><td align="center" style="padding:0 0 20px;"><img src="${LV_LOGO_URL}" alt="LV Branding" width="52" height="52" style="display:block;border:0;width:52px;height:52px;"/></td></tr>
+      <tr><td style="background:#fff;border-radius:14px;padding:32px;border:1px solid #e4e4e7;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">${escapeHtml(t.emailHeading)}</h1>
+        <p style="margin:0 0 22px;font-size:14px;color:#374151;line-height:1.65;">${escapeHtml(t.emailIntro(domain))}</p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#FAFAFA;border:1px solid #e4e4e7;border-radius:10px;margin:0 0 22px;">
+          <tr><td style="padding:18px 18px 14px;text-align:center;">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6B7280;">${escapeHtml(t.emailScoreLabel)}</p>
+            <p style="margin:0;font-size:40px;font-weight:700;color:${BRAND_RED};line-height:1.1;">${score}<span style="font-size:15px;color:#9CA3AF;font-weight:400;"> / 100</span></p>
+            <p style="margin:6px 0 0;font-size:12px;font-weight:700;color:#111827;">${escapeHtml(bandLabel)}</p>
+          </td></tr>
+        </table>
+
+        ${rows.length === 0 ? "" : `
+        <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#111827;">${escapeHtml(t.emailPriorityHeading)}</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+          ${rows.map((entry) => reportRow(entry.label, entry.value)).join("")}
+        </table>`}
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 6px;"><tr>
+          <td style="border-radius:10px;background:${BRAND_RED};">
+            <a href="${escapeHtml(reportUrl)}" target="_blank" style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:700;color:#fff;text-decoration:none;border-radius:10px;">${escapeHtml(t.emailCta)}</a>
+          </td>
+        </tr></table>
+        <p style="margin:14px 0 0;font-size:11px;color:#9CA3AF;line-height:1.6;">${escapeHtml(t.emailExpiry)}</p>
+      </td></tr>
+      <tr><td align="center" style="padding:20px 8px 32px;font-size:11px;color:#9CA3AF;line-height:1.8;">
+        ${escapeHtml(t.emailWhy)}<br/>
+        <a href="${escapeHtml(stopUrl)}" style="color:#9CA3AF;text-decoration:underline;">${escapeHtml(t.emailStop)}</a><br/>
+        LV Branding · Houston, TX
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+async function sendReportMail(to: string, subject: string, html: string): Promise<void> {
+  if (!SENDGRID_API_KEY) throw new Error("SENDGRID_API_KEY is not configured");
+  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: REPORT_FROM_EMAIL, name: REPORT_FROM_NAME },
+      reply_to: { email: REPORT_FROM_EMAIL, name: REPORT_FROM_NAME },
+      subject,
+      content: [{ type: "text/html", value: html }],
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`SendGrid responded ${response.status}: ${(await response.text()).slice(0, 300)}`);
+  }
+}
+
+/**
+ * Mails a finished report to an address the visitor supplies, and records that
+ * address in the CRM.
+ *
+ * Ordering matters: the mail goes out first and the CRM write follows. A failed
+ * CRM write must not cost the visitor the thing they actually asked for, and it
+ * is recoverable from `website_audit_report_sends` afterwards; a failed send
+ * has to surface as an error while they are still looking at the form.
+ */
+async function emailAuditReport(audit: Record<string, unknown>, body: Record<string, unknown>): Promise<void> {
+  if (!admin) throw new AuditError("service_unavailable", "Report delivery is temporarily unavailable.", 503);
+  const observation = audit.observation as Observation | null;
+  if (!observation?.pages?.length) throw new AuditError("audit_incomplete", "The audit is not complete.", 409);
+
+  const email = textField(body.email, 254).toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new AuditError("email_invalid", "Enter a valid email address.", 400);
+  }
+
+  const auditId = String(audit.id);
+  const accessToken = textField(body.accessToken, 160);
+  const language: InterfaceLanguage = body.language === "es" ? "es" : "en";
+  const copy = auditCopyFor(language);
+
+  enforceWorkerRateLimit(`report-email:${auditId}`, 3);
+  await consumePersistentRateLimit("website-audit-report-email", auditId, 6);
+
+  // Someone who has asked us to stop is never written to again, whoever types
+  // their address and for whatever reason.
+  const emailHash = await hashToken(`email:${email}`);
+  const { data: suppressed } = await admin.from("email_suppressions")
+    .select("email_hash").eq("email_hash", emailHash).maybeSingle();
+  if (suppressed) {
+    // Reported as success. Telling the sender that this specific address has
+    // opted out would turn the endpoint into a way to test whether it has.
+    return;
+  }
+
+  const { data: reservationRows, error: reservationError } = await admin.rpc("reserve_website_audit_report_send", {
+    p_audit_id: auditId,
+    p_email: email,
+    p_language: language,
+    p_max_per_audit: MAX_REPORT_SENDS_PER_AUDIT,
+  });
+  const reservation = Array.isArray(reservationRows)
+    ? reservationRows[0] as { send_id?: string; created?: boolean; over_limit?: boolean } | undefined
+    : undefined;
+  if (reservationError) {
+    console.error("website audit report send reservation failed", reservationError.message);
+    throw new AuditError("report_email_failed", "The report could not be sent. Please try again.", 500);
+  }
+  if (reservation?.over_limit) {
+    throw new AuditError("report_email_limit", "This report has already been emailed several times.", 429);
+  }
+  if (!reservation?.send_id) {
+    throw new AuditError("report_email_failed", "The report could not be sent. Please try again.", 500);
+  }
+  const sendId = reservation.send_id;
+
+  const report = scoreAudit(observation, safeAnswers(audit.answers));
+  const domain = observation.normalizedDomain || observation.finalUrl;
+  const rows = [
+    report.priorityPlan.fixNow && { label: copy.results.fixNow, value: copy.rules[report.priorityPlan.fixNow.ruleId].title },
+    report.priorityPlan.planNext && { label: copy.results.planNext, value: copy.rules[report.priorityPlan.planNext.ruleId].title },
+    report.priorityPlan.protect && { label: copy.results.protect, value: copy.rules[report.priorityPlan.protect.ruleId].title },
+  ].filter((row): row is { label: string; value: string } => Boolean(row));
+
+  try {
+    await sendReportMail(
+      email,
+      copy.reportEmail.emailSubject(domain),
+      reportEmailHtml(
+        copy,
+        domain,
+        report.overallScore,
+        copy.bands[report.band].label,
+        rows,
+        reportUrlFor(language, auditId, accessToken),
+        stopUrlFor(sendId),
+      ),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("website audit report email failed", message);
+    await admin.from("website_audit_report_sends")
+      .update({ last_error: message.slice(0, 500) }).eq("id", sendId);
+    throw new AuditError("report_email_failed", "The report could not be sent. Please try again.", 502);
+  }
+  await admin.from("website_audit_report_sends")
+    .update({ email_sent_at: new Date().toISOString(), last_error: null }).eq("id", sendId);
+
+  await admin.from("website_audit_events").insert({
+    audit_id: auditId,
+    event_name: "report_emailed",
+    detail: { language, score: report.overallScore, resend: reservation.created === false },
+  });
+
+  // The CRM write is the part that can be repaired later, so it runs last and
+  // never turns a delivered report into a visible failure.
+  try {
+    await syncReportContactToCrm(email, domain, report.overallScore, sendId, language);
+    await admin.from("website_audit_report_sends")
+      .update({ crm_synced_at: new Date().toISOString() }).eq("id", sendId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("website audit report CRM sync failed", message);
+    await admin.from("website_audit_report_sends")
+      .update({ last_error: `crm: ${message}`.slice(0, 500) }).eq("id", sendId);
+  }
+}
+
+/** The page behind the stop link in a report email. */
+function stopResponse(language: InterfaceLanguage, ok: boolean): Response {
+  const t = auditCopyFor(language).reportEmail;
+  const html = `<!DOCTYPE html><html lang="${language}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>${escapeHtml(ok ? t.stopHeading : t.stopInvalid)}</title></head>
+<body style="margin:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <div style="max-width:460px;margin:14vh auto;padding:32px;background:#fff;border:1px solid #e4e4e7;border-radius:14px;">
+    <h1 style="margin:0 0 10px;font-size:18px;color:#111827;">${escapeHtml(ok ? t.stopHeading : t.stopInvalid)}</h1>
+    ${ok ? `<p style="margin:0;font-size:14px;line-height:1.65;color:#374151;">${escapeHtml(t.stopBody)}</p>` : ""}
+  </div>
+</body></html>`;
+  return new Response(html, {
+    status: ok ? 200 : 404,
+    headers: { ...cors, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+/**
+ * Honors the stop link. The send id is an unguessable UUID that only reaches the
+ * inbox that received the mail, so possessing it is the authorization.
+ */
+async function handleStopRequest(sendId: string): Promise<Response> {
+  if (!admin || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sendId)) {
+    return stopResponse("en", false);
+  }
+  const { data, error } = await admin.from("website_audit_report_sends")
+    .select("email, interface_language").eq("id", sendId).maybeSingle();
+  if (error || !data?.email) return stopResponse("en", false);
+  const language: InterfaceLanguage = data.interface_language === "es" ? "es" : "en";
+  const emailHash = await hashToken(`email:${String(data.email).toLowerCase()}`);
+  const { error: suppressError } = await admin.from("email_suppressions")
+    .upsert({ email_hash: emailHash, reason: "website-audit-report" }, { onConflict: "email_hash" });
+  if (suppressError) {
+    console.error("website audit suppression failed", suppressError.message);
+    return stopResponse(language, false);
+  }
+  return stopResponse(language, true);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  // The stop link is followed from an email client, so it has to be a plain GET
+  // with no key and no JSON body.
+  if (req.method === "GET") {
+    const stop = new URL(req.url).searchParams.get("stop");
+    if (stop) return await handleStopRequest(stop);
+    return json({ error: "Method not allowed" }, 405);
+  }
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   let body: Record<string, unknown>;
   try {
@@ -1876,6 +2237,13 @@ Deno.serve(async (req: Request) => {
       const audit = await authorizedAudit(body.auditId, body.accessToken);
       if (!audit) return json({ error: "Audit not found" }, 404);
       await saveAuditLead(audit, body);
+      return json({ ok: true });
+    }
+    if (action === "email_report") {
+      if (textField(body.hp, 200)) return json({ ok: true });
+      const audit = await authorizedAudit(body.auditId, body.accessToken);
+      if (!audit) return json({ error: "Audit not found" }, 404);
+      await emailAuditReport(audit, body);
       return json({ ok: true });
     }
     return json({ error: "Unsupported action" }, 400);

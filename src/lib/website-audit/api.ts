@@ -114,3 +114,20 @@ export interface AuditLeadInput {
 export async function submitAuditLead(input: AuditLeadInput): Promise<void> {
   await callAuditFunction({ action: "lead", ...input }, 45_000);
 }
+
+export interface AuditReportEmailInput {
+  auditId: string;
+  accessToken: string;
+  language: AuditLanguage;
+  email: string;
+  hp: string;
+}
+
+/**
+ * Mails the visitor a link back to their own report. The server owns the whole
+ * message; the browser only supplies the address, so nothing typed here can
+ * reach an inbox as content.
+ */
+export async function emailAuditReport(input: AuditReportEmailInput): Promise<void> {
+  await callAuditFunction({ action: "email_report", ...input }, 30_000);
+}

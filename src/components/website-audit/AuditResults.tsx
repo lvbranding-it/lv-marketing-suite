@@ -37,6 +37,7 @@ import {
   type EvidenceType,
 } from "@/lib/website-audit/types";
 import AuditLeadCta from "./AuditLeadCta";
+import AuditReportEmail from "./AuditReportEmail";
 
 interface AuditResultsProps {
   language: AuditLanguage;
@@ -467,7 +468,12 @@ export default function AuditResults({ language, report, onRunAnother }: AuditRe
             </div>
           </section>
         ) : (
-          <AuditLeadCta language={language} report={report} />
+          <div className="space-y-5">
+            {/* Offered after the report, never before it: the low-commitment ask
+                comes first, the service conversation second. */}
+            <AuditReportEmail language={language} report={report} />
+            <AuditLeadCta language={language} report={report} />
+          </div>
         )}
       </div>
     </div>
