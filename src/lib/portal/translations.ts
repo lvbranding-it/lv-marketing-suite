@@ -1,5 +1,17 @@
 export const portalTranslations = {
   en: {
+    "portal.readAloud": "Read aloud",
+    "portal.speakMessage": "Speak message",
+    "portal.stopListening": "Stop microphone",
+    "portal.autoRead": "Read replies automatically",
+    "portal.stopReading": "Stop reading",
+    "portal.listening": "Listening…",
+    "portal.voiceHelp": "Speak, then review the text and press Send. Your browser may process audio through its speech provider.",
+    "portal.voiceUnavailable": "Speech input is unavailable in this browser. You can still type your message.",
+    "portal.voicePermission": "Microphone access was denied. Allow microphone access in your browser settings or type instead.",
+    "portal.voiceError": "Speech recognition stopped or is unavailable. Try again or type your message.",
+    "portal.voicePlaybackError": "Audio could not play. Try Read aloud again or read the response on screen.",
+
     "portal.commissions": "Commissions",
     "portal.advisor": "LV Branding Advisor",
     "portal.openAdvisor": "Open advisor",
@@ -216,6 +228,18 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.readAloud": "Leer en voz alta",
+    "portal.speakMessage": "Dictar mensaje",
+    "portal.stopListening": "Detener micrófono",
+    "portal.autoRead": "Leer respuestas automáticamente",
+    "portal.stopReading": "Detener lectura",
+    "portal.listening": "Escuchando…",
+    "portal.voiceHelp": "Habla, revisa el texto y pulsa Enviar. Tu navegador puede procesar el audio mediante su proveedor de voz.",
+    "portal.voiceUnavailable": "La entrada de voz no está disponible en este navegador. Puedes escribir tu mensaje.",
+    "portal.voicePermission": "Se denegó el micrófono. Permite el acceso en la configuración del navegador o escribe.",
+    "portal.voiceError": "El reconocimiento se detuvo o no está disponible. Inténtalo de nuevo o escribe.",
+    "portal.voicePlaybackError": "No se pudo reproducir el audio. Intenta Leer en voz alta o lee la respuesta en pantalla.",
+
     "portal.commissions": "Comisiones",
     "portal.advisor": "Asesor de LV Branding",
     "portal.openAdvisor": "Abrir asesor",

@@ -179,3 +179,40 @@ test("commission tracker separates ambassador viewing from admin entry",async({p
  await expect(page.getByLabel("Commission amount (USD)",{exact:true})).toBeVisible();
  await expect(page.getByRole("button",{name:"Save record",exact:true})).toBeDisabled();
 });
+
+test("voice dictation fills an editable draft and stops when leaving advisor",async({page})=>{
+ await page.addInitScript(()=>{
+  class Recognition {
+   lang="";continuous=false;interimResults=false;
+   onresult:any;onerror:any;onend:any;
+   start(){(window as any).testRecognition=this;}
+   abort(){(window as any).voiceAborted=true;}
+  }
+  (window as any).SpeechRecognition=Recognition;
+ });
+ await page.reload();
+ await page.getByRole("button",{name:"Open advisor",exact:true}).click();
+ await page.getByRole("button",{name:"Speak message",exact:true}).click();
+ await expect(page.getByText("Listening…",{exact:true})).toBeVisible();
+ await page.evaluate(()=>{
+  const r=(window as any).testRecognition;
+  r.onresult({results:[{isFinal:true,0:{transcript:"Help me introduce LV Branding"}}]});
+  r.onend();
+ });
+ await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toHaveValue("Help me introduce LV Branding");
+ await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toBeEditable();
+ await page.getByRole("button",{name:"Speak message",exact:true}).click();
+ await page.getByRole("button",{name:"Dashboard",exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).voiceAborted)).toBe(true);
+});
+
+test("unsupported voice input keeps text chat available",async({page})=>{
+ await page.addInitScript(()=>{
+  Object.defineProperty(window,"SpeechRecognition",{value:undefined,configurable:true});
+  Object.defineProperty(window,"webkitSpeechRecognition",{value:undefined,configurable:true});
+ });
+ await page.reload();
+ await page.getByRole("button",{name:"Open advisor",exact:true}).click();
+ await expect(page.getByRole("button",{name:"Speak message",exact:true})).toBeDisabled();
+ await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toBeEditable();
+});

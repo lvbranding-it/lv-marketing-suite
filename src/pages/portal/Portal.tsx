@@ -468,7 +468,7 @@ function PortalWorkspaceView({
             </p>
           )}
           <div hidden={tab !== "advisor" || isNew || !!leadId}>
-            <PortalAdvisor org={workspace.org_id} preview={preview} />
+            <PortalAdvisor org={workspace.org_id} preview={preview} active={tab === "advisor" && !isNew && !leadId} />
           </div>
           {isNew || leadId ? (
             <>

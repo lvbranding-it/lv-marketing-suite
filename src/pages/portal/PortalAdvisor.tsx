@@ -1,5 +1,8 @@
+import { useAdvisorVoice } from "@/hooks/useAdvisorVoice";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  Mic,
+  Volume2,
   Bot,
   Send,
   Loader2,
@@ -23,9 +26,11 @@ import {
 export default function PortalAdvisor({
   org,
   preview,
+  active = true,
 }: {
   org: string;
   preview: boolean;
+  active?: boolean;
 }) {
   const { t, language } = useLanguage();
   const p = (k: string) => t(`portal.${k}`);
@@ -36,10 +41,15 @@ export default function PortalAdvisor({
     [error, setError] = useState(""),
     [draft, setDraft] = useState<string | null>(null),
     [copied, setCopied] = useState(false);
+  const [autoRead,setAutoRead]=useState(false);
+  const autoReadRef=useRef(false);
+  const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)));
+  const voiceRef=useRef(voice);voiceRef.current=voice;
   const controller = useRef<AbortController | null>(null),
     generation = useRef(0),
     end = useRef<HTMLDivElement>(null);
   const stop = () => {
+    voice.stop();
     generation.current++;
     controller.current?.abort();
     controller.current = null;
@@ -58,7 +68,8 @@ export default function PortalAdvisor({
   }, [messages, streamed, busy]);
   const send = async (e: FormEvent) => {
     e.preventDefault();
-    if (preview || busy || !input.trim()) return;
+    if (preview || busy || voice.listening || !input.trim()) return;
+    voice.stop();
     const message: Message = { role: "user", content: input.trim() };
     const history = messages.slice(-12);
     while (JSON.stringify(history).length > 32000) history.shift();
@@ -86,6 +97,7 @@ export default function PortalAdvisor({
             setMessages((v) => [...v, { role: "assistant", content }]);
             setStreamed("");
             setBusy(false);
+            if(autoReadRef.current) voiceRef.current.speak(content);
           }
         },
         onError: () => {
@@ -177,6 +189,7 @@ export default function PortalAdvisor({
                   }
                 >
                   <ChatMessageText role={m.role} content={m.content} />
+                  {m.role==="assistant"&&voice.canSpeak&&<Button type="button" variant="ghost" size="sm" className="gap-2" onClick={()=>voice.speak(m.content)}><Volume2 size={14}/>{p("readAloud")}</Button>}
                   {m.role === "assistant" && (
                     <Button
                       variant="ghost"
@@ -216,7 +229,16 @@ export default function PortalAdvisor({
               {error}
             </p>
           )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" disabled={!voice.canListen||busy} onClick={()=>voice.listening?voice.stopListening():voice.listen()} className="gap-2"><Mic size={15}/>{p(voice.listening?"stopListening":"speakMessage")}</Button>
+            {voice.canSpeak&&<label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autoRead} onChange={e=>{setAutoRead(e.target.checked);autoReadRef.current=e.target.checked;if(!e.target.checked)voice.stopSpeaking();}}/>{p("autoRead")}</label>}
+            {voice.speaking&&<Button type="button" variant="outline" onClick={voice.stopSpeaking}>{p("stopReading")}</Button>}
+          </div>
+          <p className="text-xs text-muted-foreground">{p(voice.canListen?"voiceHelp":"voiceUnavailable")}</p>
+          {voice.listening&&<p role="status">{p("listening")}</p>}
+          {voice.error&&<p role="alert" className="text-sm text-destructive">{p(voice.error)}</p>}
           <Textarea
+            readOnly={voice.listening}
             aria-label={p("advisorMessage")}
             placeholder={p("advisorPlaceholder")}
             value={input}
@@ -247,7 +269,7 @@ export default function PortalAdvisor({
             ) : (
               <Button
                 type="submit"
-                disabled={preview || !input.trim()}
+                disabled={preview || voice.listening || !input.trim()}
                 className="gap-2"
               >
                 <Send size={15} />
