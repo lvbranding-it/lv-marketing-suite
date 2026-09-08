@@ -12,7 +12,7 @@ This is a first lead-handoff increment, not the entire MVP. Duplicate detection,
 
 Run `npm run dev` and open `/portal-preview` on the displayed local port. That development-only route does not require sign-in and uses fictional `example.test` leads. It supports EN/ES, mobile/table/card layouts, form review, and an administrator role preview. All save/submission/pipeline actions are disabled in preview. It never creates Supabase records. The preview route is excluded from production routing.
 
-For the authenticated workspace, use `/portal` after applying the migration to staging. Set `VITE_ENABLE_AMBASSADOR_PORTAL=true` to show its navigation link in the existing suite. This build-time flag controls discoverability only; all API access remains protected independently. The default example value is false.
+For the authenticated workspace, use `/portal` after applying the migration to staging. Its navigation link appears in the existing suite for anyone `portal_workspaces()` returns a workspace for, so representatives find it and colleagues without portal membership never see it. No environment setting controls this; where the portal schema is absent the lookup fails and the link stays hidden. API access remains protected independently of the link.
 
 ## Database artifact and prerequisites
 
@@ -59,7 +59,7 @@ Manual staging journey: representative A creates a draft, adds personal/shared n
 
 The earlier security changes and this portal increment have separate deployment steps. A frontend deployment does not itself publish Supabase Edge Functions. Verify `agent-run` and `skill-run` were deployed through the Supabase function workflow as part of the prior security increment.
 
-For this increment, deploy and verify the portal schema in staging before enabling the frontend link. No new provider keys are required; `VITE_ENABLE_AMBASSADOR_PORTAL` is the only new environment setting. Do not expose service-role keys to the browser.
+For this increment, deploy and verify the portal schema in staging before granting anyone membership: the frontend link follows membership, so it appears as soon as the first representative is added. No new environment settings are required. Do not expose service-role keys to the browser.
 
 Production release remains gated by the missing launch features, canonical migration reconciliation and a staging review. Roll back visibility by disabling the build-time navigation flag and returning to the prior frontend build. The flag does not revoke direct access to `/portal`; deactivate relevant portal memberships if access must stop. Preserve new tables/history. Do not drop populated portal tables or replay legacy migrations during rollback.
 

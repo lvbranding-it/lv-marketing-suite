@@ -14,6 +14,6 @@ The preview can be zoomed from 50% to 150% without changing the animation docume
 
 ## Ambassador Portal (in development)
 
-Run the app and open `/portal-preview` to review the bilingual portal with fictional data. This route is available only in development and disables saving. The authenticated `/portal` requires the candidate database migration and explicit portal access. See [portal setup and deployment](docs/portal/DEPLOYMENT.md) before enabling `VITE_ENABLE_AMBASSADOR_PORTAL`.
+Run the app and open `/portal-preview` to review the bilingual portal with fictional data. This route is available only in development and disables saving. The authenticated `/portal` requires the candidate database migration and explicit portal access. Its suite navigation link appears for anyone holding portal membership. See [portal setup and deployment](docs/portal/DEPLOYMENT.md).
 
 Use `npm test` for unit/database tests and `npm run test:browser` for local Chrome UI checks.

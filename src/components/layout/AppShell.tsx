@@ -31,6 +31,7 @@ import {
   Palette,
   Signature,
   Calculator,
+  Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -39,6 +40,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useOrg } from "@/hooks/useOrg";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePortalWorkspaces } from "@/hooks/usePortal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -51,7 +53,10 @@ import {
 } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
-  ...(import.meta.env.VITE_ENABLE_AMBASSADOR_PORTAL === "true" ? [{ to: "/portal", labelKey: "nav.portal", icon: Users }] : []),
+  // Shown to representatives who actually hold portal membership, checked below
+  // rather than by a build-time flag: the flag was the same for everybody, so
+  // turning it on offered the portal to colleagues who have no workspace in it.
+  { to: "/portal", labelKey: "nav.portal", icon: Handshake },
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/skills", labelKey: "nav.skills", icon: Zap },
   { to: "/agents", labelKey: "nav.agents", icon: Bot },
@@ -79,6 +84,8 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const perms = usePermissions();
+  // Shares its cache with the portal itself, so this costs no extra request.
+  const portalWorkspaces = usePortalWorkspaces();
 
   const initials = (user?.email ?? "U").slice(0, 2).toUpperCase();
 
@@ -119,6 +126,10 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             if (to === "/workspace")    return perms.canAccessWorkspace;
             if (to === "/skills")       return perms.canAccessSkills;
             if (to === "/intake")       return perms.canAccessIntake;
+            // Absent until membership is confirmed, which also keeps the link
+            // hidden wherever the portal schema is not deployed: the lookup
+            // simply fails and nobody is offered a door that opens on nothing.
+            if (to === "/portal")       return (portalWorkspaces.data?.length ?? 0) > 0;
             return true;
           });
           return visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
