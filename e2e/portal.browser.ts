@@ -237,3 +237,18 @@ test("redesigned chat switches session drafts and fits mobile",async({page})=>{
  expect(asset.ok()).toBe(true);
  expect((await asset.json()).op).toBe(150);
 });
+
+test("portal menu folds to an icon rail and expands without losing navigation",async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.getByRole("button",{name:"Collapse menu",exact:true}).click();
+ const expand=page.getByRole("button",{name:"Expand menu",exact:true});
+ await expect(expand).toHaveAttribute("aria-expanded","false");
+ await page.getByRole("button",{name:"LV Branding Advisor",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"LV Branding Advisor",exact:true})).toBeVisible();
+ expect((await page.locator("main").boundingBox())!.x).toBe(64);
+ await expand.click();
+ expect((await page.locator("main").boundingBox())!.x).toBe(256);
+ await page.setViewportSize({width:390,height:844});
+ await expect(page.getByRole("button",{name:"Collapse menu",exact:true})).toBeHidden();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});

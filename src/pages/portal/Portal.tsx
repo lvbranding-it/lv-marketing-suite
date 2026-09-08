@@ -11,6 +11,8 @@ import {
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Bot,
+  ChevronLeft,
+  ChevronRight,
   Bell,
   ArrowLeft,
   ArrowRight,
@@ -174,6 +176,7 @@ function PortalWorkspaceView({
     [sort, setSort] = useState("created_at"),
     [page, setPage] = useState(0),
     [cards, setCards] = useState(false);
+  const [menuCollapsed,setMenuCollapsed]=useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [pending, setPending] = useState(false),
     [error, setError] = useState(""),
@@ -273,10 +276,13 @@ function PortalWorkspaceView({
   ];
   return (
     <div className={tab === "advisor" && !leadId && !isNew ? "h-dvh overflow-hidden bg-background text-foreground flex flex-col md:flex-row" : "min-h-screen bg-[#f7f7f8] text-foreground md:flex"}>
-      <aside className="bg-lv-charcoal text-white md:fixed md:inset-y-0 md:w-64 flex flex-col z-20">
-        <div className="px-6 py-6 flex items-center gap-3">
+      <aside className={cn("bg-lv-charcoal text-white md:fixed md:inset-y-0 flex flex-col z-20",menuCollapsed?"md:w-16":"md:w-64")}>
+        <button type="button" aria-label={p(menuCollapsed?"expandMenu":"collapseMenu")} aria-expanded={!menuCollapsed} onClick={()=>setMenuCollapsed(v=>!v)} className="hidden md:flex absolute -right-6 top-1/2 z-30 h-6 w-6 items-center justify-center rounded-r-md border border-white/15 bg-lv-charcoal text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+          {menuCollapsed?<ChevronRight size={14}/>:<ChevronLeft size={14}/>}
+        </button>
+        <div className={cn("px-6 py-6 flex items-center gap-3",menuCollapsed&&"md:px-3 md:justify-center")}>
           <LVLogo size={36} />
-          <div>
+          <div className={menuCollapsed?"md:hidden":undefined}>
             <p className="font-semibold tracking-wide">LV Branding</p>
             <p className="text-xs text-white/60 mt-0.5">{p("title")}</p>
           </div>
@@ -284,47 +290,52 @@ function PortalWorkspaceView({
         <div className="hidden md:block mx-5 border-t border-white/10 mb-6" />
         <nav
           aria-label={p("title")}
-          className="flex md:flex-col overflow-x-auto gap-1 px-3 pb-3"
+          className={cn("flex md:flex-col overflow-auto gap-1 px-3 pb-3",menuCollapsed&&"md:px-2")}
         >
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              aria-label={p(label)}
+              title={menuCollapsed?p(label):undefined}
               onClick={() => goTab(key)}
               aria-current={tab === key ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-4 py-3 text-sm whitespace-nowrap text-left transition-colors",
+                menuCollapsed && "md:px-0 md:justify-center",
                 tab === key
                   ? "bg-primary text-white"
                   : "text-white/70 hover:bg-white/10",
               )}
             >
               <Icon size={18} />
-              {p(label)}
-              {tab === key && (
+              <span className={menuCollapsed?"md:hidden":undefined}>{p(label)}</span>
+              {tab === key && !menuCollapsed && (
                 <ArrowRight size={14} className="hidden md:block ml-auto" />
               )}
             </button>
           ))}
         </nav>
-        <div className="hidden md:block mt-auto p-6 border-t border-white/10 space-y-4">
-          <p className="text-sm text-white/60">
+        <div className={cn("hidden md:block mt-auto border-t border-white/10 space-y-4",menuCollapsed?"p-2":"p-6")}>
+          <p className={cn("text-sm text-white/60",menuCollapsed&&"hidden")}>
             {p("profileRole")}
             <span className="block text-white mt-1">{p(role)}</span>
           </p>
-          <LanguageSwitcher />
+          <LanguageSwitcher collapsed={menuCollapsed} />
           {!preview && (
             <button
+              aria-label={p("signOut")}
+              title={p("signOut")}
               onClick={() => signOut()}
               className="flex gap-2 items-center text-sm text-white/60"
             >
               <LogOut size={15} />
-              {p("signOut")}
+              {!menuCollapsed&&p("signOut")}
             </button>
           )}
-          <p className="text-xs text-white/40 pt-3">Strategy First. Always.</p>
+          <p className={cn("text-xs text-white/40 pt-3",menuCollapsed&&"hidden")}>Strategy First. Always.</p>
         </div>
       </aside>
-      <main className={tab === "advisor" ? "min-w-0 min-h-0 flex-1 md:ml-64 flex flex-col" : "min-w-0 flex-1 md:ml-64"}>
+      <main className={cn("min-w-0 flex-1",menuCollapsed?"md:ml-16":"md:ml-64",tab==="advisor"&&"min-h-0 flex flex-col")}>
         <header hidden={tab === "advisor" && !leadId && !isNew} className={tab === "advisor" && !leadId && !isNew ? "hidden" : "flex flex-wrap items-center justify-between gap-3 border-b bg-white px-5 sm:px-9 py-4"}>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>LV Branding</span>

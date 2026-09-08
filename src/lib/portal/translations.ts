@@ -1,5 +1,7 @@
 export const portalTranslations = {
   en: {
+    "portal.expandMenu": "Expand menu",
+    "portal.collapseMenu": "Collapse menu",
     "portal.chatHistory": "Chat history",
     "portal.closeHistory": "Close history",
     "portal.chatTitle": "Chat",
@@ -237,6 +239,8 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.expandMenu": "Expandir menú",
+    "portal.collapseMenu": "Contraer menú",
     "portal.chatHistory": "Historial de chat",
     "portal.closeHistory": "Cerrar historial",
     "portal.chatTitle": "Chat",
