@@ -1,20 +1,45 @@
 // Speaks an Advisor reply in the LV Branding voice.
 //
 // The browser's own speech engine remains the fallback and is never removed:
-// this service is metered per character and depends on a third party, so the
-// Advisor has to keep talking when it is unavailable, unconfigured, or when a
-// representative has run through their hourly allowance.
+// this service is billed per use and depends on a third party, so the Advisor
+// has to keep talking when it is unavailable, unconfigured, or when a
+// representative has run through their allowance.
 //
-// The cloned voice id and key live only here. Neither reaches the browser, so
-// nobody can spend the account's characters by calling ElevenLabs directly.
+// The voice is a stock narrator directed by the written persona below rather
+// than a clone, which is what keeps this to cents a month instead of a monthly
+// plan. The key never reaches the browser, so nobody can spend the account
+// against OpenAI directly.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
-const ELEVENLABS_VOICE_ID = Deno.env.get("ELEVENLABS_VOICE_ID") ?? "";
-/** Multilingual so one cloned voice carries both English and Spanish. */
-const ELEVENLABS_MODEL = Deno.env.get("ELEVENLABS_MODEL") ?? "eleven_multilingual_v2";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+/**
+ * `gpt-4o-mini-tts` accepts the persona instruction below and performs to it.
+ * `tts-1` is cheaper per character but ignores instructions entirely, so
+ * switching to it trades the brand direction for a flat read.
+ */
+const OPENAI_TTS_MODEL = Deno.env.get("OPENAI_TTS_MODEL") ?? "gpt-4o-mini-tts";
+/** Warm, grounded, male — the closest stock match to the brand's own voice. */
+const OPENAI_TTS_VOICE = Deno.env.get("OPENAI_TTS_VOICE") ?? "ash";
+
+/**
+ * How LV Branding sounds. This is the whole brand voice: with a stock narrator
+ * the direction is the only thing distinguishing the Advisor from every other
+ * product using the same voice, so it is worth writing carefully and worth
+ * revising by ear.
+ */
+function personaFor(language: string): string {
+  const base =
+    "Speak as a senior brand strategist at LV Branding talking one to one with a colleague. " +
+    "Warm, composed and unhurried, with the easy confidence of someone who has had this " +
+    "conversation many times. Land on the word that carries the meaning instead of rushing " +
+    "to the end of the sentence, and let short pauses do their work. Never sound like an " +
+    "announcer, a salesperson or a customer service line: this is trusted advice, quietly given.";
+  return language === "es"
+    ? `${base} Speak Latin American Spanish, natural and unaccented, as spoken in Mexico.`
+    : base;
+}
 
 /**
  * A spoken advisor reply is a paragraph or two. The cap is a spend guard rather
@@ -25,6 +50,13 @@ const MAX_CHARACTERS = 2_000;
 /** Per representative, per hour. */
 const REQUEST_LIMIT = 30;
 const RATE_WINDOW_SECONDS = 3_600;
+/**
+ * Per workspace, per day. Nothing here is metered by a monthly plan that would
+ * stop on its own, so this is the ceiling that turns a runaway loop or a bored
+ * afternoon into a small bill rather than a surprising one.
+ */
+const DAILY_ORG_LIMIT = Number(Deno.env.get("ADVISOR_SPEAK_DAILY_LIMIT") ?? "100");
+const DAY_SECONDS = 86_400;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -60,7 +92,7 @@ Deno.serve(async (req: Request) => {
 
   // Reported as a normal, expected state: the client falls back to the browser
   // voice rather than showing anyone an error.
-  if (!ELEVENLABS_API_KEY || !ELEVENLABS_VOICE_ID) {
+  if (!OPENAI_API_KEY) {
     return json({ error: "Voice service is not configured", code: "voice_unconfigured" }, 503);
   }
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -95,44 +127,39 @@ Deno.serve(async (req: Request) => {
   const { data: role, error: roleError } = await scoped.rpc("portal_role", { p_org: orgId });
   if (roleError || !role) return json({ error: "Not authorized" }, 403);
 
-  const { data: allowed, error: limitError } = await admin.rpc("consume_edge_rate_limit", {
-    p_scope: "advisor-speak",
-    p_key_hash: await sha256Hex(`advisor-speak:${auth.user.id}`),
-    p_limit: REQUEST_LIMIT,
-    p_window_seconds: RATE_WINDOW_SECONDS,
-  });
-  if (limitError) console.error("advisor-speak rate limit check failed", limitError.message);
-  if (allowed === false) {
+  const withinLimit = async (scope: string, key: string, limit: number, seconds: number) => {
+    const { data, error } = await admin.rpc("consume_edge_rate_limit", {
+      p_scope: scope,
+      p_key_hash: await sha256Hex(`${scope}:${key}`),
+      p_limit: limit,
+      p_window_seconds: seconds,
+    });
+    if (error) console.error(`advisor-speak ${scope} limit check failed`, error.message);
+    return data !== false;
+  };
+  if (!await withinLimit("advisor-speak", auth.user.id, REQUEST_LIMIT, RATE_WINDOW_SECONDS)) {
     return json({ error: "Too many requests", code: "voice_rate_limited" }, 429);
+  }
+  if (!await withinLimit("advisor-speak-day", orgId, DAILY_ORG_LIMIT, DAY_SECONDS)) {
+    return json({ error: "Daily voice budget reached", code: "voice_quota" }, 429);
   }
 
   let upstream: Response;
   try {
-    upstream = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(ELEVENLABS_VOICE_ID)}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVENLABS_API_KEY,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          text,
-          model_id: ELEVENLABS_MODEL,
-          // Tuned for a brand narrator rather than a performance: stable enough
-          // to sound like the same person every time, close enough to the clone
-          // to be recognisably it, and no added style so it never over-acts a
-          // straight piece of advice.
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.85,
-            style: 0,
-            use_speaker_boost: true,
-          },
-        }),
+    upstream = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        model: OPENAI_TTS_MODEL,
+        voice: OPENAI_TTS_VOICE,
+        input: text,
+        instructions: personaFor(language),
+        response_format: "mp3",
+      }),
+    });
   } catch (error) {
     console.error("advisor-speak upstream request failed", error instanceof Error ? error.message : String(error));
     return json({ error: "Voice service is unavailable", code: "voice_unavailable" }, 502);
@@ -140,7 +167,7 @@ Deno.serve(async (req: Request) => {
 
   if (!upstream.ok) {
     console.error("advisor-speak upstream error", upstream.status, (await upstream.text()).slice(0, 300));
-    // Quota exhaustion is the one worth naming: it is the account, not the
+    // A billing stop is worth naming separately: it is the account, not the
     // request, and it will keep failing until somebody tops it up.
     const code = upstream.status === 401 ? "voice_unconfigured"
       : upstream.status === 429 ? "voice_quota"
@@ -153,10 +180,6 @@ Deno.serve(async (req: Request) => {
 
   return new Response(upstream.body, {
     status: 200,
-    headers: {
-      ...cors,
-      "Content-Type": "audio/mpeg",
-      "Cache-Control": "no-store",
-    },
+    headers: { ...cors, "Content-Type": "audio/mpeg", "Cache-Control": "no-store" },
   });
 });
