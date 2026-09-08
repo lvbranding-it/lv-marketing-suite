@@ -13,20 +13,34 @@ export interface StreamCallbacks {
   onError: (error: Error) => void;
 }
 
+export type SkillStreamParams =
+  | {
+      skillSystemPrompt: string;
+      userMessage: string;
+      conversationHistory?: Message[];
+      marketingContext?: Record<string, unknown>;
+      orgId?: string;
+      branchId?: string | null;
+      sourceType?: string;
+    }
+  | {
+      mode: "portal_advisor";
+      orgId: string;
+      userMessage: string;
+      conversationHistory?: Message[];
+      language: "en" | "es";
+    };
+
 export async function runSkillStream(
-  params: {
-    skillSystemPrompt: string;
-    userMessage: string;
-    conversationHistory?: Message[];
-    marketingContext?: Record<string, unknown>;
-    orgId?: string;
-    branchId?: string | null;
-    sourceType?: string;
-  },
-  callbacks: StreamCallbacks
+  params: SkillStreamParams,
+  callbacks: StreamCallbacks,
+  options: { signal?: AbortSignal } = {},
 ): Promise<void> {
   // Always fetch the current session (handles token refresh automatically)
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
   if (sessionError || !session) {
     callbacks.onError(new Error("Not authenticated"));
@@ -37,6 +51,7 @@ export async function runSkillStream(
   try {
     response = await fetch(`${FUNCTIONS_URL}/skill-run`, {
       method: "POST",
+      signal: options.signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${session.access_token}`,
@@ -50,13 +65,24 @@ export async function runSkillStream(
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: "Unknown error" }));
+    const body = await response
+      .json()
+      .catch(() => ({ error: "Unknown error" }));
     // Include Claude API details so we can see the real error (e.g. invalid model, bad key)
     const detail = body.details
-      ? (() => { try { return JSON.parse(body.details); } catch { return body.details; } })()
+      ? (() => {
+          try {
+            return JSON.parse(body.details);
+          } catch {
+            return body.details;
+          }
+        })()
       : null;
-    const detailMsg = detail?.error?.message ?? (typeof detail === "string" ? detail : "");
-    const fullMsg = detailMsg ? `${body.error}: ${detailMsg}` : (body.error || `HTTP ${response.status}`);
+    const detailMsg =
+      detail?.error?.message ?? (typeof detail === "string" ? detail : "");
+    const fullMsg = detailMsg
+      ? `${body.error}: ${detailMsg}`
+      : body.error || `HTTP ${response.status}`;
     console.error("[skill-run] 502 details:", body);
     callbacks.onError(new Error(fullMsg));
     return;

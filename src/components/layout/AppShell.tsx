@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
+  ...(import.meta.env.VITE_ENABLE_AMBASSADOR_PORTAL === "true" ? [{ to: "/portal", labelKey: "nav.portal", icon: Users }] : []),
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/skills", labelKey: "nav.skills", icon: Zap },
   { to: "/agents", labelKey: "nav.agents", icon: Bot },

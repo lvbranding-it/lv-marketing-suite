@@ -1,3 +1,4 @@
+import { portalTranslations } from "@/lib/portal/translations";
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 export type Language = "en" | "es";
@@ -6,6 +7,7 @@ const LANGUAGE_STORAGE_KEY = "lv-marketing-suite-language";
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
+    ...portalTranslations.en,
     "common.cancel": "Cancel",
     "common.copy": "Copy",
     "common.loading": "Loading...",
@@ -173,6 +175,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     "activity.updated_branch_status": "Updated branch status",
   },
   es: {
+    ...portalTranslations.es,
     "common.cancel": "Cancelar",
     "common.copy": "Copiar",
     "common.loading": "Cargando...",

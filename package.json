@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build && node scripts/prerender-website-audit.mjs && node scripts/generate-sitemap.mjs",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "playwright test"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^25.5.0",

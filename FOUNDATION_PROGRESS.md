@@ -36,3 +36,19 @@ Verify staging using two organizations: valid existing workflows succeed; forged
 - Add authorization for representative lead context, private run persistence, durable rate limits and authoritative audit writes in the following foundation increment.
 
 This is the first security increment, not completion of milestone 0 or the portal. It does not grant representatives access to existing internal AI endpoints.
+
+## First portal workflow increment
+
+Implemented a candidate additive portal schema and bilingual dashboard, lead list/detail, notes, next follow-up dates, submission, staff assignment/internal pipeline, deliberate shared progress, notification inbox and representative roster. A development-only `/portal-preview` uses fictional data and disables mutations. The normal `/portal` uses existing authentication and server/database authorization.
+
+See `docs/portal/DEPLOYMENT.md` for tested scope, remaining MVP features, staging setup and rollback. The candidate SQL is outside the legacy migration directory until canonical history reconciliation. No portal schema was deployed. All 33 remote migration definitions were read and compared conservatively; the comparison report is in `docs/database/2026-09-08-migration-comparison.md`.
+
+## Portal onboarding increment
+
+Added expiring hashed invitation links, explicit acceptance by the invited verified account, role/access management UI, and portal-aware routing through the existing sign-in page. Existing personal workspaces are preserved. The second candidate migration is `202609080002_portal_invitations.sql`. Invitations are copied/shared manually; no messages, accounts, or memberships were created in production during this work.
+
+Local verification now covers the database onboarding edge cases and the browser invitation/sign-in handoff. Configure and verify Auth redirect/email behavior in staging before inviting real representatives.
+
+### Standalone advisor increment
+
+Added general LV Branding Advisor chat from the portal menu/dashboard, without lead selection. Reuses skill-run with a dedicated portal-authorized mode, strict context allowlist, EN/ES prompts and editable drafts. Candidate migration 003 and updated function require staging deployment. Approved knowledge retrieval and voice remain pending.

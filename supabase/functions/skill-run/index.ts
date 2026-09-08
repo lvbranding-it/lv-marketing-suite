@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { AiAccessError, requireAiUser, requireAiOrganization } from "../_shared/ai-authorization.ts";
+import {
+  AiAccessError,
+  requireAiUser,
+  requireAiOrganization,
+} from "../_shared/ai-authorization.ts";
+
+import {
+  ADVISOR_RULES,
+  parseAdvisorInput,
+  completeAdvisorResponse,
+} from "../_shared/portal-advisor.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -39,14 +49,25 @@ serve(async (req) => {
       throw new Error("CLAUDE_API_KEY is not configured");
     }
 
-    if (req.method !== "POST") throw new AiAccessError(405, "Method not allowed");
+    if (req.method !== "POST")
+      throw new AiAccessError(405, "Method not allowed");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) throw new Error("AI service unavailable");
+    if (!supabaseUrl || !serviceRoleKey)
+      throw new Error("AI service unavailable");
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-    const userId = await requireAiUser(supabaseAdmin, req.headers.get("Authorization"));
+    const userId = await requireAiUser(
+      supabaseAdmin,
+      req.headers.get("Authorization"),
+    );
 
-    const {
+    const requestBody = await req.json();
+    const advisor =
+      requestBody.mode === "portal_advisor"
+        ? parseAdvisorInput(requestBody)
+        : null;
+    let advisorName: unknown = null;
+    let {
       skillSystemPrompt,
       userMessage,
       conversationHistory,
@@ -54,16 +75,36 @@ serve(async (req) => {
       orgId,
       branchId,
       sourceType,
-    } = await req.json();
+    } = requestBody;
 
-    if (!skillSystemPrompt || !userMessage) {
-      return new Response(
-        JSON.stringify({ error: "skillSystemPrompt and userMessage are required" }),
-        { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
-      );
+    if (advisor) {
+      const scoped = createClient(supabaseUrl, serviceRoleKey, {
+        global: {
+          headers: { Authorization: req.headers.get("Authorization")! },
+        },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await scoped.rpc("portal_advisor_session", {
+        p_org: advisor.orgId,
+      });
+      if (error || !data?.role)
+        throw new AiAccessError(
+          error?.code === "P0429" ? 429 : 403,
+          "Advisor unavailable",
+        );
+      advisorName = data.first_name;
+      skillSystemPrompt = `${ADVISOR_RULES}\nRespond in ${advisor.language === "es" ? "Spanish" : "English"} unless the user requests otherwise.`;
+      userMessage = advisor.userMessage;
+      conversationHistory = advisor.conversationHistory;
+      marketingContext = undefined;
+    } else {
+      if (!skillSystemPrompt || !userMessage)
+        throw new AiAccessError(
+          400,
+          "skillSystemPrompt and userMessage are required",
+        );
+      await requireAiOrganization(supabaseAdmin, userId, orgId, branchId);
     }
-
-    await requireAiOrganization(supabaseAdmin, userId, orgId, branchId);
 
     if (supabaseAdmin && orgId && branchId) {
       const monthStart = new Date();
@@ -88,13 +129,18 @@ serve(async (req) => {
 
         const monthSpendCents = (events ?? []).reduce(
           (sum, event) => sum + Number(event.estimated_cost_cents ?? 0),
-          0
+          0,
         );
 
         if (monthSpendCents >= monthlyBudgetCents) {
           return new Response(
-            JSON.stringify({ error: "Branch AI usage budget reached for this month." }),
-            { status: 402, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+            JSON.stringify({
+              error: "Branch AI usage budget reached for this month.",
+            }),
+            {
+              status: 402,
+              headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+            },
           );
         }
       }
@@ -118,12 +164,12 @@ serve(async (req) => {
       typeof marketingContext === "object" &&
       Object.keys(marketingContext).length > 0
     ) {
-      const contextStr = (marketingContext as Record<string, unknown>).raw_markdown
+      const contextStr = (marketingContext as Record<string, unknown>)
+        .raw_markdown
         ? String((marketingContext as Record<string, unknown>).raw_markdown)
         : JSON.stringify(marketingContext, null, 2);
 
-      finalUserMessage =
-        `## Product Marketing Context\n\nUse this as background; don't re-ask for information already captured here:\n\n${contextStr}\n\n---\n\n${userMessage}`;
+      finalUserMessage = `## Product Marketing Context\n\nUse this as background; don't re-ask for information already captured here:\n\n${contextStr}\n\n---\n\n${userMessage}`;
     }
 
     messages.push({ role: "user", content: finalUserMessage });
@@ -134,28 +180,43 @@ serve(async (req) => {
     const fullSystemPrompt = `${AGENCY_CONTEXT}\n\n---\n\n${skillSystemPrompt}`;
 
     // Call Claude API with streaming
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+    const claudeResponse = await fetch(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        signal: advisor ? AbortSignal.timeout(45_000) : undefined,
+        headers: {
+          "x-api-key": CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: advisor ? 2400 : 16000,
+          system: fullSystemPrompt,
+          messages,
+          stream: true,
+        }),
       },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 16000,
-        system: fullSystemPrompt,
-        messages,
-        stream: true,
-      }),
-    });
+    );
 
     if (!claudeResponse.ok) {
+      if (advisor)
+        return new Response(JSON.stringify({ error: "Advisor unavailable" }), {
+          status: 502,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
       const errorBody = await claudeResponse.text();
       console.error("Claude API error:", claudeResponse.status, errorBody);
       return new Response(
-        JSON.stringify({ error: `Claude API error: ${claudeResponse.status}`, details: errorBody }),
-        { status: 502, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: `Claude API error: ${claudeResponse.status}`,
+          details: errorBody,
+        }),
+        {
+          status: 502,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -170,6 +231,9 @@ serve(async (req) => {
       let buffer = "";
       let inputTokens = 0;
       let outputTokens = 0;
+      let advisorText = "";
+      let advisorCompleted = false;
+      let advisorFailed = false;
 
       try {
         while (true) {
@@ -187,21 +251,38 @@ serve(async (req) => {
 
             try {
               const event = JSON.parse(data);
+              if (event.type === "message_stop") advisorCompleted = true;
+              if (event.type === "error" && advisor) advisorFailed = true;
+              if (
+                event.type === "message_delta" &&
+                event.delta?.stop_reason === "max_tokens"
+              )
+                advisorFailed = true;
               if (event.type === "message_start") {
-                inputTokens = Number(event.message?.usage?.input_tokens ?? inputTokens);
-                outputTokens = Number(event.message?.usage?.output_tokens ?? outputTokens);
+                inputTokens = Number(
+                  event.message?.usage?.input_tokens ?? inputTokens,
+                );
+                outputTokens = Number(
+                  event.message?.usage?.output_tokens ?? outputTokens,
+                );
               }
               if (event.type === "message_delta") {
-                outputTokens = Number(event.usage?.output_tokens ?? outputTokens);
+                outputTokens = Number(
+                  event.usage?.output_tokens ?? outputTokens,
+                );
               }
               if (
                 event.type === "content_block_delta" &&
                 event.delta?.type === "text_delta" &&
                 event.delta.text
               ) {
-                await writer.write(
-                  encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`)
-                );
+                if (advisor) advisorText += event.delta.text;
+                else
+                  await writer.write(
+                    encoder.encode(
+                      `data: ${JSON.stringify({ text: event.delta.text })}\n\n`,
+                    ),
+                  );
               }
             } catch {
               // Skip malformed events
@@ -209,9 +290,19 @@ serve(async (req) => {
           }
         }
 
-        if (supabaseAdmin && orgId) {
+        if (advisor) {
+          if (advisorFailed || !advisorCompleted || !advisorText.trim())
+            throw new Error("Advisor response incomplete");
+          await writer.write(
+            encoder.encode(
+              `data: ${JSON.stringify({ text: completeAdvisorResponse(advisorText, advisorName) })}\n\n`,
+            ),
+          );
+        }
+
+        if (!advisor && supabaseAdmin && orgId) {
           const estimatedCostCents = Math.ceil(
-            (inputTokens * 300 + outputTokens * 1500) / 1_000_000
+            (inputTokens * 300 + outputTokens * 1500) / 1_000_000,
           );
 
           await supabaseAdmin.from("branch_usage_events").insert({
@@ -234,7 +325,9 @@ serve(async (req) => {
       } catch (err) {
         console.error("Stream error:", err);
         await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ error: "Stream interrupted" })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ error: "Stream interrupted" })}\n\n`,
+          ),
         );
       } finally {
         await writer.close();
@@ -246,14 +339,20 @@ serve(async (req) => {
         ...CORS_HEADERS,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
   } catch (err) {
     console.error("skill-run error:", err);
     return new Response(
-      JSON.stringify({ error: err instanceof AiAccessError ? err.message : "AI service unavailable" }),
-      { status: err instanceof AiAccessError ? err.status : 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error:
+          err instanceof AiAccessError ? err.message : "AI service unavailable",
+      }),
+      {
+        status: err instanceof AiAccessError ? err.status : 500,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      },
     );
   }
 });

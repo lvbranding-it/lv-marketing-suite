@@ -11,3 +11,9 @@ Color detection recursively visits top-level layers and precomposition assets, n
 Named color schemes are stored only in the current browser's `localStorage`; animation files are processed locally and are not uploaded. Further format support should extend the framework-independent parser's detection and replacement visitors with typed handlers for the relevant Lottie property shapes, while continuing to leave unsupported data untouched.
 
 The preview can be zoomed from 50% to 150% without changing the animation document or export dimensions. The Lottie JSON download remains animated; the SVG action exports the currently visible original or recolored frame as a static, transparent-background SVG snapshot.
+
+## Ambassador Portal (in development)
+
+Run the app and open `/portal-preview` to review the bilingual portal with fictional data. This route is available only in development and disables saving. The authenticated `/portal` requires the candidate database migration and explicit portal access. See [portal setup and deployment](docs/portal/DEPLOYMENT.md) before enabling `VITE_ENABLE_AMBASSADOR_PORTAL`.
+
+Use `npm test` for unit/database tests and `npm run test:browser` for local Chrome UI checks.

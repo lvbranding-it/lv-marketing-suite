@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import LVLogo from "@/components/LVLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+
+import { safePortalReturn } from "@/lib/portal/invitations";
 
 const signInSchema = z.object({
   email: z.string().email("Invalid email"),
@@ -25,6 +27,8 @@ type ResetValues = z.infer<typeof resetSchema>;
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const returnTo = safePortalReturn(params.get("returnTo"));
   const { session, loading } = useAuth();
   const [mode, setMode] = useState<"signin" | "reset">("signin");
   const [error, setError] = useState<string | null>(null);
@@ -32,10 +36,35 @@ export default function Auth() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) {
-      navigate("/dashboard");
+    if (loading || !session) return;
+    let cancelled = false;
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+      return;
     }
-  }, [session, loading, navigate]);
+    // Existing suite accounts keep their landing page. Explicit portal members
+    // can enter their private workspace even if signup created a personal org.
+    void (async () => {
+      try {
+        const { data } = await (supabase as any).rpc("portal_workspaces");
+        const workspace = (
+          data as { org_id: string; role: string }[] | null
+        )?.find((w) =>
+          ["ambassador", "business_developer", "staff"].includes(w.role),
+        );
+        if (!cancelled)
+          navigate(
+            workspace ? `/portal?org=${workspace.org_id}` : "/dashboard",
+            { replace: true },
+          );
+      } catch {
+        if (!cancelled) navigate("/dashboard", { replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, loading, navigate, returnTo]);
 
   const signInForm = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
@@ -56,7 +85,7 @@ export default function Auth() {
         password: values.password,
       });
       if (error) throw error;
-      navigate("/dashboard");
+      // Auth state above chooses the appropriate workspace.
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -68,13 +97,18 @@ export default function Auth() {
     setError(null);
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/auth`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        values.email,
+        {
+          redirectTo: `${window.location.origin}/auth`,
+        },
+      );
       if (error) throw error;
       setResetSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send reset email");
+      setError(
+        err instanceof Error ? err.message : "Failed to send reset email",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +136,10 @@ export default function Auth() {
             { icon: "⚡", text: "Real-time streaming AI output" },
             { icon: "👥", text: "Team collaboration built in" },
           ].map(({ icon, text }) => (
-            <div key={text} className="flex items-center gap-3 text-white/70 text-sm">
+            <div
+              key={text}
+              className="flex items-center gap-3 text-white/70 text-sm"
+            >
               <span className="text-xl">{icon}</span>
               {text}
             </div>
@@ -128,7 +165,10 @@ export default function Auth() {
                 </p>
               </div>
 
-              <form onSubmit={signInForm.handleSubmit(onSignIn)} className="space-y-4">
+              <form
+                onSubmit={signInForm.handleSubmit(onSignIn)}
+                className="space-y-4"
+              >
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -166,7 +206,9 @@ export default function Auth() {
                 )}
 
                 <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+                  {submitting && (
+                    <Loader2 size={14} className="mr-2 animate-spin" />
+                  )}
                   Sign In
                 </Button>
               </form>
@@ -201,7 +243,10 @@ export default function Auth() {
                   Check your inbox — a reset link has been sent.
                 </div>
               ) : (
-                <form onSubmit={resetForm.handleSubmit(onReset)} className="space-y-4">
+                <form
+                  onSubmit={resetForm.handleSubmit(onReset)}
+                  className="space-y-4"
+                >
                   <div className="space-y-1.5">
                     <Label htmlFor="reset-email">Email</Label>
                     <Input
@@ -223,8 +268,14 @@ export default function Auth() {
                     </p>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting && <Loader2 size={14} className="mr-2 animate-spin" />}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={submitting}
+                  >
+                    {submitting && (
+                      <Loader2 size={14} className="mr-2 animate-spin" />
+                    )}
                     Send Reset Link
                   </Button>
                 </form>

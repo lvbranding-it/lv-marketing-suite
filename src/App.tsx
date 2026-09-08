@@ -8,6 +8,8 @@ import { OrgProvider } from "@/hooks/useOrg";
 import { LanguageProvider } from "@/hooks/useLanguage";
 
 // Pages
+const PortalInvite = lazy(() => import("@/pages/portal/PortalInvite"));
+const AmbassadorPortal = lazy(() => import("@/pages/portal/Portal"));
 const Auth                 = lazy(() => import("@/pages/Auth"));
 const Dashboard            = lazy(() => import("@/pages/Dashboard"));
 const SkillsLibrary        = lazy(() => import("@/pages/SkillsLibrary"));
@@ -106,6 +108,9 @@ function WebsiteAuditLocaleRedirectRoute() {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/portal-invite" element={<Suspense fallback={null}><PortalInvite /></Suspense>} />
+      <Route path="/portal" element={<ProtectedRoute><Suspense fallback={null}><AmbassadorPortal /></Suspense></ProtectedRoute>} />
+      {import.meta.env.DEV && <Route path="/portal-preview" element={<Suspense fallback={null}><AmbassadorPortal preview /></Suspense>} />}
       <Route path="/auth" element={<Suspense fallback={null}><Auth /></Suspense>} />
       <Route path="/intake/:orgId" element={<Suspense fallback={null}><IntakeForm /></Suspense>} />
       <Route path="/unsubscribe"   element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />

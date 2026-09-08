@@ -1,3 +1,4 @@
+import ChatMessageText from "./ChatMessageText";
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -864,9 +865,7 @@ export default function AgentRunChat({
                           ))}
                         </div>
                       )}
-                      <div className="bg-rose-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
-                        {msg.content}
-                      </div>
+                      <ChatMessageText role="user" content={msg.content} />
                     </div>
                     <div className="shrink-0 w-7 h-7 bg-muted rounded-full flex items-center justify-center mt-0.5">
                       <User size={14} />
@@ -900,9 +899,7 @@ export default function AgentRunChat({
                   )}
 
                   <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3">
-                    <div className="prose prose-sm max-w-none text-foreground">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayText}</ReactMarkdown>
-                    </div>
+                    <ChatMessageText role="assistant" content={displayText} />
 
                     {/* Discovery form — rendered inside the message bubble */}
                     {discoveryQuestions && (
