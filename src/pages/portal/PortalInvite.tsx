@@ -81,13 +81,10 @@ export default function PortalInvite() {
   };
   return (
     <main className="min-h-screen bg-muted/30 p-5 flex items-center justify-center">
-      <section className="w-full max-w-md rounded-2xl border bg-white p-7 space-y-5">
-        <div className="flex items-center justify-between">
-          <LVLogo size={42} />
-          <div className="bg-lv-charcoal rounded-md p-2">
-            <LanguageSwitcher />
-          </div>
-        </div>
+      <div className="w-full max-w-md space-y-6">
+      <div className="flex justify-center" aria-label="LV Branding"><LVLogo size={44.1}/></div>
+      <section className="rounded-2xl border bg-white p-7 space-y-5">
+        <div className="flex justify-end"><LanguageSwitcher appearance="surface" className="w-36"/></div>
         <h1 className="text-2xl font-semibold">{p("inviteWelcome")}</h1>
         {error && (
           <p role="alert" className="text-sm text-destructive">
@@ -186,6 +183,7 @@ export default function PortalInvite() {
           </>
         )}
       </section>
+      </div>
     </main>
   );
 }

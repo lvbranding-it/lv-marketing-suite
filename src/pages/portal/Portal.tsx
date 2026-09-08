@@ -1,3 +1,4 @@
+import PortalWelcome from "./PortalWelcome";
 import PortalCommissions from "./PortalCommissions";
 import PortalAdvisor from "./PortalAdvisor";
 import PortalTeam from "./PortalTeam";
@@ -276,6 +277,7 @@ function PortalWorkspaceView({
   ];
   return (
     <div className={tab === "advisor" && !leadId && !isNew ? "h-dvh overflow-hidden bg-background text-foreground flex flex-col md:flex-row" : "min-h-screen bg-[#f7f7f8] text-foreground md:flex"}>
+      {user&&<PortalWelcome userId={user.id} org={workspace.org_id} role={role} preview={preview}/>}
       <aside className={cn("bg-lv-charcoal text-white md:fixed md:inset-y-0 flex flex-col z-20",menuCollapsed?"md:w-16":"md:w-64")}>
         <button type="button" aria-label={p(menuCollapsed?"expandMenu":"collapseMenu")} aria-expanded={!menuCollapsed} onClick={()=>setMenuCollapsed(v=>!v)} className="hidden md:flex absolute -right-6 top-1/2 z-30 h-6 w-6 items-center justify-center rounded-r-md border border-white/15 bg-lv-charcoal text-white/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
           {menuCollapsed?<ChevronRight size={14}/>:<ChevronLeft size={14}/>}

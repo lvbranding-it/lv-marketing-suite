@@ -17,10 +17,11 @@ import { cn } from "@/lib/utils";
 
 interface LanguageSwitcherProps {
   collapsed?: boolean;
+  appearance?: "sidebar" | "surface";
   className?: string;
 }
 
-export default function LanguageSwitcher({ collapsed = false, className }: LanguageSwitcherProps) {
+export default function LanguageSwitcher({ collapsed = false, appearance = "sidebar", className }: LanguageSwitcherProps) {
   const { language, setLanguage, t } = useLanguage();
   const nextLanguage: Language = language === "en" ? "es" : "en";
 
@@ -50,12 +51,12 @@ export default function LanguageSwitcher({ collapsed = false, className }: Langu
 
   return (
     <div className={cn("space-y-1", className)}>
-      <div className="flex items-center gap-2 px-3 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/45">
+      <div className={cn("flex items-center gap-2 px-3 text-[11px] font-medium uppercase tracking-wide",appearance==="surface"?"text-muted-foreground":"text-sidebar-foreground/45")}>
         <Languages size={12} />
         {t("language.label")}
       </div>
       <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-        <SelectTrigger className="h-8 border-sidebar-border bg-sidebar-accent/40 text-xs text-sidebar-foreground focus:ring-sidebar-ring">
+        <SelectTrigger aria-label={t("language.label")} className={cn("h-8 text-xs",appearance==="surface"?"border-input bg-transparent text-foreground":"border-sidebar-border bg-sidebar-accent/40 text-sidebar-foreground focus:ring-sidebar-ring")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

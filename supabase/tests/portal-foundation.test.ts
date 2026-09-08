@@ -95,6 +95,7 @@ beforeAll(async () => {
     ),
   );
  await db.exec(readFileSync(new URL("../portal-migrations/202609080004_commission_tracker.sql",import.meta.url),"utf8"));
+ await db.exec(readFileSync(new URL("../portal-migrations/202609080005_ambassador_welcome.sql",import.meta.url),"utf8"));
 }, 30000);
 afterAll(async () => {
   await db?.close();
@@ -547,4 +548,17 @@ it("commission entries reject invalid amounts and audit omissions",async()=>{
  for(const change of [{amount_cents:-1},{amount_cents:1.5},{reason:""},{ambassador_id:outsider}]){
  await expect(scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify({...commission,...change})])).rejects.toThrow();
  }
+});
+
+it("claims the ambassador welcome once and rejects unrelated accounts",async()=>{
+ await as(alice);
+ expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(true);
+ expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(false);
+ await expect(db.query("delete from public.portal_welcome_seen")).rejects.toThrow();
+ await as(bob);
+ expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(true);
+ await as(outsider);
+ await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
+ await as(staff);
+ await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
 });

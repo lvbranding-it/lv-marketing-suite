@@ -252,3 +252,16 @@ test("portal menu folds to an icon rail and expands without losing navigation",a
  await expect(page.getByRole("button",{name:"Collapse menu",exact:true})).toBeHidden();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
+
+test("invitation logo sits above the card and selector uses the light surface",async({page})=>{
+ await page.goto("/portal-invite");
+ const logo=page.getByLabel("LV Branding",{exact:true}).locator("svg");
+ await expect(logo).toHaveAttribute("width","44.1");
+ const logoBox=await logo.boundingBox();
+ const card=await page.locator("main section").boundingBox();
+ expect(logoBox!.y+logoBox!.height).toBeLessThan(card!.y);
+ expect(Math.abs(logoBox!.x+logoBox!.width/2-(card!.x+card!.width/2))).toBeLessThan(1);
+ const selector=page.getByRole("combobox",{name:"Language",exact:true});
+ await expect(selector).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
+ await page.screenshot({path:"/private/tmp/lv-invite-welcome.png",fullPage:true});
+});
