@@ -1,5 +1,12 @@
 export const portalTranslations = {
   en: {
+    "portal.invitePasswordlessHelp": "No password needed. Enter the email address your invitation was sent to. We’ll email you a secure sign-in link, whether you’re new or already have an account.",
+    "portal.inviteSendLink": "Email me a sign-in link",
+    "portal.inviteLinkSent": "Check your inbox for the sign-in link. After opening it, return to this tab to accept your invitation. If you use another browser or device, reopen the original invitation there after signing in.",
+    "portal.inviteTryEmail": "Use another email or request a new link",
+    "portal.inviteLinkFailed": "We couldn’t send the sign-in link. Check the email address and try again in a minute. If it continues, contact your LV administrator.",
+    "portal.inviteReopen": "Open your original invitation link to continue. If you just verified your email in a new tab, return to the tab with your invitation, or reopen the original link here.",
+
     "portal.expandMenu": "Expand menu",
     "portal.collapseMenu": "Collapse menu",
     "portal.chatHistory": "Chat history",
@@ -239,6 +246,13 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.invitePasswordlessHelp": "No necesitas contraseña. Ingresa el correo al que enviaron tu invitación. Te enviaremos un enlace seguro para entrar, tanto si eres nuevo como si ya tienes cuenta.",
+    "portal.inviteSendLink": "Enviarme un enlace de acceso",
+    "portal.inviteLinkSent": "Revisa tu correo y abre el enlace de acceso. Después vuelve a esta pestaña para aceptar la invitación. Si usas otro navegador o dispositivo, vuelve a abrir allí la invitación original después de iniciar sesión.",
+    "portal.inviteTryEmail": "Usar otro correo o solicitar un nuevo enlace",
+    "portal.inviteLinkFailed": "No pudimos enviar el enlace. Revisa el correo e inténtalo en un minuto. Si continúa, contacta a tu administrador de LV.",
+    "portal.inviteReopen": "Abre tu enlace de invitación original para continuar. Si acabas de verificar tu correo en otra pestaña, vuelve a la pestaña de la invitación o abre aquí el enlace original.",
+
     "portal.expandMenu": "Expandir menú",
     "portal.collapseMenu": "Contraer menú",
     "portal.chatHistory": "Historial de chat",

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
@@ -20,9 +20,7 @@ export default function PortalInvite() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [sent, setSent] = useState(false);
-  const [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const navigate = useNavigate(),
     qc = useQueryClient();
   const details = useQuery({
@@ -39,24 +37,23 @@ export default function PortalInvite() {
         { org_name: string; role: string; display_name: string } | undefined;
     },
   });
-  const signup = async (e: FormEvent) => {
+  const sendLink = async (e: FormEvent) => {
     e.preventDefault();
+    if(busy)return;
     setBusy(true);
     setError("");
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
         options: {
-          data: { full_name: name },
+          shouldCreateUser: true,
           emailRedirectTo: `${window.location.origin}/portal-invite`,
         },
       });
       if (error) throw error;
-      setPassword("");
       setSent(true);
     } catch {
-      setError(p("authFailed"));
+      setError(p("inviteLinkFailed"));
     } finally {
       setBusy(false);
     }
@@ -94,7 +91,7 @@ export default function PortalInvite() {
         {loading ? (
           <p role="status">{p("loading")}</p>
         ) : !token ? (
-          <p>{p("inviteUnavailable")}</p>
+          <p>{p("inviteReopen")}</p>
         ) : user ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -127,57 +124,19 @@ export default function PortalInvite() {
           </>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              {p("inviteAuthHelp")}
-            </p>
-            <Button asChild variant="outline" className="w-full">
-              <Link to="/auth?returnTo=%2Fportal-invite">{p("signIn")}</Link>
-            </Button>
+            <p className="text-sm text-muted-foreground">{p("invitePasswordlessHelp")}</p>
             {sent ? (
-              <p role="status" className="text-sm text-emerald-800">
-                {p("verifyEmail")}
-              </p>
+              <div className="space-y-4">
+                <p role="status" className="text-sm text-emerald-800">{p("inviteLinkSent")}</p>
+                <Button variant="outline" className="w-full" onClick={()=>setSent(false)}>{p("inviteTryEmail")}</Button>
+              </div>
             ) : (
-              <form onSubmit={signup} className="space-y-4 border-t pt-4">
-                <h2 className="font-medium">{p("createAccount")}</h2>
-                <label className="grid gap-2 text-sm">
-                  {p("displayName")}
-                  <Input
-                    required
-                    maxLength={120}
-                    autoComplete="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </label>
+              <form onSubmit={sendLink} className="space-y-4">
                 <label className="grid gap-2 text-sm">
                   {p("email")}
-                  <Input
-                    type="email"
-                    required
-                    maxLength={320}
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
+                  <Input type="email" required maxLength={320} autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}/>
                 </label>
-                <label className="grid gap-2 text-sm">
-                  {p("password")}
-                  <Input
-                    type="password"
-                    required
-                    minLength={12}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  {p("passwordHelp")}
-                </p>
-                <Button className="w-full" disabled={busy} type="submit">
-                  {p("createAccount")}
-                </Button>
+                <Button className="w-full" disabled={busy} type="submit">{p(busy?"saving":"inviteSendLink")}</Button>
               </form>
             )}
           </>

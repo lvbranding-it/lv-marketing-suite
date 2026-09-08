@@ -36,7 +36,11 @@ export default function Auth() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (loading || !session) return;
+    if (loading) return;
+    if (!session) {
+      if(returnTo === "/portal-invite") navigate("/portal-invite", {replace:true});
+      return;
+    }
     let cancelled = false;
     if (returnTo) {
       navigate(returnTo, { replace: true });

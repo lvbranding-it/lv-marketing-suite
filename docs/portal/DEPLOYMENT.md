@@ -87,3 +87,13 @@ The portal menu and dashboard open general advisor chat without selecting a lead
 Deploy candidate migration 003 after 001 and 002, then redeploy the updated `skill-run` Edge Function and frontend. The existing Claude credential is reused. The new mode requires an authenticated active portal member or org administrator; it rejects client-supplied lead/project context and custom system prompts. Its database RPC reads only access and the current user's explicit first-name fields, with the existing per-user request throttle. No CRM records are retrieved, and no transcripts are written to shared runs or snapshots.
 
 This increment uses the existing agency identity prompt. Approved Knowledge Center retrieval, optional lead-aware mode, voice, durable private chat history and dedicated cost reporting remain future work. Provider integration is tested with mocked responses locally; verify a real authenticated response in staging after deployment.
+
+## Invitation authentication correction
+
+The invitation page now uses Supabase email-link sign-in for both new and existing accounts, rather than leading new users to password sign-in. No password is provisioned by a portal invitation. Legacy /auth?returnTo=%2Fportal-invite URLs redirect signed-out users back to invitation onboarding.
+
+Required hosting configuration: Supabase Auth must allow https://marketing.lvbranding.com/portal-invite as a redirect, allow email authentication/new registrations for new invitees, and have working authentication email delivery. The signInWithOtp call uses the existing email template's link; it does not require changing templates to numeric OTPs. See https://supabase.com/docs/guides/auth/auth-email-passwordless.
+
+The raw portal invitation token stays in tab session storage, never the authentication email request or redirect URL. After clicking the email link, return to the original invitation tab. If the link opens on a different device/browser, reopen the original invitation there after signing in. A missing token now gives those recovery instructions. Invitation acceptance still checks the verified invited email and requires explicit acceptance; authentication alone grants no portal membership.
+
+This supersedes the password-signup instructions earlier in this document. No database migration or Edge Function deployment is required. Browser checks mock email requests and verify the absence of password inputs, invitation preservation and the legacy-route redirect. Actual email delivery and production redirect configuration still require a live check after frontend deployment.

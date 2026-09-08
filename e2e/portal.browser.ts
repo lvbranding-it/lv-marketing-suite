@@ -129,14 +129,23 @@ test("invitation entry removes the bearer token from the URL and reuses sign-in"
   ).toBeVisible();
   expect(new URL(page.url()).hash).toBe("");
   expect(new URL(page.url()).search).toBe("");
-  await page.getByRole("link", { name: "Sign in", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Welcome back" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button",{name:"Email me a sign-in link",exact:true})).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.goto("/auth?returnTo=%2Fportal-invite");
+  await expect(page).toHaveURL(/\/portal-invite$/);
+  await expect(page.getByRole("button",{name:"Email me a sign-in link",exact:true})).toBeVisible();
+  let payload:any;
+  await page.route("**/auth/v1/otp**",async route=>{
+    payload=route.request().postDataJSON();
+    await route.fulfill({status:200,contentType:"application/json",body:"{}"});
+  });
+  await page.getByRole("textbox",{name:"Email",exact:false}).fill("invited@example.test");
+  await page.getByRole("button",{name:"Email me a sign-in link",exact:true}).click();
+  await expect(page.getByRole("status")).toContainText("Check your inbox");
+  expect(payload.email).toBe("invited@example.test");
+  expect(payload.create_user).toBe(true);
+  expect(JSON.stringify(payload)).not.toContain(token);
   expect(page.url()).not.toContain(token);
-  expect(new URL(page.url()).searchParams.get("returnTo")).toBe(
-    "/portal-invite",
-  );
 });
 
 test("advisor opens without a lead and preserves the draft between tabs", async ({
