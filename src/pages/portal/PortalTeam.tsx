@@ -105,6 +105,25 @@ export default function PortalTeam({
     setNotice(p(data.emailSent ? "inviteEmailed" : "inviteEmailFallback"));
   };
 
+  /**
+   * Emails a representative who has already accepted a fresh sign-in link.
+   *
+   * Unlike an invitation, the link itself never reaches this screen: it signs
+   * its holder into that representative's own account, so it is delivered only
+   * to their inbox. There is nothing to copy and nothing to fall back to, which
+   * is why a failure here is reported rather than offering a manual link.
+   */
+  const sendAccessLink = async (member: PortalMember) => {
+    const { data, error: deliveryError } = await supabase.functions.invoke(
+      "portal-send-invitation",
+      { body: { action: "access", orgId: org, userId: member.user_id } },
+    );
+    if (deliveryError || !data?.emailSent)
+      throw deliveryError ?? new Error("Delivery failed");
+    await members.refetch();
+    setNotice(p("accessLinkEmailed"));
+  };
+
   const submitInvitation = (event: FormEvent) => {
     event.preventDefault();
     void run(() =>
@@ -154,8 +173,28 @@ export default function PortalTeam({
                   {p(member.role)} ·{" "}
                   {p(member.active ? "activeMember" : "inactiveMember")}
                 </p>
+                {member.last_access_sent_at && (
+                  <p className="mt-1 text-xs font-normal text-muted-foreground">
+                    {p("lastAccessSent")}{" "}
+                    {new Date(member.last_access_sent_at).toLocaleString(
+                      language,
+                    )}
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
+                {member.active && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    disabled={busy}
+                    onClick={() => void run(() => sendAccessLink(member))}
+                  >
+                    <Mail size={14} />
+                    {p("sendAccessLink")}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"

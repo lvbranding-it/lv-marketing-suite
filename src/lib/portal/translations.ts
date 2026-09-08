@@ -90,6 +90,10 @@ export const portalTranslations = {
       "The invitation was created, but email delivery could not be confirmed. Copy and share this link manually.",
     "portal.lastEmailed": "Last emailed:",
     "portal.editRepresentative": "Edit representative",
+    "portal.sendAccessLink": "Send access link",
+    "portal.accessLinkEmailed":
+      "A secure sign-in link was emailed to this representative.",
+    "portal.lastAccessSent": "Access link sent:",
     "portal.removeRepresentative": "Remove representative",
     "portal.removeAccess": "Remove access",
     "portal.removeRepresentativeHelp":
@@ -369,6 +373,10 @@ export const portalTranslations = {
       "La invitación se creó, pero no pudimos confirmar el envío. Copia y comparte este enlace manualmente.",
     "portal.lastEmailed": "Último envío:",
     "portal.editRepresentative": "Editar representante",
+    "portal.sendAccessLink": "Enviar enlace de acceso",
+    "portal.accessLinkEmailed":
+      "Se envió por correo un enlace seguro de acceso a este representante.",
+    "portal.lastAccessSent": "Enlace de acceso enviado:",
     "portal.removeRepresentative": "Eliminar representante",
     "portal.removeAccess": "Eliminar acceso",
     "portal.removeRepresentativeHelp":

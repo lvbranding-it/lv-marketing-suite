@@ -140,7 +140,9 @@ export function usePortalMembers(org: string | undefined, enabled: boolean) {
     queryFn: async () => {
       const { data, error } = await db
         .from("portal_memberships")
-        .select("user_id,role,display_name,active")
+        .select(
+          "user_id,role,display_name,active,last_access_sent_at,access_send_count",
+        )
         .eq("org_id", org)
         .order("display_name");
       if (error) throw error;

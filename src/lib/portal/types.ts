@@ -77,6 +77,8 @@ export interface PortalMember {
   role: PortalRole;
   display_name: string;
   active: boolean;
+  last_access_sent_at: string | null;
+  access_send_count: number;
 }
 export interface PortalActivity {
   id: string;
