@@ -94,6 +94,7 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+ await db.exec(readFileSync(new URL("../portal-migrations/202609080004_commission_tracker.sql",import.meta.url),"utf8"));
 }, 30000);
 afterAll(async () => {
   await db?.close();
@@ -512,4 +513,38 @@ it("allows a standalone advisor without leads and denies other organizations", a
   await expect(
     scalar("select public.portal_advisor_session($1)", [otherOrg]),
   ).rejects.toThrow("Not authorized");
+});
+
+const commission = {ambassador_id:alice,title:"Brand project",kind:"direct",amount_cents:20000,status:"projected",plan_reference:"Signed plan A",reason:"Initial record"};
+it("commission tracker enforces recipient privacy and admin-only writes",async()=>{
+ await as(admin);
+ const id=await scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)]);
+ await as(alice);
+ expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(1);
+ expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(0);
+ await expect(scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)])).rejects.toThrow("Not authorized");
+ await expect(db.query("update public.portal_commissions set amount_cents=1 where id=$1",[id])).rejects.toThrow();
+ await as(bob);
+ expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(0);
+ await as(staff);
+ expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(0);
+ await as(admin);
+ expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(1);
+ await expect(scalar("select public.portal_save_commission($1,$2)",[otherOrg,JSON.stringify(commission)])).rejects.toThrow("Not authorized");
+});
+it("commission changes are versioned, audited and final payments locked",async()=>{
+ await as(admin);
+ const id=await scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)]);
+ await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify(commission),id,2])).rejects.toThrow("Record changed");
+ await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,ambassador_id:bob}),id,1])).rejects.toThrow("Recipient cannot");
+ await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,status:"paid"}),id,1])).rejects.toThrow();
+ await scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,status:"paid",payment_date:"2026-09-08",payment_reference:"Receipt 1"}),id,1]);
+ await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify(commission),id,2])).rejects.toThrow("Final records");
+ expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(2);
+});
+it("commission entries reject invalid amounts and audit omissions",async()=>{
+ await as(admin);
+ for(const change of [{amount_cents:-1},{amount_cents:1.5},{reason:""},{ambassador_id:outsider}]){
+ await expect(scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify({...commission,...change})])).rejects.toThrow();
+ }
 });

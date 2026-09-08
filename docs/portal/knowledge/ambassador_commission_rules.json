@@ -1,0 +1,181 @@
+{
+  "schemaVersion": "1.0.0",
+  "knowledgeId": "lvb-ambassador-commission-rules",
+  "status": "draft_for_legal_and_finance_review",
+  "currency": "USD",
+  "moneyStorage": "integer_minor_units",
+  "program": {
+    "name": "LV Branding Ambassador Program",
+    "compensationSource": "eligible_revenue_from_real_client_sales",
+    "enrollmentFeeRequired": false,
+    "compensationForRecruitmentAlone": false,
+    "maximumConnectionDepth": 1,
+    "aiCanApproveFinancialActions": false
+  },
+  "ambassadorTypes": {
+    "strategic_ambassador": {
+      "label": "Strategic Ambassador",
+      "directCommissionRate": 0.20,
+      "connectionCommissionRate": 0.05,
+      "mayIntroduceReferralAmbassadors": true,
+      "mayCreateAdditionalCompensatedLevels": false
+    },
+    "referral_ambassador": {
+      "label": "Referral Ambassador",
+      "directCommissionRate": 0.10,
+      "connectionCommissionRate": 0,
+      "mayIntroduceReferralAmbassadors": false,
+      "mayCreateAdditionalCompensatedLevels": false
+    }
+  },
+  "revenueClassifications": {
+    "commissionable": [
+      "brand_strategy",
+      "brand_architecture",
+      "brand_identity",
+      "ux_ui_design",
+      "initial_web_development",
+      "initial_platform_development",
+      "commercial_consulting",
+      "marketing_strategy",
+      "initial_ai_workflow_configuration",
+      "creative_direction",
+      "video_editing",
+      "narrative_development",
+      "color_grading",
+      "approved_intellectual_change_order"
+    ],
+    "reviewRequired": [
+      "strategic_monthly_retainer",
+      "unclassified_line_item",
+      "low_margin_service",
+      "new_engagement_from_existing_referred_client"
+    ],
+    "excluded": [
+      "hosting",
+      "server_cost",
+      "domain",
+      "technical_maintenance",
+      "routine_support",
+      "software_license",
+      "plugin",
+      "font_license",
+      "advertising_spend",
+      "media_buy",
+      "printing",
+      "physical_production",
+      "location",
+      "travel",
+      "catering",
+      "transport",
+      "outside_talent",
+      "voice_talent",
+      "model",
+      "musician",
+      "tax"
+    ],
+    "deductions": [
+      "discount",
+      "credit",
+      "refund",
+      "chargeback",
+      "attributable_payment_processing_fee",
+      "tax"
+    ]
+  },
+  "calculation": {
+    "base": "cleared_cash_allocated_to_eligible_lines_minus_deductions",
+    "accrualMethod": "proportional_per_cleared_client_payment",
+    "officialCalculationSource": "commission_ledger",
+    "freeTextInferenceAllowed": false,
+    "rounding": {
+      "mode": "nearest_cent",
+      "timing": "ledger_entry_creation"
+    }
+  },
+  "attribution": {
+    "defaultProtectionDays": 180,
+    "registrationGuaranteesAttribution": false,
+    "adminAcceptanceRequired": true,
+    "duplicateHandling": "private_admin_review",
+    "preexistingLeadHandling": "no_automatic_commission",
+    "adminOnlyCorrections": true,
+    "auditReasonRequired": true,
+    "connectionMustBeDirect": true,
+    "thirdLevelAllowed": false
+  },
+  "commissionStatuses": [
+    "projected",
+    "accrued",
+    "under_review",
+    "approved",
+    "scheduled",
+    "paid",
+    "reversed",
+    "disputed",
+    "void"
+  ],
+  "opportunityJourney": [
+    "introduced",
+    "accepted",
+    "discovery",
+    "proposal",
+    "won",
+    "client_payment_cleared",
+    "commission_approved",
+    "payment_scheduled",
+    "paid"
+  ],
+  "dashboard": {
+    "impactMetrics": [
+      "opportunities_opened",
+      "active_conversations",
+      "qualified_opportunities",
+      "projects_won",
+      "eligible_client_revenue_generated",
+      "total_commission_impact"
+    ],
+    "commissionBalances": [
+      "projected",
+      "accrued",
+      "approved",
+      "scheduled",
+      "paid",
+      "adjustments"
+    ],
+    "separateDirectAndConnectionImpact": true,
+    "publicLeaderboardDefault": false,
+    "projectedDisclaimer": "Estimate - not yet earned.",
+    "accruedDisclaimer": "Based on cleared eligible client payments; pending approval."
+  },
+  "recognitionEvents": {
+    "accepted": "Your opportunity has been accepted and your attribution is protected through {protectionDate}.",
+    "discovery": "Your connection helped open the conversation. Discovery is now in progress.",
+    "proposal": "A proposal is active. Your current projected commission is {currency}{projectedAmount}, subject to scope and client payment.",
+    "won": "The opportunity you opened has become an LV Branding project. Thank you for creating this connection.",
+    "accrued": "Client funds have cleared. {currency}{accruedAmount} has moved from projected to accrued commission.",
+    "approved": "Your commission of {currency}{approvedAmount} has been approved for payment.",
+    "scheduled": "Your commission is scheduled for {paymentDate}.",
+    "paid": "Paid. Your contribution generated {currency}{paidAmount} in commission from this opportunity."
+  },
+  "assistant": {
+    "numericSource": "stored_ledger_and_assigned_plan_version",
+    "mayExplain": true,
+    "maySimulateWithEstimateLabel": true,
+    "mayApprove": false,
+    "mayReverse": false,
+    "mayPay": false,
+    "mayExposeOtherAmbassadorData": false,
+    "closingTemplate": "Remember, {firstName}, we are Strategy First. Always.",
+    "fallbackClosing": "Remember, we are Strategy First. Always."
+  },
+  "activationRequirements": [
+    "signed_ambassador_agreement",
+    "identity_verified",
+    "tax_document_approved",
+    "payment_method_verified",
+    "commission_plan_version_assigned",
+    "legal_review_complete",
+    "finance_review_complete"
+  ]
+}

@@ -9,6 +9,9 @@ import {
 
 import {
   ADVISOR_RULES,
+  ADVISOR_BRAND_CONTEXT,
+  AMBASSADOR_TRAINING_CONTEXT,
+  AMBASSADOR_COMMISSION_CONTEXT,
   parseAdvisorInput,
   completeAdvisorResponse,
 } from "../_shared/portal-advisor.ts";
@@ -177,7 +180,7 @@ serve(async (req) => {
     // Prepend the permanent LV Branding agency identity to every skill's system prompt.
     // This ensures all Claude calls are grounded in who we are, what we do, and
     // what standard our client deliverables must meet, regardless of which skill runs.
-    const fullSystemPrompt = `${AGENCY_CONTEXT}\n\n---\n\n${skillSystemPrompt}`;
+    const fullSystemPrompt = `${advisor ? [ADVISOR_BRAND_CONTEXT, AMBASSADOR_TRAINING_CONTEXT, AMBASSADOR_COMMISSION_CONTEXT].join("\n\n") : AGENCY_CONTEXT}\n\n---\n\n${skillSystemPrompt}`;
 
     // Call Claude API with streaming
     const claudeResponse = await fetch(

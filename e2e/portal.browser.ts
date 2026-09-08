@@ -169,3 +169,13 @@ test("advisor opens without a lead and preserves the draft between tabs", async 
     fullPage: true,
   });
 });
+
+test("commission tracker separates ambassador viewing from admin entry",async({page})=>{
+ await page.getByRole("button",{name:"Commissions",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Commissions",exact:true})).toBeVisible();
+ await expect(page.getByRole("button",{name:"Add commission",exact:true})).toHaveCount(0);
+ await page.getByRole("combobox",{name:"Your role"}).selectOption("admin");
+ await page.getByRole("button",{name:"Add commission",exact:true}).click();
+ await expect(page.getByLabel("Commission amount (USD)",{exact:true})).toBeVisible();
+ await expect(page.getByRole("button",{name:"Save record",exact:true})).toBeDisabled();
+});

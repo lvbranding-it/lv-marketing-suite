@@ -1,5 +1,6 @@
 export const portalTranslations = {
   en: {
+    "portal.commissions": "Commissions",
     "portal.advisor": "LV Branding Advisor",
     "portal.openAdvisor": "Open advisor",
     "portal.advisorSubtitle":
@@ -215,6 +216,7 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.commissions": "Comisiones",
     "portal.advisor": "Asesor de LV Branding",
     "portal.openAdvisor": "Abrir asesor",
     "portal.advisorSubtitle":

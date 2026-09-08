@@ -1,3 +1,4 @@
+import PortalCommissions from "./PortalCommissions";
 import PortalAdvisor from "./PortalAdvisor";
 import PortalTeam from "./PortalTeam";
 import {
@@ -261,6 +262,7 @@ function PortalWorkspaceView({
   const tabs = [
     { key: "dashboard", label: "dashboard", icon: LayoutDashboard },
     { key: "advisor", label: "advisor", icon: Bot },
+    ...(role !== "staff" ? [{key:"commissions",label:"commissions",icon:BriefcaseBusiness}] : []),
     {
       key: "leads",
       label: role === "admin" ? "allLeads" : "leads",
@@ -546,7 +548,7 @@ function PortalWorkspaceView({
                 />
               )}
             </>
-          ) : tab === "advisor" ? null : tab === "team" && role === "admin" ? (
+          ) : tab === "commissions" && role !== "staff" ? (<PortalCommissions org={workspace.org_id} admin={role === "admin"} preview={preview}/>) : tab === "advisor" ? null : tab === "team" && role === "admin" ? (
             <PortalTeam org={workspace.org_id} preview={preview} />
           ) : (
             <>

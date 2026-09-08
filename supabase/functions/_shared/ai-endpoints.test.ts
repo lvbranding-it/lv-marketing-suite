@@ -51,7 +51,7 @@ function endpoint(
       target: ts.ScriptTarget.ES2022,
     },
   }).outputText;
-  const provider = vi.fn(async () => {
+  const provider = vi.fn(async (_url: string, _options: RequestInit) => {
     if (!advisorAllowed) throw new Error("Provider must not be called");
     return new Response(
       'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Start with discovery."}}\n\ndata: {"type":"message_stop"}\n\n',
@@ -167,4 +167,18 @@ it("standalone advisor denies inactive or missing portal access", async () => {
     ).status,
   ).toBe(403);
   expect(app.provider).not.toHaveBeenCalled();
+});
+
+
+it("grounds advisor requests in reviewed website content without internal deliverable instructions", async () => {
+ const app = endpoint("skill-run", true, false, true);
+ const response = await app.handler(request({mode:"portal_advisor",orgId,userMessage:"What services do we offer?",language:"es"}));
+ await response.text();
+ const payload = JSON.parse(app.provider.mock.calls[0][1].body as string);
+ expect(payload.system).toContain(portalAdvisor.ADVISOR_BRAND_CONTEXT);
+ expect(payload.system).toContain(portalAdvisor.AMBASSADOR_TRAINING_CONTEXT);
+ expect(payload.system).toContain(portalAdvisor.AMBASSADOR_COMMISSION_CONTEXT);
+ expect(payload.system).toContain("Respond in Spanish");
+ expect(payload.system).not.toContain("will be used directly in client-facing deliverables");
+ expect(app.calls).toEqual(["portal_advisor_session"]);
 });
