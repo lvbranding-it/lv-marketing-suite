@@ -13,6 +13,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
+import { loadAdvisorChats, saveAdvisorChat, type AdvisorSession } from "@/hooks/usePortal";
 import { runSkillStream, type Message } from "@/lib/claude";
 import ChatMessageText from "@/components/agents/ChatMessageText";
 import { Button } from "@/components/ui/button";
@@ -43,25 +44,27 @@ export default function PortalAdvisor({
     [draft, setDraft] = useState<string | null>(null),
     [copied, setCopied] = useState(false);
   const [historyOpen,setHistoryOpen]=useState(false);
-  const [sessions,setSessions]=useState<{id:number;messages:Message[];input:string}[]>([]);
-  const [sessionId,setSessionId]=useState(0);
-  const nextSession=useRef(1);
-  const switchSession=(id?:number)=>{
+  const [sessions,setSessions]=useState<AdvisorSession[]>([]);
+  // Ids are generated here rather than by the database so a new chat exists the
+  // moment it is opened, before it has anything worth saving.
+  const [sessionId,setSessionId]=useState<string>(()=>crypto.randomUUID());
+  const switchSession=(id?:string)=>{
     if(id===sessionId)return;
     stop();
     setHistoryOpen(false);
     setSessions(v=>{
       const other=v.filter(c=>c.id!==sessionId);
-      return messages.length||input.trim()?[...other,{id:sessionId,messages,input}]:other;
+      return messages.length||input.trim()?[...other,{id:sessionId,messages,input,updatedAt:Date.now()}]:other;
     });
     const target=sessions.find(c=>c.id===id);
-    setSessionId(id??nextSession.current++);
+    setSessionId(id??crypto.randomUUID());
     setMessages(target?.messages??[]);
     setInput(target?.input??"");
     setError("");
     setDraft(null);
   };
-  const sessionList=[...sessions.filter(c=>c.id!==sessionId),{id:sessionId,messages,input}].filter(c=>c.messages.length||c.input.trim()).sort((a,b)=>b.id-a.id);
+  // The open chat is stamped with the current time so it always heads the list.
+  const sessionList=[...sessions.filter(c=>c.id!==sessionId),{id:sessionId,messages,input,updatedAt:Date.now()}].filter(c=>c.messages.length||c.input.trim()).sort((a,b)=>b.updatedAt-a.updatedAt);
   const [autoRead,setAutoRead]=useState(false);
   const autoReadRef=useRef(false);
   const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)));
@@ -87,6 +90,43 @@ export default function PortalAdvisor({
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [messages, streamed, busy]);
+
+  // Restore this representative's saved chats once, and reopen the most recent
+  // one so the last conversation is simply still there.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (preview || !org || restored.current) return;
+    restored.current = true;
+    let cancelled = false;
+    loadAdvisorChats(org)
+      .then((saved) => {
+        if (cancelled || !saved.length) return;
+        setSessions(saved);
+        const latest = saved[0];
+        setSessionId(latest.id);
+        setMessages(latest.messages);
+        setInput(latest.input);
+      })
+      // History is a convenience; failing to read it must not block the Advisor.
+      .catch((cause) => console.error("advisor history unavailable", cause));
+    // The guard is released on teardown as well as set on entry. Without the
+    // reset, StrictMode's mount/unmount/mount in development discards the first
+    // fetch and then skips the second, so history silently never arrives.
+    return () => { cancelled = true; restored.current = false; };
+  }, [org, preview]);
+
+  // Persist after a pause rather than on every keystroke or token. The unsent
+  // draft is saved alongside the messages, so a half-typed question survives a
+  // refresh the same way the answers do.
+  useEffect(() => {
+    if (preview || !org) return;
+    if (!messages.length && !input.trim()) return;
+    const handle = window.setTimeout(() => {
+      saveAdvisorChat(org, sessionId, messages, input)
+        .catch((cause) => console.error("advisor chat save failed", cause));
+    }, 700);
+    return () => window.clearTimeout(handle);
+  }, [messages, input, sessionId, org, preview]);
   const send = async (e: FormEvent) => {
     e.preventDefault();
     if (preview || busy || voice.listening || !input.trim()) return;

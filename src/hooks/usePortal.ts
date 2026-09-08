@@ -219,3 +219,60 @@ export function usePortalInvitations(org: string, preview = false) {
     },
   });
 }
+
+/**
+ * One saved Advisor conversation.
+ *
+ * `updatedAt` is a millisecond timestamp rather than the ISO string the column
+ * holds, because the history list sorts by it on every render.
+ */
+export interface AdvisorSession {
+  id: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  input: string;
+  updatedAt: number;
+}
+
+/**
+ * Reads back this representative's own Advisor chats.
+ *
+ * The row-level policy is owner-only, so no org filter is needed for safety;
+ * it is here so a representative in two workspaces sees each one separately.
+ */
+export async function loadAdvisorChats(org: string): Promise<AdvisorSession[]> {
+  const { data, error } = await db
+    .from("portal_advisor_chats")
+    .select("id,messages,draft_input,updated_at")
+    .eq("org_id", org)
+    .order("updated_at", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return (data ?? []).flatMap((row: Record<string, unknown>) => {
+    // A malformed row is skipped rather than crashing the Advisor: losing one
+    // old conversation is recoverable, losing the screen is not.
+    if (!Array.isArray(row.messages)) return [];
+    const savedAt = new Date(String(row.updated_at)).getTime();
+    return [{
+      id: String(row.id),
+      messages: row.messages as AdvisorSession["messages"],
+      input: typeof row.draft_input === "string" ? row.draft_input : "",
+      updatedAt: Number.isFinite(savedAt) ? savedAt : 0,
+    }];
+  });
+}
+
+/** Saves one conversation, creating it on first write. */
+export async function saveAdvisorChat(
+  org: string,
+  id: string,
+  messages: AdvisorSession["messages"],
+  input: string,
+): Promise<void> {
+  const { error } = await db.rpc("portal_advisor_chat_save", {
+    p_org: org,
+    p_id: id,
+    p_messages: messages,
+    p_draft: input.slice(0, 8000),
+  });
+  if (error) throw error;
+}

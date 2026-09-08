@@ -16,10 +16,10 @@ export const portalTranslations = {
     "portal.chatHistory": "Chat history",
     "portal.closeHistory": "Close history",
     "portal.chatTitle": "Chat",
-    "portal.sessionChats": "This session",
+    "portal.sessionChats": "Recent",
     "portal.noSessionChats": "Your conversations will appear here.",
     "portal.sessionOnly":
-      "Conversations stay in this tab and clear when you reload.",
+      "Your conversations are saved to your account and stay private to you. The 30 most recent are kept.",
     "portal.chatWelcome": "Welcome aboard 🚀",
     "portal.chatQuestion": "What do you want to build today?",
 
@@ -63,7 +63,7 @@ export const portalTranslations = {
     "portal.advisorPlaceholder": "Ask your LV Branding advisor…",
     "portal.advisorPreview": "Design preview. Live AI responses are disabled.",
     "portal.advisorRetention":
-      "This conversation stays in this tab and clears when you reload. Review drafts before using them.",
+      "This conversation is saved to your account and visible only to you. Review drafts before using them.",
     "portal.stopResponse": "Stop response",
     "portal.sendMessage": "Send message",
     "portal.editDraft": "Edit draft",
@@ -298,10 +298,10 @@ export const portalTranslations = {
     "portal.chatHistory": "Historial de chat",
     "portal.closeHistory": "Cerrar historial",
     "portal.chatTitle": "Chat",
-    "portal.sessionChats": "Esta sesión",
+    "portal.sessionChats": "Recientes",
     "portal.noSessionChats": "Tus conversaciones aparecerán aquí.",
     "portal.sessionOnly":
-      "Las conversaciones permanecen en esta pestaña y se borran al recargar.",
+      "Tus conversaciones se guardan en tu cuenta y solo tú puedes verlas. Se conservan las 30 más recientes.",
     "portal.chatWelcome": "Te damos la bienvenida 🚀",
     "portal.chatQuestion": "¿Qué quieres construir hoy?",
 
@@ -346,7 +346,7 @@ export const portalTranslations = {
     "portal.advisorPreview":
       "Vista de diseño. Las respuestas de IA están deshabilitadas.",
     "portal.advisorRetention":
-      "Esta conversación permanece en esta pestaña y se borra al recargar. Revisa los borradores antes de usarlos.",
+      "Esta conversación se guarda en tu cuenta y solo tú puedes verla. Revisa los borradores antes de usarlos.",
     "portal.stopResponse": "Detener respuesta",
     "portal.sendMessage": "Enviar mensaje",
     "portal.editDraft": "Editar borrador",
