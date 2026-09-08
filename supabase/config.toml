@@ -398,6 +398,9 @@ verify_jwt = false
 [functions.portal-send-invitation]
 verify_jwt = true
 
+[functions.advisor-speak]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

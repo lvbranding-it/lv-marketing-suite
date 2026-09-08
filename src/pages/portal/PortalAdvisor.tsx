@@ -67,7 +67,8 @@ export default function PortalAdvisor({
   const sessionList=[...sessions.filter(c=>c.id!==sessionId),{id:sessionId,messages,input,updatedAt:Date.now()}].filter(c=>c.messages.length||c.input.trim()).sort((a,b)=>b.updatedAt-a.updatedAt);
   const [autoRead,setAutoRead]=useState(false);
   const autoReadRef=useRef(false);
-  const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)));
+  // The preview has no workspace to bill against, so it keeps the system voice.
+  const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)),preview?undefined:org);
   const voiceRef=useRef(voice);voiceRef.current=voice;
   const controller = useRef<AbortController | null>(null),
     generation = useRef(0),
