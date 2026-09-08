@@ -42,12 +42,14 @@ export default function PortalAdvisor({
     [error, setError] = useState(""),
     [draft, setDraft] = useState<string | null>(null),
     [copied, setCopied] = useState(false);
+  const [historyOpen,setHistoryOpen]=useState(false);
   const [sessions,setSessions]=useState<{id:number;messages:Message[];input:string}[]>([]);
   const [sessionId,setSessionId]=useState(0);
   const nextSession=useRef(1);
   const switchSession=(id?:number)=>{
     if(id===sessionId)return;
     stop();
+    setHistoryOpen(false);
     setSessions(v=>{
       const other=v.filter(c=>c.id!==sessionId);
       return messages.length||input.trim()?[...other,{id:sessionId,messages,input}]:other;
@@ -131,9 +133,10 @@ export default function PortalAdvisor({
     );
   };
   return (
-    <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#efefef] lg:grid lg:grid-cols-[220px_minmax(0,1fr)] min-h-[720px]">
-      <aside className="bg-[#1b1b1b] text-white p-5 flex flex-col gap-5">
-        <p className="text-2xl font-semibold">{p("chatTitle")}</p>
+    <section className="relative h-full min-h-0 flex overflow-hidden bg-background">
+      {historyOpen&&<button className="absolute inset-0 bg-black/30 z-20 lg:hidden" aria-label={p("closeHistory")} onClick={()=>setHistoryOpen(false)}/>}
+      <aside className={`${historyOpen?"flex":"hidden lg:flex"} absolute lg:relative inset-y-0 left-0 z-30 lg:z-auto w-64 shrink-0 border-r bg-[#1b1b1b] text-white p-4 flex-col gap-4`}>
+        <div className="flex justify-between items-center"><p className="text-lg font-semibold">{p("chatTitle")}</p><button className="lg:hidden text-sm" onClick={()=>setHistoryOpen(false)}>{p("closeHistory")}</button></div>
         <Button className="w-full gap-2 rounded-xl h-12" onClick={()=>switchSession()}><Plus size={18}/>{p("newConversation")}</Button>
         <div className="flex-1">
           <p className="text-xs uppercase tracking-widest text-white/45 mb-3">{p("sessionChats")}</p>
@@ -143,33 +146,35 @@ export default function PortalAdvisor({
         </div>
         <p className="text-xs leading-relaxed text-white/45">{p("sessionOnly")}</p>
       </aside>
-      <div className="min-w-0 p-4 sm:p-7 flex flex-col gap-5">
+      <div className="min-w-0 min-h-0 flex-1 flex flex-col">
 
-      <div className="flex flex-wrap gap-4 items-center justify-between">
+      <div className="shrink-0 flex gap-3 items-center border-b px-4 py-3">
+        <Button variant="ghost" size="sm" className="lg:hidden" onClick={()=>setHistoryOpen(true)} aria-label={p("chatHistory")}><MessageSquare size={18}/></Button>
+        <img src="/animations/lv-branding-agent.svg" alt="" className="w-8 h-10 object-contain shrink-0"/>
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium">{p("advisor")}</h1>
-          <p className="mt-2 text-muted-foreground">{p("advisorSubtitle")}</p>
+          <h1 className="text-base sm:text-lg font-medium">{p("advisor")}</h1>
+          <p className="hidden sm:block text-xs text-muted-foreground">{p("advisorSubtitle")}</p>
         </div>
       </div>
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden">
+        <div className="shrink-0 flex flex-wrap items-center gap-2 text-xs text-muted-foreground px-4 py-2">
           <span className="h-2 w-2 rounded-full bg-emerald-600" />
           <span className="font-medium">{p("generalAdvisor")}</span>
           <span className="text-muted-foreground">· {p("noLeadContext")}</span>
         </div>
         <div
-          className={`min-h-80 py-6 sm:px-3 space-y-6 flex-1 ${messages.length?"max-h-[60vh] overflow-y-auto":""}`}
+          className="min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:px-8 space-y-6 flex-1"
           role="log"
           aria-label={p("advisorConversation")}
           aria-live="polite"
         >
           {!messages.length ? (
-            <div className="max-w-2xl mx-auto py-8 sm:py-12 text-center">
-              <div className="mx-auto w-32 h-32 flex items-center justify-center rounded-full bg-primary text-white shadow-sm"><Bot size={76} strokeWidth={1.4}/></div>
-              <h2 className="text-3xl sm:text-4xl font-semibold mt-7 tracking-tight">
+            <div className="max-w-2xl mx-auto py-2 sm:py-8 text-center">
+              <img src="/animations/lv-branding-agent.svg" alt="LV Branding Agent" className="mx-auto w-20 h-24 sm:w-28 sm:h-32 object-contain"/>
+              <h2 className="text-xl sm:text-3xl font-semibold mt-4 tracking-tight">
                 {p("chatWelcome")}
               </h2>
-              <p className="mt-4 text-xl sm:text-2xl font-semibold leading-snug">
+              <p className="mt-2 text-base sm:text-xl font-semibold leading-snug">
                 {p("chatQuestion")}
               </p>
               <div className="grid sm:grid-cols-2 gap-2 mt-7 text-left">
@@ -198,7 +203,7 @@ export default function PortalAdvisor({
                 }
               >
                 {m.role === "assistant" && (
-                  <Bot className="shrink-0 text-primary mt-2" size={20} />
+                  <img src="/animations/lv-branding-agent.svg" alt="" className="shrink-0 w-7 h-9 object-contain mt-1"/>
                 )}
                 <div
                   className={
@@ -240,7 +245,7 @@ export default function PortalAdvisor({
           )}
           <div ref={end} />
         </div>
-        <form onSubmit={send} className="rounded-3xl bg-white border border-black/5 shadow-sm p-4 sm:p-5 space-y-3">
+        <form onSubmit={send} className="shrink-0 border-t bg-background px-3 py-3 sm:px-6 space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
@@ -262,7 +267,7 @@ export default function PortalAdvisor({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             maxLength={8000}
-            rows={3}
+            rows={2}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

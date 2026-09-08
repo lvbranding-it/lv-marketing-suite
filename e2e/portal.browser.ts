@@ -221,12 +221,17 @@ test("redesigned chat switches session drafts and fits mobile",async({page})=>{
  await page.setViewportSize({width:390,height:844});
  await page.getByRole("button",{name:"Open advisor",exact:true}).click();
  await page.getByRole("textbox",{name:"Your message",exact:true}).fill("First conversation");
+ await page.getByRole("button",{name:"Chat history",exact:true}).click();
  await page.getByRole("button",{name:"New conversation",exact:true}).click();
  await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toHaveValue("");
  await page.getByRole("textbox",{name:"Your message",exact:true}).fill("Second conversation");
+ await page.getByRole("button",{name:"Chat history",exact:true}).click();
  await page.getByRole("button",{name:"First conversation",exact:true}).click();
  await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toHaveValue("First conversation");
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ const composer=await page.getByRole("textbox",{name:"Your message",exact:true}).boundingBox();
+ expect(composer!.y+composer!.height).toBeLessThanOrEqual(844);
+ await expect(page.getByRole("img",{name:"LV Branding Agent",exact:true})).toBeVisible();
  await page.screenshot({path:"/private/tmp/lv-chat-mobile.png",fullPage:true});
  const asset=await page.request.get("/animations/lv-advisor-loading.json");
  expect(asset.ok()).toBe(true);

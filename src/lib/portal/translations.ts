@@ -1,5 +1,7 @@
 export const portalTranslations = {
   en: {
+    "portal.chatHistory": "Chat history",
+    "portal.closeHistory": "Close history",
     "portal.chatTitle": "Chat",
     "portal.sessionChats": "This session",
     "portal.noSessionChats": "Your conversations will appear here.",
@@ -235,6 +237,8 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.chatHistory": "Historial de chat",
+    "portal.closeHistory": "Cerrar historial",
     "portal.chatTitle": "Chat",
     "portal.sessionChats": "Esta sesión",
     "portal.noSessionChats": "Tus conversaciones aparecerán aquí.",

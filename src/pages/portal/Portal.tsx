@@ -272,7 +272,7 @@ function PortalWorkspaceView({
     ...(role === "admin" ? [{ key: "team", label: "team", icon: Users }] : []),
   ];
   return (
-    <div className="min-h-screen bg-[#f7f7f8] text-foreground md:flex">
+    <div className={tab === "advisor" && !leadId && !isNew ? "h-dvh overflow-hidden bg-background text-foreground flex flex-col md:flex-row" : "min-h-screen bg-[#f7f7f8] text-foreground md:flex"}>
       <aside className="bg-lv-charcoal text-white md:fixed md:inset-y-0 md:w-64 flex flex-col z-20">
         <div className="px-6 py-6 flex items-center gap-3">
           <LVLogo size={36} />
@@ -324,8 +324,8 @@ function PortalWorkspaceView({
           <p className="text-xs text-white/40 pt-3">Strategy First. Always.</p>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 md:ml-64">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-5 sm:px-9 py-4">
+      <main className={tab === "advisor" ? "min-w-0 min-h-0 flex-1 md:ml-64 flex flex-col" : "min-w-0 flex-1 md:ml-64"}>
+        <header hidden={tab === "advisor" && !leadId && !isNew} className={tab === "advisor" && !leadId && !isNew ? "hidden" : "flex flex-wrap items-center justify-between gap-3 border-b bg-white px-5 sm:px-9 py-4"}>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>LV Branding</span>
             <span>/</span>
@@ -434,8 +434,8 @@ function PortalWorkspaceView({
             )}
           </div>
         </header>
-        <div className="mx-auto max-w-7xl p-5 sm:p-9 space-y-7">
-          {preview && (
+        <div className={tab === "advisor" && !leadId && !isNew ? "flex-1 min-h-0 flex flex-col" : "mx-auto max-w-7xl p-5 sm:p-9 space-y-7"}>
+          {preview && tab !== "advisor" && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 text-sm">
               <p className="font-medium">{p("preview")}</p>
               <p className="mt-1 text-xs">{p("previewBody")}</p>
@@ -467,7 +467,7 @@ function PortalWorkspaceView({
               {notice}
             </p>
           )}
-          <div hidden={tab !== "advisor" || isNew || !!leadId}>
+          <div className={tab === "advisor" && !isNew && !leadId ? "flex-1 min-h-0" : "hidden"} hidden={tab !== "advisor" || isNew || !!leadId}>
             <PortalAdvisor org={workspace.org_id} preview={preview} active={tab === "advisor" && !isNew && !leadId} />
           </div>
           {isNew || leadId ? (
