@@ -15,6 +15,7 @@ import { runSkillStream } from "@/lib/claude";
 import { useUpdateProject } from "@/hooks/useProjects";
 import { getSkill } from "@/data/skills";
 import { useToast } from "@/hooks/use-toast";
+import { useOrg } from "@/hooks/useOrg";
 import { useLanguage } from "@/hooks/useLanguage";
 
 interface MarketingContextWizardProps {
@@ -74,6 +75,7 @@ export default function MarketingContextWizard({
 }: MarketingContextWizardProps) {
   const { toast } = useToast();
   const { language } = useLanguage();
+  const { org } = useOrg();
   const updateProject = useUpdateProject();
 
   const [step, setStep] = useState(0); // 0=welcome, 1-4=form steps, 5=generating, 6=done
@@ -159,6 +161,7 @@ Please produce a comprehensive, well-structured marketing context document that 
 
     await runSkillStream(
       {
+        orgId: org?.id,
         skillSystemPrompt: `${pmcSkill.systemPrompt}\n\n${
           language === "es"
             ? "Important: respond in Spanish for all user-facing content. Keep brand names, product names, URLs, code, metrics, and technical acronyms unchanged when appropriate."

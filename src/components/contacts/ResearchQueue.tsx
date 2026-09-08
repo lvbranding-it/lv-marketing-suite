@@ -92,6 +92,8 @@ function ResearchCard({ contact }: { contact: ImportedContact }) {
     setResearchState("streaming");
     await runSkillStream(
       {
+        orgId: contact.org_id,
+        branchId: contact.branch_id,
         skillSystemPrompt: RESEARCH_SYSTEM_PROMPT,
         userMessage: buildResearchPrompt(contact, vr),
         conversationHistory: [],

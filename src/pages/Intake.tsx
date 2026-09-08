@@ -347,6 +347,7 @@ export default function Intake() {
 
     await runSkillStream(
       {
+        orgId: org?.id,
         skillSystemPrompt: `${pmcSkill.systemPrompt}\n\n${
           language === "es"
             ? "Important: respond in Spanish for all user-facing content. Keep brand names, product names, URLs, code, metrics, and technical acronyms unchanged when appropriate."

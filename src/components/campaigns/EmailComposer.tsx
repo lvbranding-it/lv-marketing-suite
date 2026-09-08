@@ -526,7 +526,7 @@ export default function EmailComposer({
     onSubjectChange(""); onPreviewTextChange("");
     let full = "";
     await runSkillStream(
-      { skillSystemPrompt: SYSTEM_PROMPT, userMessage: intent.trim(), conversationHistory: [], marketingContext: {} },
+      { orgId: org?.id, skillSystemPrompt: SYSTEM_PROMPT, userMessage: intent.trim(), conversationHistory: [], marketingContext: {} },
       {
         onToken: (t) => {
           full += t;

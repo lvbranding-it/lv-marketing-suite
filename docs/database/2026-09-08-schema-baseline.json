@@ -1,0 +1,1194 @@
+{
+  "columns": [
+    {
+      "column_default": "gen_random_uuid()",
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "user_email",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "action",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "entity_type",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "entity_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": null,
+      "column_name": "entity_label",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "metadata",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "activity_log"
+    },
+    {
+      "column_default": "gen_random_uuid()",
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "project_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "agent_id",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'1.1'::text",
+      "column_name": "agent_pack_version",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "input",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "''::text",
+      "column_name": "output_full_text",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'[]'::jsonb",
+      "column_name": "output_sections",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "brand_snapshot",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "snapshot_delta",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'[]'::jsonb",
+      "column_name": "assumptions",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'[]'::jsonb",
+      "column_name": "qa",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "language_control",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'create'::text",
+      "column_name": "mode",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'claude-sonnet-4-6'::text",
+      "column_name": "model",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'anthropic'::text",
+      "column_name": "provider",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "parent_run_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'pending'::text",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "usage",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "error",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "completed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "agent_runs"
+    },
+    {
+      "column_default": null,
+      "column_name": "branch_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": "'crew'::branch_member_role",
+      "column_name": "role",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "assigned_by",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "assigned_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_email",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "display_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "branch_team_members"
+    },
+    {
+      "column_default": "gen_random_uuid()",
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_email",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": "'member'::member_role",
+      "column_name": "role",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_by",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": "replace(((gen_random_uuid())::text || (gen_random_uuid())::text), '-'::text, ''::text)",
+      "column_name": "token",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "accepted_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": "(now() + '7 days'::interval)",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_by_role",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "cancelled_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "table_name": "invitations"
+    },
+    {
+      "column_default": null,
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "profiles"
+    },
+    {
+      "column_default": null,
+      "column_name": "full_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "profiles"
+    },
+    {
+      "column_default": null,
+      "column_name": "avatar_url",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "profiles"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "profiles"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "profiles"
+    },
+    {
+      "column_default": "gen_random_uuid()",
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "client_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "'active'::text",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "marketing_context",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "false",
+      "column_name": "context_complete",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "created_by",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "branch_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "projects"
+    },
+    {
+      "column_default": "'{}'::jsonb",
+      "column_name": "brand_snapshot",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "projects"
+    },
+    {
+      "column_default": null,
+      "column_name": "org_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": "'member'::member_role",
+      "column_name": "role",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_email",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": "now()",
+      "column_name": "joined_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": null,
+      "column_name": "invited_by",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "table_name": "team_members"
+    },
+    {
+      "column_default": "'{\"intake\": true, \"skills\": true, \"contacts\": true, \"projects\": true, \"campaigns\": true, \"workspace\": true}'::jsonb",
+      "column_name": "feature_access",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "table_name": "team_members"
+    }
+  ],
+  "constraints": [
+    {
+      "conname": "agent_runs_org_id_fkey",
+      "definition": "FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE",
+      "table_name": "agent_runs"
+    },
+    {
+      "conname": "agent_runs_parent_run_id_fkey",
+      "definition": "FOREIGN KEY (parent_run_id) REFERENCES agent_runs(id) ON DELETE SET NULL",
+      "table_name": "agent_runs"
+    },
+    {
+      "conname": "agent_runs_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "agent_runs"
+    },
+    {
+      "conname": "agent_runs_project_id_fkey",
+      "definition": "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE",
+      "table_name": "agent_runs"
+    },
+    {
+      "conname": "projects_branch_id_fkey",
+      "definition": "FOREIGN KEY (branch_id) REFERENCES org_branches(id) ON DELETE SET NULL",
+      "table_name": "projects"
+    },
+    {
+      "conname": "projects_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "projects"
+    },
+    {
+      "conname": "projects_org_id_fkey",
+      "definition": "FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE",
+      "table_name": "projects"
+    },
+    {
+      "conname": "projects_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "projects"
+    },
+    {
+      "conname": "projects_status_check",
+      "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'archived'::text])))",
+      "table_name": "projects"
+    }
+  ],
+  "grants": [
+    {
+      "grantee": "anon",
+      "privilege_type": "DELETE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "INSERT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "REFERENCES",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "SELECT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "TRIGGER",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "TRUNCATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "UPDATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "DELETE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "INSERT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "REFERENCES",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "SELECT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "TRIGGER",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "TRUNCATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "UPDATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "DELETE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "INSERT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "REFERENCES",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "SELECT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "TRIGGER",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "TRUNCATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "UPDATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "DELETE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "INSERT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "REFERENCES",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "SELECT",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "TRIGGER",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "TRUNCATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "UPDATE",
+      "table_name": "agent_runs"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "DELETE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "INSERT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "REFERENCES",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "SELECT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "TRIGGER",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "TRUNCATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "anon",
+      "privilege_type": "UPDATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "DELETE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "INSERT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "REFERENCES",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "SELECT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "TRIGGER",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "TRUNCATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "authenticated",
+      "privilege_type": "UPDATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "DELETE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "INSERT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "REFERENCES",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "SELECT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "TRIGGER",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "TRUNCATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "postgres",
+      "privilege_type": "UPDATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "DELETE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "INSERT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "REFERENCES",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "SELECT",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "TRIGGER",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "TRUNCATE",
+      "table_name": "projects"
+    },
+    {
+      "grantee": "service_role",
+      "privilege_type": "UPDATE",
+      "table_name": "projects"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "SELECT",
+      "policyname": "admin_can_view_activity",
+      "qual": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text]))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "activity_log",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "service_can_insert_activity",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "activity_log",
+      "with_check": "true"
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "agent_runs_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "agent_runs",
+      "with_check": "is_org_member(org_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "agent_runs_select",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "agent_runs",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "agent_runs_update",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "agent_runs",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "branch_managers_can_add_branch_team",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "branch_team_members",
+      "with_check": "can_write_branch_team_role(branch_id, org_id, role)"
+    },
+    {
+      "cmd": "DELETE",
+      "policyname": "branch_managers_can_remove_branch_team",
+      "qual": "can_write_branch_team_role(branch_id, org_id, role)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "branch_team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "branch_managers_can_update_branch_team",
+      "qual": "can_write_branch_team_role(branch_id, org_id, role)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "branch_team_members",
+      "with_check": "can_write_branch_team_role(branch_id, org_id, role)"
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "branch_members_can_view_own_branch_team",
+      "qual": "is_branch_member(branch_id, org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "branch_team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "org_members_can_view_branch_team",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "branch_team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "policyname": "admin_can_manage_invitations",
+      "qual": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text]))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "invitations",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "manager_can_invite_members",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "invitations",
+      "with_check": "((org_role(org_id) = 'manager'::text) AND (role = 'member'::member_role))"
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "manager_can_view_own_invitations",
+      "qual": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text, 'manager'::text]))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "invitations",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "public_can_read_invitation_by_token",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "tablename": "invitations",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "Org members can view teammate profiles",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (team_members tm1\n     JOIN team_members tm2 ON ((tm1.org_id = tm2.org_id)))\n  WHERE ((tm1.user_id = auth.uid()) AND (tm2.user_id = profiles.id))))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "profiles",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "Users insert own profile",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "profiles",
+      "with_check": "(auth.uid() = id)"
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "Users update own profile",
+      "qual": "(auth.uid() = id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "profiles",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "Users view own profile",
+      "qual": "(auth.uid() = id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "profiles",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "Members can create projects",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": "is_org_member(org_id)"
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "Members can update projects",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "Members can view projects",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "policyname": "Owner/admin can delete projects",
+      "qual": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text]))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "branch_members_projects_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": "can_access_branch_record(org_id, branch_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "branch_members_projects_select",
+      "qual": "can_access_branch_record(org_id, branch_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "branch_members_projects_update",
+      "qual": "can_access_branch_record(org_id, branch_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "projects",
+      "with_check": "can_access_branch_record(org_id, branch_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "policyname": "Members can view membership",
+      "qual": "is_org_member(org_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "policyname": "owner_admin_can_remove_members",
+      "qual": "((org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text])) OR ((org_role(org_id) = 'manager'::text) AND (invited_by = auth.uid()) AND (role = 'member'::member_role)))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "policyname": "owner_admin_can_update_members",
+      "qual": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text]))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "team_members",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "policyname": "owner_admin_manager_can_add_members",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "team_members",
+      "with_check": "(org_role(org_id) = ANY (ARRAY['owner'::text, 'admin'::text, 'manager'::text]))"
+    }
+  ],
+  "rls": [
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "activity_log"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "agent_runs"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "branch_team_members"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "invitations"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "profiles"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "projects"
+    },
+    {
+      "rls_enabled": true,
+      "rls_forced": false,
+      "table_name": "team_members"
+    }
+  ]
+}

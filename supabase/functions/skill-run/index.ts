@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import { AiAccessError, requireAiUser, requireAiOrganization } from "../_shared/ai-authorization.ts";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -37,33 +39,12 @@ serve(async (req) => {
       throw new Error("CLAUDE_API_KEY is not configured");
     }
 
-    // Validate auth using service role key (most reliable in Deno edge functions)
-    const authHeader = req.headers.get("Authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!token) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    // Decode the JWT payload without re-verifying the signature.
-    // Supabase's gateway already validated the token before this function runs.
-    // Re-validating with the JS client fails for ES256-signed tokens.
-    let userId: string | null = null;
-    try {
-      const payloadB64 = token.split(".")[1];
-      const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-      userId = payload.sub ?? null;
-    } catch {
-      // malformed token
-    }
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
+    if (req.method !== "POST") throw new AiAccessError(405, "Method not allowed");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) throw new Error("AI service unavailable");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const userId = await requireAiUser(supabaseAdmin, req.headers.get("Authorization"));
 
     const {
       skillSystemPrompt,
@@ -82,27 +63,7 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabaseAdmin = supabaseUrl && serviceRoleKey
-      ? createClient(supabaseUrl, serviceRoleKey)
-      : null;
-
-    if (supabaseAdmin && orgId) {
-      const { data: membership } = await supabaseAdmin
-        .from("team_members")
-        .select("user_id")
-        .eq("org_id", orgId)
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (!membership) {
-        return new Response(JSON.stringify({ error: "Unauthorized organization" }), {
-          status: 403,
-          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-        });
-      }
-    }
+    await requireAiOrganization(supabaseAdmin, userId, orgId, branchId);
 
     if (supabaseAdmin && orgId && branchId) {
       const monthStart = new Date();
@@ -291,8 +252,8 @@ serve(async (req) => {
   } catch (err) {
     console.error("skill-run error:", err);
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+      JSON.stringify({ error: err instanceof AiAccessError ? err.message : "AI service unavailable" }),
+      { status: err instanceof AiAccessError ? err.status : 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
     );
   }
 });

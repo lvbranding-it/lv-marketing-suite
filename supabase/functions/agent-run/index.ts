@@ -7,6 +7,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import { AiAccessError, requireAiUser, requireAiOrganization, requireAiProject } from "../_shared/ai-authorization.ts";
+
 const CLAUDE_API_KEY  = Deno.env.get("CLAUDE_API_KEY")!;
 const SUPABASE_URL    = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -174,18 +176,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
-  // ── Auth: decode JWT manually (same pattern as skill-run; no SUPABASE_ANON_KEY needed) ──
-  const authHeader = req.headers.get("Authorization");
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!token) return json({ error: "Unauthorized" }, 401);
-
-  let userId: string | null = null;
-  try {
-    const payloadB64 = token.split(".")[1];
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-    userId = payload.sub ?? null;
-  } catch { /* malformed token */ }
-  if (!userId) return json({ error: "Unauthorized" }, 401);
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const db = createClient(SUPABASE_URL, SUPABASE_SERVICE);
+  const userId = await requireAiUser(db, req.headers.get("Authorization"));
 
   // Parse body
   let body: {
@@ -220,15 +213,8 @@ serve(async (req) => {
   const agent = AGENTS[agentId];
   if (!agent) return json({ error: `Unknown agent: ${agentId}` }, 400);
 
-  // Service-role client for DB writes
-  const db = createClient(SUPABASE_URL, SUPABASE_SERVICE);
-
-  // Load current brand snapshot
-  const { data: project } = await db
-    .from("projects")
-    .select("name, client_name, description, marketing_context, brand_snapshot")
-    .eq("id", projectId)
-    .single();
+  await requireAiOrganization(db, userId, orgId);
+  const project = await requireAiProject(db, orgId, projectId, parentRunId);
 
   const currentSnapshot    = (project?.brand_snapshot    ?? {}) as Record<string, unknown>;
   const marketingContext   = (project?.marketing_context ?? {}) as Record<string, unknown>;
@@ -395,7 +381,7 @@ serve(async (req) => {
 
   // Update project's brand_snapshot
   if (Object.keys(snapshotDelta).length > 0) {
-    await db.from("projects").update({ brand_snapshot: newSnapshot }).eq("id", projectId);
+    await db.from("projects").update({ brand_snapshot: newSnapshot }).eq("org_id", orgId).eq("id", projectId);
   }
 
   return json({
@@ -410,9 +396,10 @@ serve(async (req) => {
   });
 
   } catch (err) {
+    if (err instanceof AiAccessError) return json({ error: err.message }, err.status);
     // Safety net: always return CORS headers even on unexpected crashes
     const msg = err instanceof Error ? err.message : String(err);
     console.error("agent-run unhandled error:", msg);
-    return json({ error: "Internal server error", detail: msg }, 500);
+    return json({ error: "Internal server error" }, 500);
   }
 });
