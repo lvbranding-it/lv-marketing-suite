@@ -1,5 +1,12 @@
 export const portalTranslations = {
   en: {
+    "portal.chatTitle": "Chat",
+    "portal.sessionChats": "This session",
+    "portal.noSessionChats": "Your conversations will appear here.",
+    "portal.sessionOnly": "Conversations stay in this tab and clear when you reload.",
+    "portal.chatWelcome": "Welcome aboard 🚀",
+    "portal.chatQuestion": "What do you want to build today?",
+
     "portal.readAloud": "Read aloud",
     "portal.speakMessage": "Speak message",
     "portal.stopListening": "Stop microphone",
@@ -228,6 +235,13 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
+    "portal.chatTitle": "Chat",
+    "portal.sessionChats": "Esta sesión",
+    "portal.noSessionChats": "Tus conversaciones aparecerán aquí.",
+    "portal.sessionOnly": "Las conversaciones permanecen en esta pestaña y se borran al recargar.",
+    "portal.chatWelcome": "Te damos la bienvenida 🚀",
+    "portal.chatQuestion": "¿Qué quieres construir hoy?",
+
     "portal.readAloud": "Leer en voz alta",
     "portal.speakMessage": "Dictar mensaje",
     "portal.stopListening": "Detener micrófono",

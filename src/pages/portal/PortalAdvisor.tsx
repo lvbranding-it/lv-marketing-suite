@@ -1,12 +1,13 @@
+import AuditLottie from "@/components/website-audit/AuditLottie";
 import { useAdvisorVoice } from "@/hooks/useAdvisorVoice";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  MessageSquare,
+  Plus,
   Mic,
   Volume2,
   Bot,
   Send,
-  Loader2,
-  RotateCcw,
   Square,
   Copy,
   Pencil,
@@ -41,6 +42,24 @@ export default function PortalAdvisor({
     [error, setError] = useState(""),
     [draft, setDraft] = useState<string | null>(null),
     [copied, setCopied] = useState(false);
+  const [sessions,setSessions]=useState<{id:number;messages:Message[];input:string}[]>([]);
+  const [sessionId,setSessionId]=useState(0);
+  const nextSession=useRef(1);
+  const switchSession=(id?:number)=>{
+    if(id===sessionId)return;
+    stop();
+    setSessions(v=>{
+      const other=v.filter(c=>c.id!==sessionId);
+      return messages.length||input.trim()?[...other,{id:sessionId,messages,input}]:other;
+    });
+    const target=sessions.find(c=>c.id===id);
+    setSessionId(id??nextSession.current++);
+    setMessages(target?.messages??[]);
+    setInput(target?.input??"");
+    setError("");
+    setDraft(null);
+  };
+  const sessionList=[...sessions.filter(c=>c.id!==sessionId),{id:sessionId,messages,input}].filter(c=>c.messages.length||c.input.trim()).sort((a,b)=>b.id-a.id);
   const [autoRead,setAutoRead]=useState(false);
   const autoReadRef=useRef(false);
   const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)));
@@ -112,50 +131,48 @@ export default function PortalAdvisor({
     );
   };
   return (
-    <section className="space-y-5">
+    <section className="overflow-hidden rounded-[28px] border border-black/10 bg-[#efefef] lg:grid lg:grid-cols-[220px_minmax(0,1fr)] min-h-[720px]">
+      <aside className="bg-[#1b1b1b] text-white p-5 flex flex-col gap-5">
+        <p className="text-2xl font-semibold">{p("chatTitle")}</p>
+        <Button className="w-full gap-2 rounded-xl h-12" onClick={()=>switchSession()}><Plus size={18}/>{p("newConversation")}</Button>
+        <div className="flex-1">
+          <p className="text-xs uppercase tracking-widest text-white/45 mb-3">{p("sessionChats")}</p>
+          <div className="flex lg:flex-col gap-2 overflow-auto max-h-64 lg:max-h-[480px]">
+            {sessionList.length?sessionList.map(c=><button key={c.id} onClick={()=>switchSession(c.id)} aria-current={c.id===sessionId?"page":undefined} className={`flex shrink-0 lg:shrink items-start gap-2 rounded-lg p-3 text-left text-sm max-w-64 ${c.id===sessionId?"bg-white/10 text-white":"text-white/65 hover:bg-white/5"}`}><MessageSquare size={16} className="shrink-0 mt-0.5"/><span className="line-clamp-2 break-words">{c.messages.find(m=>m.role==="user")?.content||c.input}</span></button>):<p className="text-sm text-white/45">{p("noSessionChats")}</p>}
+          </div>
+        </div>
+        <p className="text-xs leading-relaxed text-white/45">{p("sessionOnly")}</p>
+      </aside>
+      <div className="min-w-0 p-4 sm:p-7 flex flex-col gap-5">
+
       <div className="flex flex-wrap gap-4 items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">{p("advisor")}</h1>
+          <h1 className="text-xl sm:text-2xl font-medium">{p("advisor")}</h1>
           <p className="mt-2 text-muted-foreground">{p("advisorSubtitle")}</p>
         </div>
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={() => {
-            stop();
-            setMessages([]);
-            setError("");
-            setInput("");
-          }}
-        >
-          <RotateCcw size={15} />
-          {p("newConversation")}
-        </Button>
       </div>
-      <div className="rounded-xl border bg-white overflow-hidden">
-        <div className="border-b px-5 py-3 flex items-center gap-2 text-sm">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-emerald-600" />
           <span className="font-medium">{p("generalAdvisor")}</span>
           <span className="text-muted-foreground">· {p("noLeadContext")}</span>
         </div>
         <div
-          className="min-h-80 max-h-[60vh] overflow-y-auto p-5 sm:p-7 space-y-6"
+          className={`min-h-80 py-6 sm:px-3 space-y-6 flex-1 ${messages.length?"max-h-[60vh] overflow-y-auto":""}`}
           role="log"
           aria-label={p("advisorConversation")}
           aria-live="polite"
         >
           {!messages.length ? (
-            <div className="max-w-2xl mx-auto py-8 text-center">
-              <div className="inline-flex bg-primary/5 p-4 rounded-2xl text-primary">
-                <Bot size={32} />
-              </div>
-              <h2 className="text-xl font-semibold mt-5">
-                {p("advisorWelcome")}
+            <div className="max-w-2xl mx-auto py-8 sm:py-12 text-center">
+              <div className="mx-auto w-32 h-32 flex items-center justify-center rounded-full bg-primary text-white shadow-sm"><Bot size={76} strokeWidth={1.4}/></div>
+              <h2 className="text-3xl sm:text-4xl font-semibold mt-7 tracking-tight">
+                {p("chatWelcome")}
               </h2>
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-                {p("advisorWelcomeBody")}
+              <p className="mt-4 text-xl sm:text-2xl font-semibold leading-snug">
+                {p("chatQuestion")}
               </p>
-              <div className="grid sm:grid-cols-2 gap-3 mt-7 text-left">
+              <div className="grid sm:grid-cols-2 gap-2 mt-7 text-left">
                 {[
                   "advisorIntro",
                   "advisorDiscovery",
@@ -164,7 +181,7 @@ export default function PortalAdvisor({
                 ].map((key) => (
                   <button
                     key={key}
-                    className="rounded-xl border p-4 text-sm hover:border-primary/40 hover:bg-primary/5 text-left"
+                    className="rounded-xl border border-black/5 bg-white/60 p-3 text-sm hover:border-primary/40 hover:bg-white text-left"
                     onClick={() => setInput(p(key))}
                   >
                     {p(key)}
@@ -211,9 +228,9 @@ export default function PortalAdvisor({
           {busy && (
             <div
               role="status"
-              className="flex gap-3 text-sm text-muted-foreground"
+              className="flex items-center gap-3 text-sm text-muted-foreground"
             >
-              <Loader2 size={18} className="animate-spin shrink-0" />
+              <AuditLottie src="/animations/lv-advisor-loading.json" className="!w-24 h-24 shrink-0" />
               {streamed ? (
                 <ChatMessageText role="assistant" content={streamed} />
               ) : (
@@ -223,7 +240,7 @@ export default function PortalAdvisor({
           )}
           <div ref={end} />
         </div>
-        <form onSubmit={send} className="border-t p-4 sm:p-5 space-y-3">
+        <form onSubmit={send} className="rounded-3xl bg-white border border-black/5 shadow-sm p-4 sm:p-5 space-y-3">
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
@@ -238,6 +255,7 @@ export default function PortalAdvisor({
           {voice.listening&&<p role="status">{p("listening")}</p>}
           {voice.error&&<p role="alert" className="text-sm text-destructive">{p(voice.error)}</p>}
           <Textarea
+            className="border-0 shadow-none resize-none focus-visible:ring-0 text-base p-1"
             readOnly={voice.listening}
             aria-label={p("advisorMessage")}
             placeholder={p("advisorPlaceholder")}
@@ -278,6 +296,7 @@ export default function PortalAdvisor({
             )}
           </div>
         </form>
+      </div>
       </div>
       <Dialog
         open={draft !== null}
