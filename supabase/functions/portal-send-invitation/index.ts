@@ -173,6 +173,15 @@ serve(async (req) => {
         reply_to: { email: fromEmail, name: fromName },
         subject: action === "access" ? "Your secure LV Branding Portal link" : "Your LV Branding Ambassador Portal invitation",
         content: [{ type: "text/html", value: emailHtml(recipientName, invitationUrl, action === "access") }],
+        // Click tracking rewrites every link through SendGrid's branded redirect
+        // domain. For a sign-in link that is wrong twice over: the credential
+        // would travel through a third-party redirector, and the rewritten URL
+        // is only as reachable as that domain's TLS certificate, which is what
+        // made these links land on a browser security warning. Marketing email
+        // still tracks clicks; a credential never should.
+        tracking_settings: {
+          click_tracking: { enable: false, enable_text: false },
+        },
       }),
     });
     delivered = response.status === 202;

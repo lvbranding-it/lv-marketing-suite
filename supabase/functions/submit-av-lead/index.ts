@@ -505,6 +505,10 @@ async function sendMail(
         subject,
         content: [{ type: "text/html", value: html }],
         ...(attachments.length > 0 ? { attachments } : {}),
+        // Transactional mail is not rewritten through SendGrid's click-tracking
+        // domain: its links then work only while that domain's certificate is
+        // valid. Campaign sends still track clicks; these do not need to.
+        tracking_settings: { click_tracking: { enable: false, enable_text: false } },
       }),
     });
     if (res.status === 202) return true;

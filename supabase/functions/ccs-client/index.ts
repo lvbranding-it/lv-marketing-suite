@@ -45,6 +45,9 @@ async function sendCompletionEmail(to: string, opts: { confirmation: string; pro
       personalizations: [{ to: [{ email: to }] }],
       from: { email: FROM_EMAIL, name: FROM_NAME }, reply_to: { email: FROM_EMAIL, name: FROM_NAME },
       subject: `${opts.heading} - ${opts.projectName}`, content: [{ type: "text/html", value: html }],
+      // Project links are not rewritten through SendGrid's click-tracking
+      // domain: they then work only while that domain's certificate is valid.
+      tracking_settings: { click_tracking: { enable: false, enable_text: false } },
     }),
   });
 }

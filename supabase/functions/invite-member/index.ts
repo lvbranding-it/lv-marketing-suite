@@ -317,6 +317,9 @@ serve(async (req) => {
     reply_to: { email: FROM_EMAIL, name: FROM_NAME },
     subject: `You've been invited to join LV Branding's Workspace`,
     content: [{ type: "text/html", value: emailHtml }],
+    // An invite link is not rewritten through SendGrid's click-tracking domain:
+    // it then works only while that domain's certificate is valid.
+    tracking_settings: { click_tracking: { enable: false, enable_text: false } },
   };
 
   try {

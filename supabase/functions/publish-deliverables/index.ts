@@ -79,6 +79,10 @@ Deno.serve(async (req) => {
                 `,
               },
             ],
+            // The gallery download link is not rewritten through SendGrid's
+            // click-tracking domain: it then works only while that domain's
+            // certificate is valid.
+            tracking_settings: { click_tracking: { enable: false, enable_text: false } },
           }),
         });
         notified = emailRes.ok;

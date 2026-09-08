@@ -2016,6 +2016,14 @@ async function sendReportMail(to: string, subject: string, html: string): Promis
       reply_to: { email: REPORT_FROM_EMAIL, name: REPORT_FROM_NAME },
       subject,
       content: [{ type: "text/html", value: html }],
+      // The report link carries its access token in a URL fragment and the stop
+      // link must always work. Click tracking would route both through
+      // SendGrid's branded redirect domain, which reaches the reader only if
+      // that domain's certificate is valid, and puts a rewrite between the
+      // reader and a fragment the server never sees.
+      tracking_settings: {
+        click_tracking: { enable: false, enable_text: false },
+      },
     }),
   });
   if (!response.ok) {

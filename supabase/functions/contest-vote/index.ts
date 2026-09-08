@@ -207,6 +207,10 @@ serve(async (req) => {
         from:    { email: FROM_EMAIL, name: FROM_NAME },
         subject: `Confirm your vote — ${contest.title}`,
         content: [{ type: "text/html", value: html }],
+        // The vote confirmation link is not rewritten through SendGrid's
+        // click-tracking domain: it then works only while that domain's
+        // certificate is valid.
+        tracking_settings: { click_tracking: { enable: false, enable_text: false } },
       }),
     });
     if (sgRes.status !== 202) {

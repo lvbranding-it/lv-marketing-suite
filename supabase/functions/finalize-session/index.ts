@@ -249,6 +249,10 @@ Deno.serve(async (req) => {
                   <p>Log in to your dashboard to review their selection.</p>
                 `,
               }],
+              // Internal notification links are not rewritten through SendGrid's
+              // click-tracking domain: they then work only while that domain's
+              // certificate is valid.
+              tracking_settings: { click_tracking: { enable: false, enable_text: false } },
             }),
           });
         }

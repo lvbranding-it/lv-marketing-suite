@@ -193,6 +193,10 @@ serve(async (req) => {
         from:    { email: FROM_EMAIL, name: FROM_NAME },
         subject: `📋 New intake: ${company_name}`,
         content: [{ type: "text/html", value: html }],
+        // Internal notification links are not rewritten through SendGrid's
+        // click-tracking domain: they then work only while that domain's
+        // certificate is valid.
+        tracking_settings: { click_tracking: { enable: false, enable_text: false } },
       }),
     });
 
