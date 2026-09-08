@@ -114,9 +114,9 @@ test("admin preview includes invitation creation without sending messages", asyn
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Create invitation link" }),
+    page.getByRole("button", { name: "Create and send invitation" }),
   ).toBeDisabled();
-  await expect(page.getByText(/No email is sent automatically/)).toBeVisible();
+  await expect(page.getByText(/Create and email a private invitation/)).toBeVisible();
 });
 
 test("invitation entry removes the bearer token from the URL and reuses sign-in", async ({

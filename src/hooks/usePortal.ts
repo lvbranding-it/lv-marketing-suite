@@ -195,6 +195,8 @@ export interface PortalInvitation {
   expires_at: string;
   accepted_at: string | null;
   cancelled_at: string | null;
+  last_sent_at: string | null;
+  send_count: number;
 }
 export function usePortalInvitations(org: string, preview = false) {
   const { user } = useAuth();
@@ -205,7 +207,7 @@ export function usePortalInvitations(org: string, preview = false) {
       const { data, error } = await db
         .from("portal_invitations")
         .select(
-          "id,invited_email,display_name,role,created_at,expires_at,accepted_at,cancelled_at",
+          "id,invited_email,display_name,role,created_at,expires_at,accepted_at,cancelled_at,last_sent_at,send_count",
         )
         .eq("org_id", org)
         .order("created_at", { ascending: false })

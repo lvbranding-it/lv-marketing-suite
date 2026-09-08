@@ -1,11 +1,15 @@
 export const portalTranslations = {
   en: {
-    "portal.invitePasswordlessHelp": "No password needed. Enter the email address your invitation was sent to. We’ll email you a secure sign-in link, whether you’re new or already have an account.",
+    "portal.invitePasswordlessHelp":
+      "No password needed. Enter the email address your invitation was sent to. We’ll email you a secure sign-in link, whether you’re new or already have an account.",
     "portal.inviteSendLink": "Email me a sign-in link",
-    "portal.inviteLinkSent": "Check your inbox for the sign-in link. After opening it, return to this tab to accept your invitation. If you use another browser or device, reopen the original invitation there after signing in.",
+    "portal.inviteLinkSent":
+      "Check your inbox for the sign-in link. After opening it, return to this tab to accept your invitation. If you use another browser or device, reopen the original invitation there after signing in.",
     "portal.inviteTryEmail": "Use another email or request a new link",
-    "portal.inviteLinkFailed": "We couldn’t send the sign-in link. Check the email address and try again in a minute. If it continues, contact your LV administrator.",
-    "portal.inviteReopen": "Open your original invitation link to continue. If you just verified your email in a new tab, return to the tab with your invitation, or reopen the original link here.",
+    "portal.inviteLinkFailed":
+      "We couldn’t send the sign-in link. Check the email address and try again in a minute. If it continues, contact your LV administrator.",
+    "portal.inviteReopen":
+      "Open your original invitation link to continue. If you just verified your email in a new tab, return to the tab with your invitation, or reopen the original link here.",
 
     "portal.expandMenu": "Expand menu",
     "portal.collapseMenu": "Collapse menu",
@@ -14,7 +18,8 @@ export const portalTranslations = {
     "portal.chatTitle": "Chat",
     "portal.sessionChats": "This session",
     "portal.noSessionChats": "Your conversations will appear here.",
-    "portal.sessionOnly": "Conversations stay in this tab and clear when you reload.",
+    "portal.sessionOnly":
+      "Conversations stay in this tab and clear when you reload.",
     "portal.chatWelcome": "Welcome aboard 🚀",
     "portal.chatQuestion": "What do you want to build today?",
 
@@ -24,11 +29,16 @@ export const portalTranslations = {
     "portal.autoRead": "Read replies automatically",
     "portal.stopReading": "Stop reading",
     "portal.listening": "Listening…",
-    "portal.voiceHelp": "Speak, then review the text and press Send. Your browser may process audio through its speech provider.",
-    "portal.voiceUnavailable": "Speech input is unavailable in this browser. You can still type your message.",
-    "portal.voicePermission": "Microphone access was denied. Allow microphone access in your browser settings or type instead.",
-    "portal.voiceError": "Speech recognition stopped or is unavailable. Try again or type your message.",
-    "portal.voicePlaybackError": "Audio could not play. Try Read aloud again or read the response on screen.",
+    "portal.voiceHelp":
+      "Speak, then review the text and press Send. Your browser may process audio through its speech provider.",
+    "portal.voiceUnavailable":
+      "Speech input is unavailable in this browser. You can still type your message.",
+    "portal.voicePermission":
+      "Microphone access was denied. Allow microphone access in your browser settings or type instead.",
+    "portal.voiceError":
+      "Speech recognition stopped or is unavailable. Try again or type your message.",
+    "portal.voicePlaybackError":
+      "Audio could not play. Try Read aloud again or read the response on screen.",
 
     "portal.commissions": "Commissions",
     "portal.advisor": "LV Branding Advisor",
@@ -64,8 +74,30 @@ export const portalTranslations = {
 
     "portal.inviteWelcome": "Join the LV Branding portal",
     "portal.inviteRepresentative": "Invite a representative",
+    "portal.createAndSend": "Create and send invitation",
+    "portal.saveAndResend": "Save and send new link",
+    "portal.editInvitation": "Edit invitation",
+    "portal.resendInvitation": "Resend link",
+    "portal.deleteInvitation": "Delete invitation",
+    "portal.replaceInviteHelp":
+      "Saving creates and emails a new secure link. The previous link stops working.",
+    "portal.deleteInvitationHelp":
+      "This permanently removes the pending invitation. Its audit event is retained.",
+    "portal.invitationDeleted": "Invitation deleted.",
+    "portal.inviteEmailed":
+      "A new secure invitation link was emailed successfully.",
+    "portal.inviteEmailFallback":
+      "The invitation was created, but email delivery could not be confirmed. Copy and share this link manually.",
+    "portal.lastEmailed": "Last emailed:",
+    "portal.editRepresentative": "Edit representative",
+    "portal.removeRepresentative": "Remove representative",
+    "portal.removeAccess": "Remove access",
+    "portal.removeRepresentativeHelp":
+      "This revokes portal access while preserving leads, commissions, notes, and audit history. You can reactivate the representative later.",
+    "portal.representativeUpdated": "Representative updated.",
+    "portal.representativeRemoved": "Representative access removed.",
     "portal.inviteLinkHelp":
-      "Create a private invitation link to share with your representative. It expires in seven days. Creating a replacement cancels the previous link. No email is sent automatically.",
+      "Create and email a private invitation link. It expires in seven days. You can also copy the link after delivery. A replacement cancels the previous link.",
     "portal.createInvitation": "Create invitation link",
     "portal.invitationLink": "Invitation link",
     "portal.copyLink": "Copy link",
@@ -246,12 +278,16 @@ export const portalTranslations = {
     "portal.not_a_fit": "Not a fit",
   },
   es: {
-    "portal.invitePasswordlessHelp": "No necesitas contraseña. Ingresa el correo al que enviaron tu invitación. Te enviaremos un enlace seguro para entrar, tanto si eres nuevo como si ya tienes cuenta.",
+    "portal.invitePasswordlessHelp":
+      "No necesitas contraseña. Ingresa el correo al que enviaron tu invitación. Te enviaremos un enlace seguro para entrar, tanto si eres nuevo como si ya tienes cuenta.",
     "portal.inviteSendLink": "Enviarme un enlace de acceso",
-    "portal.inviteLinkSent": "Revisa tu correo y abre el enlace de acceso. Después vuelve a esta pestaña para aceptar la invitación. Si usas otro navegador o dispositivo, vuelve a abrir allí la invitación original después de iniciar sesión.",
+    "portal.inviteLinkSent":
+      "Revisa tu correo y abre el enlace de acceso. Después vuelve a esta pestaña para aceptar la invitación. Si usas otro navegador o dispositivo, vuelve a abrir allí la invitación original después de iniciar sesión.",
     "portal.inviteTryEmail": "Usar otro correo o solicitar un nuevo enlace",
-    "portal.inviteLinkFailed": "No pudimos enviar el enlace. Revisa el correo e inténtalo en un minuto. Si continúa, contacta a tu administrador de LV.",
-    "portal.inviteReopen": "Abre tu enlace de invitación original para continuar. Si acabas de verificar tu correo en otra pestaña, vuelve a la pestaña de la invitación o abre aquí el enlace original.",
+    "portal.inviteLinkFailed":
+      "No pudimos enviar el enlace. Revisa el correo e inténtalo en un minuto. Si continúa, contacta a tu administrador de LV.",
+    "portal.inviteReopen":
+      "Abre tu enlace de invitación original para continuar. Si acabas de verificar tu correo en otra pestaña, vuelve a la pestaña de la invitación o abre aquí el enlace original.",
 
     "portal.expandMenu": "Expandir menú",
     "portal.collapseMenu": "Contraer menú",
@@ -260,7 +296,8 @@ export const portalTranslations = {
     "portal.chatTitle": "Chat",
     "portal.sessionChats": "Esta sesión",
     "portal.noSessionChats": "Tus conversaciones aparecerán aquí.",
-    "portal.sessionOnly": "Las conversaciones permanecen en esta pestaña y se borran al recargar.",
+    "portal.sessionOnly":
+      "Las conversaciones permanecen en esta pestaña y se borran al recargar.",
     "portal.chatWelcome": "Te damos la bienvenida 🚀",
     "portal.chatQuestion": "¿Qué quieres construir hoy?",
 
@@ -270,11 +307,16 @@ export const portalTranslations = {
     "portal.autoRead": "Leer respuestas automáticamente",
     "portal.stopReading": "Detener lectura",
     "portal.listening": "Escuchando…",
-    "portal.voiceHelp": "Habla, revisa el texto y pulsa Enviar. Tu navegador puede procesar el audio mediante su proveedor de voz.",
-    "portal.voiceUnavailable": "La entrada de voz no está disponible en este navegador. Puedes escribir tu mensaje.",
-    "portal.voicePermission": "Se denegó el micrófono. Permite el acceso en la configuración del navegador o escribe.",
-    "portal.voiceError": "El reconocimiento se detuvo o no está disponible. Inténtalo de nuevo o escribe.",
-    "portal.voicePlaybackError": "No se pudo reproducir el audio. Intenta Leer en voz alta o lee la respuesta en pantalla.",
+    "portal.voiceHelp":
+      "Habla, revisa el texto y pulsa Enviar. Tu navegador puede procesar el audio mediante su proveedor de voz.",
+    "portal.voiceUnavailable":
+      "La entrada de voz no está disponible en este navegador. Puedes escribir tu mensaje.",
+    "portal.voicePermission":
+      "Se denegó el micrófono. Permite el acceso en la configuración del navegador o escribe.",
+    "portal.voiceError":
+      "El reconocimiento se detuvo o no está disponible. Inténtalo de nuevo o escribe.",
+    "portal.voicePlaybackError":
+      "No se pudo reproducir el audio. Intenta Leer en voz alta o lee la respuesta en pantalla.",
 
     "portal.commissions": "Comisiones",
     "portal.advisor": "Asesor de LV Branding",
@@ -311,8 +353,30 @@ export const portalTranslations = {
 
     "portal.inviteWelcome": "Únete al portal de LV Branding",
     "portal.inviteRepresentative": "Invitar representante",
+    "portal.createAndSend": "Crear y enviar invitación",
+    "portal.saveAndResend": "Guardar y enviar enlace nuevo",
+    "portal.editInvitation": "Editar invitación",
+    "portal.resendInvitation": "Reenviar enlace",
+    "portal.deleteInvitation": "Eliminar invitación",
+    "portal.replaceInviteHelp":
+      "Al guardar se crea y envía un enlace seguro nuevo. El enlace anterior deja de funcionar.",
+    "portal.deleteInvitationHelp":
+      "Esto elimina permanentemente la invitación pendiente. Su evento de auditoría se conserva.",
+    "portal.invitationDeleted": "Invitación eliminada.",
+    "portal.inviteEmailed":
+      "El nuevo enlace seguro se envió correctamente por correo.",
+    "portal.inviteEmailFallback":
+      "La invitación se creó, pero no pudimos confirmar el envío. Copia y comparte este enlace manualmente.",
+    "portal.lastEmailed": "Último envío:",
+    "portal.editRepresentative": "Editar representante",
+    "portal.removeRepresentative": "Eliminar representante",
+    "portal.removeAccess": "Eliminar acceso",
+    "portal.removeRepresentativeHelp":
+      "Esto revoca el acceso al portal y conserva leads, comisiones, notas e historial de auditoría. Puedes reactivar al representante más adelante.",
+    "portal.representativeUpdated": "Representante actualizado.",
+    "portal.representativeRemoved": "Acceso del representante eliminado.",
     "portal.inviteLinkHelp":
-      "Crea un enlace privado para compartir con tu representante. Caduca en siete días. Un enlace nuevo cancela el anterior. No se envía un correo automáticamente.",
+      "Crea y envía por correo un enlace privado. Caduca en siete días y también podrás copiarlo después del envío. Un enlace nuevo cancela el anterior.",
     "portal.createInvitation": "Crear enlace de invitación",
     "portal.invitationLink": "Enlace de invitación",
     "portal.copyLink": "Copiar enlace",

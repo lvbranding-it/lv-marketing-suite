@@ -94,9 +94,42 @@ beforeAll(async () => {
       "utf8",
     ),
   );
- await db.exec(readFileSync(new URL("../portal-migrations/202609080004_commission_tracker.sql",import.meta.url),"utf8"));
- await db.exec(readFileSync(new URL("../portal-migrations/202609080005_ambassador_welcome.sql",import.meta.url),"utf8"));
- await db.exec(readFileSync(new URL("../portal-migrations/202609080006_ambassador_role_isolation.sql",import.meta.url),"utf8"));
+  await db.exec(
+    readFileSync(
+      new URL(
+        "../portal-migrations/202609080004_commission_tracker.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      new URL(
+        "../portal-migrations/202609080005_ambassador_welcome.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      new URL(
+        "../portal-migrations/202609080006_ambassador_role_isolation.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      new URL(
+        "../portal-migrations/202609080007_representative_management.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
 }, 30000);
 afterAll(async () => {
   await db?.close();
@@ -517,68 +550,264 @@ it("allows a standalone advisor without leads and denies other organizations", a
   ).rejects.toThrow("Not authorized");
 });
 
-const commission = {ambassador_id:alice,title:"Brand project",kind:"direct",amount_cents:20000,status:"projected",plan_reference:"Signed plan A",reason:"Initial record"};
-it("commission tracker enforces recipient privacy and admin-only writes",async()=>{
- await as(admin);
- const id=await scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)]);
- await as(alice);
- expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(1);
- expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(0);
- await expect(scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)])).rejects.toThrow("Not authorized");
- await expect(db.query("update public.portal_commissions set amount_cents=1 where id=$1",[id])).rejects.toThrow();
- await as(bob);
- expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(0);
- await as(staff);
- expect((await db.query("select * from public.portal_commissions")).rows).toHaveLength(0);
- await as(admin);
- expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(1);
- await expect(scalar("select public.portal_save_commission($1,$2)",[otherOrg,JSON.stringify(commission)])).rejects.toThrow("Not authorized");
+const commission = {
+  ambassador_id: alice,
+  title: "Brand project",
+  kind: "direct",
+  amount_cents: 20000,
+  status: "projected",
+  plan_reference: "Signed plan A",
+  reason: "Initial record",
+};
+it("commission tracker enforces recipient privacy and admin-only writes", async () => {
+  await as(admin);
+  const id = await scalar("select public.portal_save_commission($1,$2)", [
+    org,
+    JSON.stringify(commission),
+  ]);
+  await as(alice);
+  expect(
+    (await db.query("select * from public.portal_commissions")).rows,
+  ).toHaveLength(1);
+  expect(
+    (await db.query("select * from public.portal_commission_history")).rows,
+  ).toHaveLength(0);
+  await expect(
+    scalar("select public.portal_save_commission($1,$2)", [
+      org,
+      JSON.stringify(commission),
+    ]),
+  ).rejects.toThrow("Not authorized");
+  await expect(
+    db.query(
+      "update public.portal_commissions set amount_cents=1 where id=$1",
+      [id],
+    ),
+  ).rejects.toThrow();
+  await as(bob);
+  expect(
+    (await db.query("select * from public.portal_commissions")).rows,
+  ).toHaveLength(0);
+  await as(staff);
+  expect(
+    (await db.query("select * from public.portal_commissions")).rows,
+  ).toHaveLength(0);
+  await as(admin);
+  expect(
+    (await db.query("select * from public.portal_commission_history")).rows,
+  ).toHaveLength(1);
+  await expect(
+    scalar("select public.portal_save_commission($1,$2)", [
+      otherOrg,
+      JSON.stringify(commission),
+    ]),
+  ).rejects.toThrow("Not authorized");
 });
-it("commission changes are versioned, audited and final payments locked",async()=>{
- await as(admin);
- const id=await scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify(commission)]);
- await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify(commission),id,2])).rejects.toThrow("Record changed");
- await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,ambassador_id:bob}),id,1])).rejects.toThrow("Recipient cannot");
- await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,status:"paid"}),id,1])).rejects.toThrow();
- await scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify({...commission,status:"paid",payment_date:"2026-09-08",payment_reference:"Receipt 1"}),id,1]);
- await expect(scalar("select public.portal_save_commission($1,$2,$3,$4)",[org,JSON.stringify(commission),id,2])).rejects.toThrow("Final records");
- expect((await db.query("select * from public.portal_commission_history")).rows).toHaveLength(2);
+it("commission changes are versioned, audited and final payments locked", async () => {
+  await as(admin);
+  const id = await scalar("select public.portal_save_commission($1,$2)", [
+    org,
+    JSON.stringify(commission),
+  ]);
+  await expect(
+    scalar("select public.portal_save_commission($1,$2,$3,$4)", [
+      org,
+      JSON.stringify(commission),
+      id,
+      2,
+    ]),
+  ).rejects.toThrow("Record changed");
+  await expect(
+    scalar("select public.portal_save_commission($1,$2,$3,$4)", [
+      org,
+      JSON.stringify({ ...commission, ambassador_id: bob }),
+      id,
+      1,
+    ]),
+  ).rejects.toThrow("Recipient cannot");
+  await expect(
+    scalar("select public.portal_save_commission($1,$2,$3,$4)", [
+      org,
+      JSON.stringify({ ...commission, status: "paid" }),
+      id,
+      1,
+    ]),
+  ).rejects.toThrow();
+  await scalar("select public.portal_save_commission($1,$2,$3,$4)", [
+    org,
+    JSON.stringify({
+      ...commission,
+      status: "paid",
+      payment_date: "2026-09-08",
+      payment_reference: "Receipt 1",
+    }),
+    id,
+    1,
+  ]);
+  await expect(
+    scalar("select public.portal_save_commission($1,$2,$3,$4)", [
+      org,
+      JSON.stringify(commission),
+      id,
+      2,
+    ]),
+  ).rejects.toThrow("Final records");
+  expect(
+    (await db.query("select * from public.portal_commission_history")).rows,
+  ).toHaveLength(2);
 });
-it("commission entries reject invalid amounts and audit omissions",async()=>{
- await as(admin);
- for(const change of [{amount_cents:-1},{amount_cents:1.5},{reason:""},{ambassador_id:outsider}]){
- await expect(scalar("select public.portal_save_commission($1,$2)",[org,JSON.stringify({...commission,...change})])).rejects.toThrow();
- }
+it("commission entries reject invalid amounts and audit omissions", async () => {
+  await as(admin);
+  for (const change of [
+    { amount_cents: -1 },
+    { amount_cents: 1.5 },
+    { reason: "" },
+    { ambassador_id: outsider },
+  ]) {
+    await expect(
+      scalar("select public.portal_save_commission($1,$2)", [
+        org,
+        JSON.stringify({ ...commission, ...change }),
+      ]),
+    ).rejects.toThrow();
+  }
 });
 
-it("claims the ambassador welcome once and rejects unrelated accounts",async()=>{
- await as(alice);
- expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(true);
- expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(false);
- await expect(db.query("delete from public.portal_welcome_seen")).rejects.toThrow();
- await as(bob);
- expect(await scalar("select public.portal_claim_welcome($1)",[org])).toBe(true);
- await as(outsider);
- await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
- await as(staff);
- await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
+it("claims the ambassador welcome once and rejects unrelated accounts", async () => {
+  await as(alice);
+  expect(await scalar("select public.portal_claim_welcome($1)", [org])).toBe(
+    true,
+  );
+  expect(await scalar("select public.portal_claim_welcome($1)", [org])).toBe(
+    false,
+  );
+  await expect(
+    db.query("delete from public.portal_welcome_seen"),
+  ).rejects.toThrow();
+  await as(bob);
+  expect(await scalar("select public.portal_claim_welcome($1)", [org])).toBe(
+    true,
+  );
+  await as(outsider);
+  await expect(
+    scalar("select public.portal_claim_welcome($1)", [org]),
+  ).rejects.toThrow("Not authorized");
+  await as(staff);
+  await expect(
+    scalar("select public.portal_claim_welcome($1)", [org]),
+  ).rejects.toThrow("Not authorized");
 });
 
+it("representatives cannot use auto-created owner access while legitimate LV admins retain access", async () => {
+  await db.exec(
+    "reset role; alter table public.team_members enable row level security; grant select,insert on public.team_members to authenticated; create policy fixture_team_access on public.team_members for all to authenticated using(true) with check(true);",
+  );
+  await db.query(
+    "insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",
+    [otherOrg, alice],
+  );
+  await as(alice);
+  expect(await scalar("select public.portal_role($1)", [org])).toBe(
+    "ambassador",
+  );
+  expect(await scalar("select public.portal_is_admin($1)", [otherOrg])).toBe(
+    false,
+  );
+  expect(await scalar("select public.portal_account_restricted()")).toBe(true);
+  expect(
+    (await db.query("select * from public.team_members")).rows,
+  ).toHaveLength(0);
+  await expect(
+    db.query(
+      "insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",
+      [org, alice],
+    ),
+  ).rejects.toThrow();
+  await db.exec("reset role");
+  await db.query(
+    "update public.portal_memberships set active=false where user_id=$1",
+    [alice],
+  );
+  await as(alice);
+  expect(await scalar("select public.portal_role($1)", [org])).toBe(null);
+  expect(await scalar("select public.portal_account_restricted()")).toBe(true);
+  await as(admin);
+  expect(await scalar("select public.portal_is_admin($1)", [org])).toBe(true);
+});
 
-it("representatives cannot use auto-created owner access while legitimate LV admins retain access",async()=>{
- await db.exec("reset role; alter table public.team_members enable row level security; grant select,insert on public.team_members to authenticated; create policy fixture_team_access on public.team_members for all to authenticated using(true) with check(true);");
- await db.query("insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",[otherOrg,alice]);
- await as(alice);
- expect(await scalar("select public.portal_role($1)",[org])).toBe("ambassador");
- expect(await scalar("select public.portal_is_admin($1)",[otherOrg])).toBe(false);
- expect(await scalar("select public.portal_account_restricted()")).toBe(true);
- expect((await db.query("select * from public.team_members")).rows).toHaveLength(0);
- await expect(db.query("insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",[org,alice])).rejects.toThrow();
- await db.exec("reset role");
- await db.query("update public.portal_memberships set active=false where user_id=$1",[alice]);
- await as(alice);
- expect(await scalar("select public.portal_role($1)",[org])).toBe(null);
- expect(await scalar("select public.portal_account_restricted()")).toBe(true);
- await as(admin);
- expect(await scalar("select public.portal_is_admin($1)",[org])).toBe(true);
+it("rotates pending invitation links and invalidates the previous token", async () => {
+  await as(admin);
+  const created = (
+    await db.query<{ invitation_id: string; token: string }>(
+      "select * from public.portal_create_invitation($1,'original@example.test','Original','ambassador')",
+      [org],
+    )
+  ).rows[0];
+  const replaced = (
+    await db.query<{ invitation_id: string; token: string }>(
+      "select * from public.portal_replace_invitation($1,'updated@example.test','Updated','business_developer')",
+      [created.invitation_id],
+    )
+  ).rows[0];
+  expect(replaced.token).not.toBe(created.token);
+  expect(
+    await scalar(
+      "select cancelled_at is not null from public.portal_invitations where id=$1",
+      [created.invitation_id],
+    ),
+  ).toBe(true);
+  expect(
+    await scalar("select role from public.portal_invitations where id=$1", [
+      replaced.invitation_id,
+    ]),
+  ).toBe("business_developer");
+  await as(newcomer);
+  await expect(
+    scalar("select public.portal_accept_invitation($1)", [created.token]),
+  ).rejects.toThrow("Invitation unavailable");
+});
+
+it("records email delivery without exposing a write path", async () => {
+  await as(admin);
+  const id = await scalar(
+    "select invitation_id from public.portal_create_invitation($1,'email@example.test','Email','ambassador')",
+    [org],
+  );
+  await scalar("select public.portal_mark_invitation_sent($1)", [id]);
+  expect(
+    await scalar(
+      "select send_count from public.portal_invitations where id=$1",
+      [id],
+    ),
+  ).toBe(1);
+  await as(alice);
+  await expect(
+    scalar("select public.portal_mark_invitation_sent($1)", [id]),
+  ).rejects.toThrow("Not authorized");
+  await expect(
+    db.query("update public.portal_invitations set send_count=10 where id=$1", [
+      id,
+    ]),
+  ).rejects.toThrow();
+});
+
+it("deletes only pending invitations and retains an audit event", async () => {
+  await as(admin);
+  const id = await scalar(
+    "select invitation_id from public.portal_create_invitation($1,'delete@example.test','Delete','ambassador')",
+    [org],
+  );
+  await scalar("select public.portal_delete_invitation($1)", [id]);
+  expect(
+    await scalar(
+      "select count(*)::int from public.portal_invitations where id=$1",
+      [id],
+    ),
+  ).toBe(0);
+  expect(
+    await scalar(
+      "select count(*)::int from public.portal_audit_events where action='invitation_deleted' and detail->>'invitation_id'=$1",
+      [id],
+    ),
+  ).toBe(1);
 });
