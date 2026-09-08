@@ -1,6 +1,7 @@
+import { supabase } from "@/integrations/supabase/client";
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
@@ -88,10 +89,15 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children, portal = false }: { children: React.ReactNode; portal?: boolean }) {
   const { session, loading } = useAuth();
+  const access=useQuery({queryKey:["portal-account-access",session?.user.id],enabled:!!session&&!portal,
+    queryFn:async()=>{const {data,error}=await (supabase as any).rpc("portal_account_restricted");if(error)throw error;return data===true;},
+    staleTime:0,retry:false});
   if (loading) return null;
   if (!session) return <Navigate to="/auth" replace />;
+  if(!portal && access.isPending)return null;
+  if(!portal && (access.isError||access.data))return <Navigate to="/portal" replace/>;
   return <>{children}</>;
 }
 
@@ -109,7 +115,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/portal-invite" element={<Suspense fallback={null}><PortalInvite /></Suspense>} />
-      <Route path="/portal" element={<ProtectedRoute><Suspense fallback={null}><AmbassadorPortal /></Suspense></ProtectedRoute>} />
+      <Route path="/portal" element={<ProtectedRoute portal><Suspense fallback={null}><AmbassadorPortal /></Suspense></ProtectedRoute>} />
       {import.meta.env.DEV && <Route path="/portal-preview" element={<Suspense fallback={null}><AmbassadorPortal preview /></Suspense>} />}
       <Route path="/auth" element={<Suspense fallback={null}><Auth /></Suspense>} />
       <Route path="/intake/:orgId" element={<Suspense fallback={null}><IntakeForm /></Suspense>} />

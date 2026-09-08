@@ -96,6 +96,7 @@ beforeAll(async () => {
   );
  await db.exec(readFileSync(new URL("../portal-migrations/202609080004_commission_tracker.sql",import.meta.url),"utf8"));
  await db.exec(readFileSync(new URL("../portal-migrations/202609080005_ambassador_welcome.sql",import.meta.url),"utf8"));
+ await db.exec(readFileSync(new URL("../portal-migrations/202609080006_ambassador_role_isolation.sql",import.meta.url),"utf8"));
 }, 30000);
 afterAll(async () => {
   await db?.close();
@@ -561,4 +562,22 @@ it("claims the ambassador welcome once and rejects unrelated accounts",async()=>
  await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
  await as(staff);
  await expect(scalar("select public.portal_claim_welcome($1)",[org])).rejects.toThrow("Not authorized");
+});
+
+it("representative membership removes internal roles and cannot fall back to admin",async()=>{
+ await db.exec("reset role");
+ await db.query("insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",[otherOrg,alice]);
+ await db.query("update public.portal_memberships set role=role where user_id=$1",[alice]);
+ expect(await scalar("select count(*)::int from public.team_members where user_id=$1",[alice])).toBe(0);
+ expect(await scalar("select count(*)::int from public.portal_internal_membership_archive where user_id=$1",[alice])).toBe(1);
+ await as(alice);
+ expect(await scalar("select public.portal_role($1)",[org])).toBe("ambassador");
+ expect(await scalar("select public.portal_is_admin($1)",[otherOrg])).toBe(false);
+ expect(await scalar("select public.portal_account_restricted()")).toBe(true);
+ await expect(db.query("insert into public.team_members(org_id,user_id,role) values($1,$2,'owner')",[otherOrg,alice])).rejects.toThrow();
+ await db.exec("reset role");
+ await db.query("update public.portal_memberships set active=false where user_id=$1",[alice]);
+ await as(alice);
+ expect(await scalar("select public.portal_role($1)",[org])).toBe(null);
+ expect(await scalar("select public.portal_account_restricted()")).toBe(true);
 });
