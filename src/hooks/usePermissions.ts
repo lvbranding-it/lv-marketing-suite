@@ -14,7 +14,7 @@ export function usePermissions() {
 
   // Admins always have full feature access regardless of feature_access column
   const features = isAdmin || isBranchOnly
-    ? { campaigns: true, contacts: true, projects: true, skills: true, intake: true, workspace: true }
+    ? { campaigns: true, contacts: true, projects: true, skills: true, intake: true, workspace: true, creativeCanvas: true }
     : featureAccess;
 
   return {
@@ -35,6 +35,11 @@ export function usePermissions() {
     canAccessWorkspace: features.workspace !== false,
     canAccessSkills:    features.skills    !== false,
     canAccessIntake:    features.intake    !== false,
+    // Opt-in, unlike the features above. Creative Canvas spends provider credit
+    // on every action, so it is granted per member in team setup rather than
+    // being open to anyone who is simply in the organization. The same grant is
+    // enforced in `creative_project_role`, so hiding the link is not the gate.
+    canAccessCreativeCanvas: (features as Record<string, boolean | undefined>).creativeCanvas === true,
     // Contacts
     canAddContacts:      true,               // all roles can add/import contacts; HQ prospecting tools are gated separately
     canDeleteContacts:   isAdmin,

@@ -5,10 +5,10 @@ Regenerate the counts with the commands in [Keeping this current](#keeping-this-
 
 | | |
 |---|---|
-| Modules | 16 |
-| Routes | 69 |
-| Edge functions | 28 |
-| Database tables | 53 (row-level security on all) |
+| Modules | 17 |
+| Routes | 72 (including two development-only previews) |
+| Edge functions | 29 |
+| Database tables | 63 after the candidate Creative Canvas migration (row-level security on all) |
 | AI skills | 33 |
 | AI agents | 9 |
 
@@ -94,6 +94,9 @@ Functions: `intake-notify`, `send-intake-invite`.
 ---
 
 ## Delivering the work
+
+### LV Creative Canvas™ · `/dashboard/creative-canvas`
+An authenticated React Flow Community creative-direction workspace connected to the existing project and organization model. A normalized, vendor-independent LV scene keeps rich-content nodes, groups, frames, private references and generated images, brand context, provider-neutral AI generation, decisions, lineage, usage estimates, and PNG/PDF export in one project context. The additive schema and Edge Function are implemented locally but require staged migration/deployment and live provider verification. See `docs/creative-canvas/`.
 
 ### Collaboration / CCS · `/ccs`
 The **Creative Collaboration Standard**: acknowledgment requests sent to contributors, capturing
@@ -203,7 +206,7 @@ to bypass row-level security.
 
 | Purpose | Functions |
 |---|---|
-| AI execution | `skill-run`, `agent-run` |
+| AI execution | `skill-run`, `agent-run`, `creative-canvas-generate` |
 | Leads and enrichment | `submit-av-lead`, `intake-notify`, `send-intake-invite`, `contact-verify`, `apollo-proxy`, `vibe-proxy` |
 | Photo and file delivery | `get-photo-urls`, `get-deliverable-urls`, `publish-deliverables`, `finalize-session`, `client-upload` |
 | Invoicing | `create-session-invoice`, `send-session-invoice`, `create-topup-invoice`, `send-topup-invoice` |

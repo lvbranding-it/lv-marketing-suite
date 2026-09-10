@@ -1750,9 +1750,13 @@ export default function Settings() {
                               { key: "workspace", label: "Workspace", icon: "📓" },
                               { key: "skills",    label: "Skills",    icon: "⚡" },
                               { key: "intake",    label: "Intake",    icon: "📋" },
-                            ].map(({ key, label, icon }) => {
+                              // Opt-in rather than opt-out: Creative Canvas spends
+                              // provider credit per action, so it stays off until
+                              // someone is deliberately given it here.
+                              { key: "creativeCanvas", label: "Creative Canvas", icon: "🎨", optIn: true },
+                            ].map(({ key, label, icon, optIn }: { key: string; label: string; icon: string; optIn?: boolean }) => {
                               const fa = ((member as any).feature_access as Record<string, boolean>) ?? {};
-                              const enabled = fa[key] !== false; // default true
+                              const enabled = optIn ? fa[key] === true : fa[key] !== false;
                               return (
                                 <div key={key} className="flex items-center justify-between">
                                   <span className="text-xs text-foreground">{icon} {label}</span>

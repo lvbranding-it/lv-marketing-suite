@@ -61,6 +61,9 @@ const PhotoVideoLead         = lazy(() => import("@/pages/PhotoVideoLead"));
 const BrandStrategyLead      = lazy(() => import("@/pages/BrandStrategyLead"));
 const DigitalMarketingLead   = lazy(() => import("@/pages/DigitalMarketingLead"));
 const LeadForms              = lazy(() => import("@/pages/LeadForms"));
+const CreativeCanvasProjects = lazy(() => import("@/pages/CreativeCanvasProjects"));
+const CreativeCanvasWorkspace = lazy(() => import("@/pages/CreativeCanvasWorkspace"));
+const CreativeCanvasPreview = lazy(() => import("@/pages/CreativeCanvasPreview"));
 const AvEventProductionEs    = lazy(() => import("@/pages/es/AvEventProductionEs"));
 const WebSolutionsLeadEs     = lazy(() => import("@/pages/es/WebSolutionsLeadEs"));
 const UxUiDesignLeadEs       = lazy(() => import("@/pages/es/UxUiDesignLeadEs"));
@@ -117,6 +120,7 @@ function AppRoutes() {
       <Route path="/portal-invite" element={<Suspense fallback={null}><PortalInvite /></Suspense>} />
       <Route path="/portal" element={<ProtectedRoute portal><Suspense fallback={null}><AmbassadorPortal /></Suspense></ProtectedRoute>} />
       {import.meta.env.DEV && <Route path="/portal-preview" element={<Suspense fallback={null}><AmbassadorPortal preview /></Suspense>} />}
+      {import.meta.env.DEV && <Route path="/creative-canvas-preview" element={<Suspense fallback={null}><CreativeCanvasPreview /></Suspense>} />}
       <Route path="/auth" element={<Suspense fallback={null}><Auth /></Suspense>} />
       <Route path="/intake/:orgId" element={<Suspense fallback={null}><IntakeForm /></Suspense>} />
       <Route path="/unsubscribe"   element={<Suspense fallback={null}><Unsubscribe /></Suspense>} />
@@ -127,6 +131,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Suspense fallback={null}><Dashboard /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/creative-canvas"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><CreativeCanvasProjects /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/creative-canvas/:canvasId"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><CreativeCanvasWorkspace /></Suspense>
           </ProtectedRoute>
         }
       />

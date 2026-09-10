@@ -32,6 +32,7 @@ import {
   Signature,
   Calculator,
   Handshake,
+  PenTool,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -58,6 +59,7 @@ const NAV_ITEMS = [
   // turning it on offered the portal to colleagues who have no workspace in it.
   { to: "/portal", labelKey: "nav.portal", icon: Handshake },
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/dashboard/creative-canvas", labelKey: "nav.creativeCanvas", icon: PenTool },
   { to: "/skills", labelKey: "nav.skills", icon: Zap },
   { to: "/agents", labelKey: "nav.agents", icon: Bot },
   { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
@@ -126,6 +128,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             if (to === "/workspace")    return perms.canAccessWorkspace;
             if (to === "/skills")       return perms.canAccessSkills;
             if (to === "/intake")       return perms.canAccessIntake;
+            if (to === "/dashboard/creative-canvas") return perms.canAccessCreativeCanvas;
             // Absent until membership is confirmed, which also keeps the link
             // hidden wherever the portal schema is not deployed: the lookup
             // simply fails and nobody is offered a door that opens on nothing.

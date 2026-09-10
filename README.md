@@ -2,6 +2,10 @@
 
 Internal and public-facing marketing tools built with React, TypeScript, and Vite.
 
+## LV Creative Canvas™
+
+The authenticated `/dashboard/creative-canvas` workspace connects brand strategy, references, creative directions, AI-assisted copy and imagery, decisions, version lineage, usage, and export in a normalized LV scene rendered with React Flow Community Edition. See the [architecture, setup, security, provider, and admin guide](docs/creative-canvas/README.md) and [manual QA checklist](docs/creative-canvas/MANUAL_QA.md).
+
 ## Motion Palette
 
 Motion Palette is an authenticated, browser-only editor for detecting and replacing colors in Lottie/Bodymovin JSON animations. Start the suite with `npm install` and `npm run dev`, sign in, then open `/motion-palette` or choose **Motion Palette** in the sidebar's tools section.
