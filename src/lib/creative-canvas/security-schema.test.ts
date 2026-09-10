@@ -36,9 +36,20 @@ describe("creative canvas database security contract", () => {
   it("keeps signed assets private and scoped by organization/project path", () => {
     expect(sql).toMatch(/'creative-canvas-assets'.*false/s);
     // A malformed path segment must deny rather than raise 22P02 inside a policy.
-    expect(sql).toContain("public.creative_path_uuid((storage.foldername(name))[2])");
+    expect(sql).toContain("public.creative_path_uuid((storage.foldername(storage.objects.name))[2])");
     expect(sql).not.toContain("storage.foldername(name))[2]::uuid");
-    expect(sql).toContain("p.org_id::text = (storage.foldername(name))[1]");
+  });
+
+  it("qualifies the storage path column so it cannot bind to projects.name", () => {
+    // `public.projects` also has a `name` column. Left unqualified inside the
+    // insert policy's subquery, `name` resolved to the project title — which has
+    // no slashes — so foldername returned an empty array and every upload was
+    // refused. Both halves of the fix are pinned here.
+    const insertPolicy = sql.slice(sql.indexOf("create policy creative_canvas_storage_insert"));
+    const body = insertPolicy.slice(0, insertPolicy.indexOf(");"));
+    expect(body).toContain("storage.foldername(storage.objects.name)");
+    expect(body).not.toMatch(/foldername\(name\)/);
+    expect(body).toContain("projects proj");
   });
 
   it("preserves idempotency, lineage, failed generations, and server-owned usage", () => {

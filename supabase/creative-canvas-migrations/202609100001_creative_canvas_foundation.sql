@@ -354,18 +354,26 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('creative-canvas-assets', 'creative-canvas-assets', false, 26214400, array['image/png', 'image/jpeg', 'image/webp'])
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
+-- `name` is written as `storage.objects.name` throughout. Unqualified, the
+-- reference inside the insert policy's subquery bound to `public.projects.name`
+-- instead — the project's title, which has no slashes — so `foldername` returned
+-- an empty array, the org check could never match, and every upload was refused.
 create policy creative_canvas_storage_select on storage.objects for select using (
   bucket_id = 'creative-canvas-assets'
-  and public.can_view_creative_project(public.creative_path_uuid((storage.foldername(name))[2]))
+  and public.can_view_creative_project(public.creative_path_uuid((storage.foldername(storage.objects.name))[2]))
 );
 create policy creative_canvas_storage_insert on storage.objects for insert with check (
   bucket_id = 'creative-canvas-assets'
-  and public.can_edit_creative_project(public.creative_path_uuid((storage.foldername(name))[2]))
-  and exists (select 1 from public.projects p where p.id = public.creative_path_uuid((storage.foldername(name))[2]) and p.org_id::text = (storage.foldername(name))[1])
+  and public.can_edit_creative_project(public.creative_path_uuid((storage.foldername(storage.objects.name))[2]))
+  and exists (
+    select 1 from public.projects proj
+    where proj.id = public.creative_path_uuid((storage.foldername(storage.objects.name))[2])
+      and proj.org_id::text = (storage.foldername(storage.objects.name))[1]
+  )
 );
 create policy creative_canvas_storage_delete on storage.objects for delete using (
   bucket_id = 'creative-canvas-assets'
-  and public.creative_project_role(public.creative_path_uuid((storage.foldername(name))[2])) in ('owner_admin', 'creative_director')
+  and public.creative_project_role(public.creative_path_uuid((storage.foldername(storage.objects.name))[2])) in ('owner_admin', 'creative_director')
 );
 
 commit;
