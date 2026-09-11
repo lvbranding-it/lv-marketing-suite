@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { COMMANDS } from "./catalog";
-import { UGC_COMMANDS } from "./ugc";
 import { buildCommandRequest, checkCommand, consentRequirement, defaultValues, findCommand, type CommandSelectionItem } from "./registry";
 
 const context = { selectionTitles: [], selectionText: [], brandName: "LV Branding", language: "en" };
@@ -12,8 +11,9 @@ const live = () => ugc().filter((command) => command.status === "live");
 
 describe("the UGC category", () => {
   it("registers every command the brief listed", () => {
-    expect(UGC_COMMANDS).toHaveLength(35);
-    expect(live().length).toBeGreaterThanOrEqual(10);
+    // The count that matters is the category, not which module holds them.
+    expect(ugc()).toHaveLength(35);
+    expect(live().length).toBeGreaterThanOrEqual(27);
   });
 
   it("declares a mode on every UGC command", () => {

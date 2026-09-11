@@ -61,7 +61,7 @@ export default function CommandPanel({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] gap-0 sm:max-w-lg">
         <DialogHeader className="border-b pb-4">
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex flex-wrap items-center gap-2 pr-8">
             <Slash size={15} className="text-[#CB2039]" />{command.name}
             <code className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">/{command.trigger}</code>
           </DialogTitle>

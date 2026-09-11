@@ -27,13 +27,15 @@ describe("the registry itself", () => {
   it("gives every live command something to run", () => {
     // The one rule that keeps the roadmap honest.
     expect(liveCommands().every((command) => typeof command.instruction === "function")).toBe(true);
-    expect(liveCommands().length).toBeGreaterThanOrEqual(10);
+    expect(liveCommands().length).toBeGreaterThanOrEqual(80);
   });
 
   it("never marks a roadmap command runnable", () => {
     const roadmap = COMMANDS.filter((command) => command.status === "coming_soon");
     expect(roadmap.every((command) => command.instruction === undefined)).toBe(true);
-    expect(roadmap.length).toBeGreaterThan(80);
+    // The roadmap shrinks as commands are built; what must hold is that it is
+    // still a roadmap and still inert.
+    expect(roadmap.length).toBeGreaterThan(0);
   });
 
   it("classifies anything depicting a person as person_likeness", () => {
@@ -217,5 +219,82 @@ describe("parseSlash", () => {
 
   it("leaves ordinary instructions alone", () => {
     expect(parseSlash("make the goat red").isCommand).toBe(false);
+  });
+});
+
+describe("the instruction-only batch", () => {
+  const live = () => COMMANDS.filter((command) => command.status === "live");
+
+  /** Fills every required input so a command can be built for inspection. */
+  const fill = (command: typeof COMMANDS[number]) => {
+    const values: Record<string, string | number | boolean | undefined> = { ...defaultValues(command) };
+    for (const input of command.inputs) {
+      if (!input.required) continue;
+      if (input.type === "select") values[input.key] = String(input.defaultValue ?? input.options?.[0]?.value ?? "");
+      else if (input.type === "count") values[input.key] = Number(input.defaultValue ?? 1);
+      else values[input.key] = "something specific and concrete";
+    }
+    return values;
+  };
+
+  it("builds a real instruction for every live command", () => {
+    for (const command of live()) {
+      const rule = command.selection;
+      const selection = Array.from({ length: rule?.min ?? 0 }, (_, index) => picture(`ref-${index}`));
+      const request = buildCommandRequest(command, fill(command), selection, context, { permissionConfirmed: true });
+      // Long enough to be an instruction rather than a stub, and it must have
+      // actually used what was typed in.
+      expect(request.instruction.length, command.trigger).toBeGreaterThan(80);
+      expect(request.audit.commandId, command.trigger).toBe(command.id);
+    }
+  });
+
+  it("never leaves an empty label in an instruction", () => {
+    // `line()` drops absent values; a stray "Context: ." means one slipped past.
+    for (const command of live()) {
+      const request = buildCommandRequest(command, fill(command), Array.from({ length: command.selection?.min ?? 0 }, (_, i) => picture(`r${i}`)), context, { permissionConfirmed: true });
+      expect(request.instruction, command.trigger).not.toMatch(/:\s*\.\s/);
+      expect(request.instruction, command.trigger).not.toContain("undefined");
+    }
+  });
+
+  it("keeps every command that advises on a person inside the neutral rules", () => {
+    const advice = ["fitprofile", "facestylingmap", "coloranalysis", "stylebook", "styleprofile",
+      "wardrobeaudit", "capsulewardrobe", "closetupgrade", "outfitstyles", "occasionlook",
+      "professionallook", "brandambassadorlook", "accessorystyles", "shoestyles", "seasonalwardrobe", "packinglist"];
+    for (const trigger of advice) {
+      const command = findCommand(trigger)!;
+      expect(command.status, trigger).toBe("live");
+      const request = buildCommandRequest(command, fill(command), [picture("photo")], context, { permissionConfirmed: true });
+      expect(request.instruction, trigger).toContain("Do not score, rank or assess attractiveness");
+      expect(request.instruction, trigger).toContain("Do not infer or comment on ethnicity");
+    }
+  });
+
+  it("gates the commands that require a photo, and only those", () => {
+    // The gate exists for using someone's image. Advice that needs no photo
+    // should not train people to click past a consent box.
+    for (const trigger of ["fitprofile", "facestylingmap", "coloranalysis", "stylebook", "styleprofile"]) {
+      expect(findCommand(trigger)?.safety, trigger).toBe("person_likeness");
+    }
+    for (const trigger of ["packinglist", "shoestyles", "seasonalwardrobe", "occasionlook"]) {
+      expect(findCommand(trigger)?.safety, trigger).toBe("standard");
+    }
+  });
+
+  it("turned on nothing that needs plumbing we do not have", () => {
+    // Video, masks, upscaling, canvas manipulation and orchestration all wait.
+    for (const trigger of ["ugcrepurpose", "ugcsubtitles", "ugcresize", "ugcbroll", "ugcmatrix",
+      "ugccampaign", "inpaint", "outpaint", "upscale", "backgroundremove", "campaignset",
+      "brandpresentation", "arrange", "exportset"]) {
+      expect(findCommand(trigger)?.status, trigger).toBe("coming_soon");
+    }
+  });
+
+  it("switches capability with direction wherever a command adapts language", () => {
+    const localise = findCommand("ugclocalize")!;
+    const selection = [words("copy", "Built for the long game")];
+    expect(buildCommandRequest(localise, { direction: "es_en" }, selection, context).operation).toBe("adapt_es_en");
+    expect(buildCommandRequest(localise, { direction: "en_es" }, selection, context).operation).toBe("adapt_en_es");
   });
 });

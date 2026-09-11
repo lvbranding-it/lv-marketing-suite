@@ -66,7 +66,7 @@ export default function CommandPalette({
         <DialogTitle className="sr-only">Creative commands</DialogTitle>
         <DialogDescription className="sr-only">Search the LV Creative Command System by name, task or category.</DialogDescription>
 
-        <div className="flex items-center gap-2 border-b px-4 py-3">
+        <div className="flex items-center gap-2 border-b py-3 pl-4 pr-12">
           <Search size={16} className="shrink-0 text-muted-foreground" />
           <Input
             autoFocus

@@ -1,4 +1,8 @@
 import { UGC_COMMANDS } from "./ugc";
+import { UGC_TEXT_COMMANDS } from "./ugc-text";
+import { COPY_COMMANDS } from "./copy";
+import { PEOPLE_COMMANDS } from "./people";
+import { BRAND_COMMANDS } from "./brand";
 import { ASPECT_INPUT, countInput, type CommandCategory, type CommandDefinition, type CommandSafety, type CommandValues } from "./types";
 
 /**
@@ -425,28 +429,12 @@ const LIVE: CommandDefinition[] = [
 
 const ROADMAP: CommandDefinition[] = [
   // People & Style
-  soon("outfitstyles", "people", "Outfit directions", "Outfit directions for an occasion, profession or aesthetic.", { safety: "person_likeness" }),
-  soon("stylebook", "people", "Style book", "A personalised style guide built from references.", { safety: "person_likeness" }),
   soon("glassestryon", "people", "Eyewear try-on", "Visualise eyewear alternatives.", { safety: "person_likeness" }),
   soon("haircolor", "people", "Hair colour", "Test natural or creative hair colours.", { aliases: ["haircolour"], safety: "person_likeness" }),
   soon("beardstyles", "people", "Beard styles", "Explore beard and facial-hair variations.", { safety: "person_likeness" }),
   soon("groomingstyles", "people", "Grooming", "Broader grooming recommendations.", { safety: "person_likeness" }),
-  soon("coloranalysis", "people", "Colour analysis", "An appearance-based colour palette.", { aliases: ["colouranalysis"], safety: "person_likeness" }),
-  soon("fitprofile", "people", "Fit profile", "Garment cuts and proportions from stated preferences and visible fit.", { aliases: ["bodytype"], safety: "person_likeness" }),
-  soon("facestylingmap", "people", "Face styling map", "Eyewear, hair and grooming shapes from visible facial geometry.", { aliases: ["faceanalysis"], safety: "person_likeness" }),
-  soon("styleprofile", "people", "Style profile", "A reusable personal-style context.", { safety: "person_likeness" }),
   soon("wardrobe", "people", "Wardrobe", "Organise uploaded clothing into a visual wardrobe.", { safety: "person_likeness" }),
-  soon("wardrobeaudit", "people", "Wardrobe audit", "Coverage, repetition and gaps in a wardrobe.", { safety: "person_likeness" }),
-  soon("capsulewardrobe", "people", "Capsule wardrobe", "A limited, coordinated wardrobe.", { safety: "person_likeness" }),
-  soon("closetupgrade", "people", "Closet upgrade", "Strategic additions to an existing wardrobe.", { safety: "person_likeness" }),
-  soon("occasionlook", "people", "Occasion look", "A look for a specific event.", { safety: "person_likeness" }),
-  soon("professionallook", "people", "Professional look", "Wardrobe options for professional positioning.", { safety: "person_likeness" }),
-  soon("brandambassadorlook", "people", "Ambassador look", "Align a person's appearance with a brand or campaign.", { safety: "person_likeness" }),
-  soon("accessorystyles", "people", "Accessories", "Watches, jewellery, ties, scarves and other accessories.", { safety: "person_likeness" }),
-  soon("shoestyles", "people", "Footwear", "Footwear recommendations.", { safety: "person_likeness" }),
   soon("outfitvariations", "people", "Outfit variations", "Controlled alternatives from one approved look.", { safety: "person_likeness" }),
-  soon("seasonalwardrobe", "people", "Seasonal wardrobe", "Wardrobe adapted by season and location.", { safety: "person_likeness" }),
-  soon("packinglist", "people", "Packing list", "A visual travel wardrobe and packing plan.", { safety: "person_likeness" }),
 
   // Photography
   soon("backgroundremove", "photography", "Remove background", "Create a transparent-background asset.", { aliases: ["cutout", "transparent"] }),
@@ -467,8 +455,6 @@ const ROADMAP: CommandDefinition[] = [
   soon("stylematch", "photography", "Style match", "Match the visual treatment of a reference."),
   soon("subjectisolate", "photography", "Isolate subject", "Separate a subject from the scene."),
   soon("contactsheet", "photography", "Contact sheet", "Arrange selected images into a review sheet."),
-  soon("selectbest", "photography", "Select best", "Critique selected images against the project brief."),
-  soon("shotlist", "photography", "Shot list", "The missing photographs a campaign still needs."),
 
   // Product & Commercial
   soon("packshot", "product", "Packshot", "A clean catalogue-style presentation."),
@@ -489,41 +475,14 @@ const ROADMAP: CommandDefinition[] = [
   soon("campaignset", "product", "Campaign set", "Brand context to key visual to channel variations to copy, in one frame."),
 
   // Brand & Campaign
-  soon("creativedirections", "brand", "Creative directions", "Multiple strategic creative territories."),
   soon("brandapply", "brand", "Apply brand", "Apply the project's visual system to an asset."),
-  soon("brandcheck", "brand", "Brand check", "Evaluate an asset against brand rules."),
-  soon("paletteextract", "brand", "Extract palette", "Extract and organise a colour system.", { aliases: ["extractcolors"] }),
-  soon("paletteexplore", "brand", "Explore palettes", "Strategic palette alternatives."),
-  soon("typographypairing", "brand", "Type pairing", "Develop typography combinations.", { aliases: ["typepairing", "fonts"] }),
-  soon("campaignconcepts", "brand", "Campaign concepts", "Campaign platforms and narratives."),
   soon("keyvisual", "brand", "Key visual", "A central campaign visual."),
-  soon("visualsystem", "brand", "Visual system", "Expand one concept into a repeatable design language."),
   soon("socialkit", "brand", "Social kit", "A coordinated social-media asset system."),
   soon("advariations", "brand", "Ad variations", "Controlled campaign alternatives."),
   soon("formatadapt", "brand", "Format adapt", "Adapt approved artwork into channel-specific formats."),
   soon("brandpresentation", "brand", "Brand presentation", "Turn selected frames into a client presentation.", { aliases: ["presentation", "deck"] }),
-  soon("compareconcepts", "brand", "Compare concepts", "Evaluate directions against strategic criteria.", { aliases: ["compare"] }),
-  soon("finalartcheck", "brand", "Final art check", "Composition, copy, brand rules and production readiness.", { aliases: ["preflight"] }),
 
   // Copy & Strategy
-  soon("tagline", "copy", "Tagline", "Brand or campaign taglines."),
-  soon("caption", "copy", "Caption", "Channel-appropriate captions."),
-  soon("cta", "copy", "Call to action", "Develop calls to action."),
-  soon("adcopy", "copy", "Ad copy", "Advertising variations."),
-  soon("brandvoice", "copy", "Brand voice", "Define or apply a voice system."),
-  soon("positioning", "copy", "Positioning", "Positioning alternatives."),
-  soon("valueproposition", "copy", "Value proposition", "Clarify the commercial value proposition.", { aliases: ["valueroposition", "valueprop"] }),
-  soon("creativebrief", "copy", "Creative brief", "Build a structured creative brief.", { aliases: ["brief"] }),
-  soon("rationale", "copy", "Rationale", "The strategic logic behind a direction."),
-  soon("storyboard", "copy", "Storyboard", "Convert a concept or script into visual beats."),
-  soon("script", "copy", "Script", "Generate or refine video scripts."),
-  soon("copyvariants", "copy", "Copy variants", "Controlled alternatives."),
-  soon("shorten", "copy", "Shorten", "Reduce copy while preserving intent."),
-  soon("expand", "copy", "Expand", "Develop a selected idea further."),
-  soon("tonechange", "copy", "Change tone", "Adjust voice without changing the message."),
-  soon("proofread", "copy", "Proofread", "Correct grammar and clarity."),
-  soon("contentseries", "copy", "Content series", "Expand one idea into multiple pieces."),
-  soon("campaignmatrix", "copy", "Campaign matrix", "Map audience, message, channel and creative variation."),
 
   // Canvas & Production
   soon("arrange", "canvas", "Arrange", "Lay selected objects out on a grid."),
@@ -533,7 +492,10 @@ const ROADMAP: CommandDefinition[] = [
   soon("cleancanvas", "canvas", "Tidy canvas", "Find failed, orphaned and duplicate objects."),
 ];
 
-export const COMMANDS: CommandDefinition[] = [...LIVE, ...UGC_COMMANDS, ...ROADMAP];
+export const COMMANDS: CommandDefinition[] = [
+  ...LIVE, ...COPY_COMMANDS, ...PEOPLE_COMMANDS, ...BRAND_COMMANDS,
+  ...UGC_COMMANDS, ...UGC_TEXT_COMMANDS, ...ROADMAP,
+];
 
 /** Commands that can actually run. */
 export const liveCommands = () => COMMANDS.filter((command) => command.status === "live");
