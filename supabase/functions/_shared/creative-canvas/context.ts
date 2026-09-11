@@ -12,6 +12,18 @@ const MAX_CONTEXT_CHARS = 36_000;
  * and only the context that can be seen.
  */
 const MAX_IMAGE_PROMPT_CHARS = 2_400;
+/**
+ * What the output is, as opposed to what to do.
+ *
+ * Handing two pictures to the edits endpoint and describing a change asks the
+ * model to reason about a set, and it will sometimes answer with the set: a
+ * diptych, a before-and-after, the reference tiled beside the result. Nothing
+ * in an instruction like "replace the clothing" says how many images come back,
+ * so this says it. A future command that genuinely wants a grid will need to
+ * opt out of this line rather than rely on its absence.
+ */
+const SINGLE_OUTPUT = "Return exactly one finished image. Do not produce a collage, grid, contact sheet, split screen, side-by-side layout or before-and-after pair, do not divide the frame into panels, and do not include the reference images themselves anywhere in the output.";
+
 /** Brand fields that describe how a picture should look, not how copy reads. */
 const VISUAL_BRAND_FIELDS = [
   "visualPrinciples", "approvedColors", "requiredElements", "prohibitedElements", "typography", "brandName",
@@ -161,5 +173,7 @@ function buildImagePrompt(
     .slice(0, 3);
   if (direction.length) parts.push(`Creative direction — ${direction.join("; ")}`);
 
-  return parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS);
+  // Last, and never trimmed away: the cap applies to everything before it.
+  const body = parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS - SINGLE_OUTPUT.length - 2);
+  return `${body}\n\n${SINGLE_OUTPUT}`;
 }

@@ -7,6 +7,10 @@ const TYPE_LABELS: Record<CreativeNodeType, string> = {
   text: "Text block", image: "Image", reference: "Reference", brand_context: "Brand context",
   creative_direction: "Creative direction", palette: "Color palette", typography: "Typography",
   conversation: "AI conversation", decision: "Decision", export_frame: "Export frame", generation: "Generation",
+  creator_profile: "Creator profile", ugc_brief: "UGC brief", hook_bank: "Hook bank", ugc_script: "Script",
+  talking_points: "Talking points", shot_list: "Shot list", storyboard: "Storyboard", raw_footage: "Raw footage",
+  transcript: "Transcript", claim_disclosure: "Claims & disclosure", platform_adaptation: "Platform adaptation",
+  performance_result: "Performance", usage_rights: "Usage rights",
 };
 
 const NodeActions = createContext<{ updateNodeData: (id: string, values: Partial<CreativeNodeData>) => void }>({ updateNodeData: () => undefined });
@@ -50,4 +54,17 @@ export const creativeNodeTypes: NodeTypes = {
   decision: CreativeNodeCard,
   generation: CreativeNodeCard,
   export_frame: CreativeNodeCard,
+  creator_profile: CreativeNodeCard,
+  ugc_brief: CreativeNodeCard,
+  hook_bank: CreativeNodeCard,
+  ugc_script: CreativeNodeCard,
+  talking_points: CreativeNodeCard,
+  shot_list: CreativeNodeCard,
+  storyboard: CreativeNodeCard,
+  raw_footage: CreativeNodeCard,
+  transcript: CreativeNodeCard,
+  claim_disclosure: CreativeNodeCard,
+  platform_adaptation: CreativeNodeCard,
+  performance_result: CreativeNodeCard,
+  usage_rights: CreativeNodeCard,
 };

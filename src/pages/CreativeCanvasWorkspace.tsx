@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import { toPng } from "html-to-image";
 import { addEdge, Background, BackgroundVariant, Controls, getNodesBounds, getViewportForBounds, MiniMap, ReactFlow, type Connection, type ReactFlowInstance, type Viewport, useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowDownToLine, ArrowLeft, ArrowUpToLine, Bot, Check, ChevronLeft, ChevronRight, CircleDollarSign, Cloud, CloudOff, Download, FileText, Focus, Grid3x3, Group, HelpCircle, Image as ImageIcon, Layers3, Loader2, Maximize2, Palette, Plus, Save, Sparkles, Type, Ungroup, Upload, WifiOff } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowUpToLine, Bot, Check, ChevronLeft, ChevronRight, CircleDollarSign, Cloud, CloudOff, Download, FileText, Focus, Grid3x3, Group, HelpCircle, Image as ImageIcon, Layers3, Loader2, Maximize2, Palette, Plus, Captions, ClipboardList, FileCheck, LayoutGrid, ListOrdered, MessageSquare, Save, ShieldAlert, Slash, Smartphone, Sparkles, TrendingUp, Type, Ungroup, Upload, UserRound, Video, WifiOff, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,17 +18,21 @@ import { CreativeNodeActionsProvider, creativeNodeTypes } from "@/components/cre
 import SeriesDialog, { type SeriesCandidate } from "@/components/creative-canvas/SeriesDialog";
 import CanvasHelpDialog from "@/components/creative-canvas/CanvasHelpDialog";
 import ConnectionInspector from "@/components/creative-canvas/ConnectionInspector";
+import CommandPalette from "@/components/creative-canvas/CommandPalette";
+import CommandPanel from "@/components/creative-canvas/CommandPanel";
 import { toast } from "@/hooks/use-toast";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useBrandContext, useCreativeAssets, useCreativeCanvas, useCreativeGenerations, useCreateDecision, useCreativeProviderStatus, useCreativeUsage, useGenerateCreative, useSaveBrandContext, useSaveCreativeCanvas, useUploadCreativeAsset } from "@/hooks/useCreativeCanvas";
 import { edgeAppearance, edgeKindOf, flowToScene, sceneToFlow, type CreativeFlowEdge, type CreativeFlowNode, type CreativeNodeData } from "@/lib/creative-canvas/react-flow-adapter";
 import { createEmptyScene, makeIdempotencyKey, restoreScene, serializeScene, type CreativeSceneDocument } from "@/lib/creative-canvas/scene";
 import { collectInheritedContext, sequencePosition, type CreativeEdgeKind } from "@/lib/creative-canvas/graph";
-import { runSeries, type SeriesPlan } from "@/lib/creative-canvas/series";
+import { runPaced, runSeries, type SeriesPlan } from "@/lib/creative-canvas/series";
+import { buildCommandRequest, parseSlash, type CommandSelectionItem } from "@/lib/creative-canvas/commands/registry";
+import type { CommandDefinition, CommandValues } from "@/lib/creative-canvas/commands/types";
 import { exportFileName, isArtworkNode, planExport } from "@/lib/creative-canvas/export-batch";
 import type { BrandContext, CreativeDecision, CreativeNodeType, CreativeOperation, CreativeProvider } from "@/lib/creative-canvas/types";
 
-const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Type; title: string; body: string; accent?: string; size?: [number, number] }> = [
+const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Type; title: string; body: string; accent?: string; size?: [number, number]; group?: "ugc" }> = [
   { type: "text", label: "Text", icon: Type, title: "Headline concept", body: "Write directly in this block." },
   { type: "reference", label: "Reference", icon: ImageIcon, title: "Visual reference", body: "Add why this reference matters." },
   { type: "brand_context", label: "Brand", icon: Layers3, title: "Brand context", body: "Open Brand Context in the right panel to define the project source of truth.", size: [360, 250] },
@@ -38,6 +42,26 @@ const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Ty
   { type: "conversation", label: "AI chat", icon: Bot, title: "AI conversation", body: "Preserve the instruction and the visible assistant response here." },
   { type: "decision", label: "Decision", icon: Check, title: "Decision", body: "Status, owner, rationale, and next revision." },
   { type: "export_frame", label: "Export", icon: Maximize2, title: "Presentation frame", body: "Arrange approved work inside this export area.", size: [900, 600] },
+
+  // UGC production blocks. Each opens with the fields that block is for, so a
+  // half-filled card still says what is missing rather than sitting blank.
+  { type: "creator_profile", group: "ugc", label: "Creator", icon: UserRound, title: "Creator profile", size: [380, 460], body: [
+    "Name:", "Market and language:", "Content style:", "Approved products:", "Availability:", "Rate:",
+    "Contract status:", "Usage-rights period:", "Whitelisting permitted:", "Raw-footage rights:",
+    "Exclusivity:", "Allowed platforms:",
+  ].join("\n") },
+  { type: "ugc_brief", group: "ugc", label: "Brief", icon: ClipboardList, title: "UGC brief", size: [420, 420], body: "Objective:\n\nAudience:\n\nProduct truth:\n\nMust say:\n\nMust not say:\n\nDeliverables:\n\nDue:" },
+  { type: "hook_bank", group: "ugc", label: "Hooks", icon: Zap, title: "Hook bank", size: [380, 360], body: "One hook per line. Mark the ones that have been tested." },
+  { type: "ugc_script", group: "ugc", label: "Script", icon: FileText, title: "Script", size: [420, 440], body: "HOOK (0–3s):\n\nBODY:\n\nPROOF:\n\nCTA:" },
+  { type: "talking_points", group: "ugc", label: "Talking points", icon: MessageSquare, title: "Talking points", size: [380, 360], body: "Flexible points rather than a script. The creator says these in their own words." },
+  { type: "shot_list", group: "ugc", label: "Shots", icon: ListOrdered, title: "Shot list", size: [400, 400], body: "1. Shot — framing — action — duration\n2.\n3." },
+  { type: "storyboard", group: "ugc", label: "Storyboard", icon: LayoutGrid, title: "Storyboard", size: [420, 400], body: "Beat by beat: what is on screen, what is said, how long." },
+  { type: "raw_footage", group: "ugc", label: "Footage", icon: Video, title: "Raw footage", size: [380, 300], body: "Where the footage lives, who shot it and when. Canvas stores the reference, not the video file." },
+  { type: "transcript", group: "ugc", label: "Transcript", icon: Captions, title: "Transcript", size: [420, 420], body: "The creator's actual words, verbatim. Edits to this are cuts, never rewrites." },
+  { type: "claim_disclosure", group: "ugc", label: "Claims", icon: ShieldAlert, title: "Claims & disclosure", size: [400, 380], body: "Claims made:\n\nEvidence for each:\n\nDisclosure required:\n\nReviewed by:" },
+  { type: "platform_adaptation", group: "ugc", label: "Platforms", icon: Smartphone, title: "Platform adaptation", size: [380, 340], body: "Reels:\nTikTok:\nShorts:\nPaid:" },
+  { type: "performance_result", group: "ugc", label: "Results", icon: TrendingUp, title: "Performance", size: [380, 320], body: "Placement:\nSpend:\nViews:\nHold rate:\nConversions:\nWhat it suggests:" },
+  { type: "usage_rights", group: "ugc", label: "Rights", icon: FileCheck, title: "Usage rights", size: [380, 360], body: "Owner:\nGranted for:\nTerritory:\nPeriod:\nPaid media permitted:\nWhitelisting:\nExpires:" },
 ];
 
 /**
@@ -145,7 +169,7 @@ export default function CreativeCanvasWorkspace() {
   const [nodes, setNodes, onNodesChange] = useNodesState<CreativeFlowNode>([]); const [edges, setEdges, onEdgesChange] = useEdgesState<CreativeFlowEdge>([]); const [flow, setFlow] = useState<ReactFlowInstance<CreativeFlowNode, CreativeFlowEdge> | null>(null);
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 }); const nodesRef = useRef(nodes); const edgesRef = useRef(edges); nodesRef.current = nodes; edgesRef.current = edges;
   const hydrated = useRef(false); const lastSavedScene = useRef<string>(""); const loadedCanvasId = useRef<string | null>(null); const history = useRef<{ past: FlowSnapshot[]; future: FlowSnapshot[] }>({ past: [], future: [] }); const clipboard = useRef<CreativeFlowNode[]>([]);
-  const [leftOpen, setLeftOpen] = useState(true); const [rightOpen, setRightOpen] = useState(true); const [pendingScene, setPendingScene] = useState<CreativeSceneDocument | null>(null); const [saveState, setSaveState] = useState<"saved" | "unsaved" | "saving" | "error" | "offline">("saved"); const [exporting, setExporting] = useState<"png" | "pdf" | null>(null); const [exportPreset, setExportPreset] = useState("actual"); const [seriesOpen, setSeriesOpen] = useState(false); const [helpOpen, setHelpOpen] = useState(false); const [seriesProgress, setSeriesProgress] = useState<{ done: number; total: number } | null>(null); const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [leftOpen, setLeftOpen] = useState(true); const [rightOpen, setRightOpen] = useState(true); const [pendingScene, setPendingScene] = useState<CreativeSceneDocument | null>(null); const [saveState, setSaveState] = useState<"saved" | "unsaved" | "saving" | "error" | "offline">("saved"); const [exporting, setExporting] = useState<"png" | "pdf" | null>(null); const [exportPreset, setExportPreset] = useState("actual"); const [seriesOpen, setSeriesOpen] = useState(false); const [helpOpen, setHelpOpen] = useState(false); const [ugcOpen, setUgcOpen] = useState(false); const [paletteOpen, setPaletteOpen] = useState(false); const [paletteQuery, setPaletteQuery] = useState(""); const [activeCommand, setActiveCommand] = useState<CommandDefinition | null>(null); const [commandProgress, setCommandProgress] = useState<{ done: number; total: number } | null>(null); const [seriesProgress, setSeriesProgress] = useState<{ done: number; total: number } | null>(null); const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [instruction, setInstruction] = useState(""); const [operation, setOperation] = useState<CreativeOperation>("campaign_concept"); const [provider, setProvider] = useState<CreativeProvider>("auto"); const [brandDraft, setBrandDraft] = useState<BrandContext>({}); const fileInput = useRef<HTMLInputElement>(null);
   const selection = useMemo(() => nodes.filter((node) => node.selected), [nodes]); const edgeSelection = useMemo(() => edges.filter((edge) => edge.selected), [edges]); const assetUrls = useMemo(() => new Map(assets.filter((asset) => asset.signedUrl).map((asset) => [asset.id, asset.signedUrl!])), [assets]);
 
@@ -232,16 +256,7 @@ export default function CreativeCanvasWorkspace() {
   const applyDecision = async (decision: CreativeDecision) => { if (!canvas || selection.length !== 1) return; const node = selection[0]; try { await createDecision.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, targetType: node.data.assetId ? "asset" : "shape", targetId: node.data.assetId || node.id, decision }); updateNodeData(node.id, { status: decision }); toast({ description: `Marked ${decision.replace(/_/g, " ")}.` }); } catch (error) { toast({ title: "Decision was not recorded", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
   const runGeneration = async () => {
     if (!canvas || !instruction.trim()) return;
-    // Selecting pictures and sending none of them is never what was meant: the
-    // model would invent something from the words alone and charge for it.
-    if (isImageOperation && !referenceAssetIds.length && mutedArtwork > 0) {
-      toast({
-        title: "Those pictures are not being sent",
-        description: `${mutedArtwork === 1 ? "The selected picture has" : `All ${mutedArtwork} selected pictures have`} “Include in AI context” unticked, so the model would not see ${mutedArtwork === 1 ? "it" : "them"}. Tick the box on the card${mutedArtwork === 1 ? "" : "s"} and try again.`,
-        variant: "destructive",
-      });
-      return;
-    }
+    if (imageBlocker) { toast({ ...imageBlocker, variant: "destructive" }); return; }
     const point = canvasCenter(); const originalInstruction = instruction.trim(); const placeholderId = addNode("generation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI generation", body: `Provider: ${provider}\n\n${originalInstruction}`, status: "processing", width: 360, height: 240 }, point); try { const result = await generate.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, operation, instruction: originalInstruction, provider, idempotencyKey: makeIdempotencyKey(canvas.id, operation), selectedNodes: selectedContext, brandContext: brandDraft, referenceAssetIds, language, placement: point }); setNodes((current) => current.filter((node) => node.id !== placeholderId)); if (result.asset?.signedUrl) addNode("image", { title: "Generated image", body: originalInstruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: 480, height: 420 }, point); else addNode("conversation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI response", body: `Instruction\n${originalInstruction}\n\nResponse\n${result.generation.output_text ?? "Generation completed."}`, status: "generated", width: 420, height: 320 }, point); setInstruction(""); if (result.budget?.warning) toast({ title: "Canvas AI budget warning", description: `$${result.budget.monthTotalUsd.toFixed(2)} estimated this month of a $${result.budget.softLimitUsd.toFixed(2)} soft limit.` }); } catch (error) { updateNodeData(placeholderId, { status: "failed", body: `${originalInstruction}\n\n${error instanceof Error ? error.message : "Generation failed"}` }); toast({ title: "Generation failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
   /**
    * What the export buttons would produce right now.
@@ -289,6 +304,27 @@ export default function CreativeCanvasWorkspace() {
     () => artworkIn(selection).filter((node) => node.data.includeInContext === false).length,
     [artworkIn, selection],
   );
+  /**
+   * Why this image request cannot go out, in words, or null if it can.
+   *
+   * Editing needs something to edit. The server already refuses a request with
+   * no picture attached, but by then it is a 400 in a console rather than an
+   * answer, so the same rule is stated here where it can name the fix. A plain
+   * `generate_image` with nothing selected is left alone — that is text to
+   * image, which is a legitimate thing to ask for.
+   */
+  const imageBlocker = useMemo(() => {
+    if (!isImageOperation || referenceAssetIds.length) return null;
+    if (mutedArtwork > 0) return {
+      title: "Those pictures are not being sent",
+      description: `${mutedArtwork === 1 ? "The selected picture has" : `All ${mutedArtwork} selected pictures have`} “Include in AI context” unticked, so the model would not see ${mutedArtwork === 1 ? "it" : "them"}. Tick the box on the card${mutedArtwork === 1 ? "" : "s"} and try again.`,
+    };
+    if (operation === "edit_image") return {
+      title: "Nothing to edit",
+      description: "Select the picture you want to edit first. Edit image works on artwork already on the canvas — click the card, or ⌘-click to add a second picture to work from.",
+    };
+    return null;
+  }, [isImageOperation, mutedArtwork, operation, referenceAssetIds.length]);
 
   /** The objects on the canvas a series can be built from. */
   const seriesCandidates: SeriesCandidate[] = selection.map((node) => ({
@@ -356,6 +392,122 @@ export default function CreativeCanvasWorkspace() {
    * case is what a generated series needs — nine posts are nine deliverables,
    * and a contact sheet of them cannot be posted.
    */
+  /** What the panel and the registry need to know about the current selection. */
+  const commandSelection: CommandSelectionItem[] = selection.map((node) => ({
+    id: node.id,
+    nodeType: node.data.nodeType,
+    title: node.data.title,
+    text: node.data.body,
+    assetId: node.data.assetId || undefined,
+    includeInContext: node.data.includeInContext !== false,
+  }));
+  const commandContext = {
+    selectionTitles: selection.map((node) => node.data.title),
+    selectionText: selection.map((node) => node.data.body),
+    brandName: brandDraft?.brandName || canvas?.projects.client_name || undefined,
+    language,
+  };
+
+  /** Wraps finished work in an export frame, the way grouping does by hand. */
+  const frameNodes = useCallback((ids: string[], title: string) => {
+    if (ids.length < 2) return;
+    setNodes((current) => {
+      const children = current.filter((node) => ids.includes(node.id) && !node.parentId);
+      if (children.length < 2) return current;
+      const bounds = getNodesBounds(children);
+      const padding = 48;
+      const frame = makeNode("export_frame", { x: 0, y: 0 }, { title, body: "", width: bounds.width + padding * 2, height: bounds.height + padding * 2 });
+      frame.id = newId("frame");
+      frame.position = { x: bounds.x - padding, y: bounds.y - padding };
+      frame.zIndex = -1;
+      frame.selected = false;
+      return [frame, ...current.map((node) => ids.includes(node.id) && !node.parentId
+        ? { ...node, parentId: frame.id, extent: "parent" as const, position: { x: node.position.x - frame.position.x, y: node.position.y - frame.position.y }, selected: false, zIndex: 1 }
+        : node)];
+    });
+  }, [setNodes]);
+
+  /**
+   * Runs a command.
+   *
+   * Results are new objects placed clear of their sources and joined to them by
+   * an informing arrow, so a piece of work always shows what it came from. The
+   * source is never altered — an outfit transfer leaves the original photograph
+   * exactly where it was.
+   */
+  const runCommand = async (values: CommandValues, chosenProvider: CreativeProvider, permissionConfirmed: boolean) => {
+    const command = activeCommand;
+    if (!canvas || !command) return;
+
+    let request;
+    try {
+      request = buildCommandRequest(command, values, commandSelection, commandContext, { permissionConfirmed });
+    } catch (error) {
+      toast({ title: "Cannot run yet", description: error instanceof Error ? error.message : "Check the panel.", variant: "destructive" });
+      return;
+    }
+
+    const sourceIds = selection.map((node) => node.id);
+    const sourceBounds = selection.length ? getNodesBounds(selection) : null;
+    const aspect = request.aspect ?? "square";
+    const size = aspect === "portrait" ? [400, 520] : aspect === "landscape" ? [520, 360] : [440, 440];
+    const gap = 44;
+    const columns = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(request.runs))));
+    const origin = sourceBounds
+      ? { x: sourceBounds.x + sourceBounds.width + gap + size[0] / 2, y: sourceBounds.y + size[1] / 2 }
+      : canvasCenter();
+    const placeAt = (index: number) => ({
+      x: origin.x + (index % columns) * (size[0] + gap),
+      y: origin.y + Math.floor(index / columns) * (size[1] + gap),
+    });
+
+    const runId: string = crypto.randomUUID();
+    setCommandProgress({ done: 0, total: request.runs });
+    let done = 0;
+    const created: string[] = [];
+
+    const results = await runPaced(Array.from({ length: request.runs }, (_, index) => index), async (index) => {
+      const point = placeAt(index);
+      try {
+        const result = await generate.mutateAsync({
+          projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id,
+          operation: request.operation, instruction: request.instruction, provider: chosenProvider,
+          idempotencyKey: `${runId}-${index}`,
+          selectedNodes: selectedContext, brandContext: brandDraft,
+          referenceAssetIds: request.referenceAssetIds, language, placement: point,
+          aspect: request.aspect,
+          command: { commandId: request.audit.commandId, trigger: request.audit.trigger, values: request.audit.values as Record<string, unknown> },
+        });
+        const label = request.runs > 1 ? `${command.name} ${index + 1}` : command.name;
+        const id = result.asset?.signedUrl
+          ? addNode("image", { title: label, body: request.instruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: size[0], height: size[1] }, point)
+          : addNode("conversation", { title: label, body: `${request.instruction}\n\n${result.generation.output_text ?? "Completed."}`, status: "generated", width: 440, height: 360 }, point);
+        created.push(id);
+        // Visible lineage: every source informs what came out of it.
+        setEdges((current) => [...current, ...sourceIds.map((source) => ({
+          id: newId("edge"), source, target: id, type: "smoothstep",
+          data: { kind: "association" as const }, ...edgeAppearance("association"),
+        }))]);
+        return id;
+      } finally {
+        done += 1;
+        setCommandProgress({ done, total: request.runs });
+      }
+    }, { concurrency: 2, minSpacingMs: request.runs > 1 ? 6_500 : 0 });
+
+    setCommandProgress(null);
+    const failures = results.filter((entry) => entry.error).length;
+    if (created.length && command.placement === "frame") frameNodes(created, `${command.name} · ${new Date().toLocaleDateString()}`);
+    setActiveCommand(null);
+
+    if (!created.length) {
+      const first = results.find((entry) => entry.error)?.error;
+      toast({ title: `${command.name} failed`, description: first instanceof Error ? first.message : "Nothing was produced.", variant: "destructive" });
+      return;
+    }
+    toast({ description: `${command.name} produced ${created.length} result${created.length === 1 ? "" : "s"}${failures ? `; ${failures} failed.` : "."}` });
+  };
+
   const exportSelection = async (format: "png" | "pdf") => {
     if (!selection.length) { toast({ description: "Select one or more objects to export." }); return; }
     const preset = EXPORT_PRESETS.find((item) => item.value === exportPreset);
@@ -470,16 +622,18 @@ export default function CreativeCanvasWorkspace() {
   return <div className="creative-canvas-shell" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!flow || !event.dataTransfer.files.length) return; void upload(event.dataTransfer.files, flow.screenToFlowPosition({ x: event.clientX, y: event.clientY })); }}>
     <header className="creative-canvas-topbar"><div className="flex min-w-0 items-center gap-3"><Button asChild size="icon" variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white"><Link to="/dashboard/creative-canvas" aria-label="Back to Canvas projects"><ArrowLeft size={17} /></Link></Button><div className="h-5 w-px bg-white/10" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{canvas.projects.name}</p><p className="truncate text-[11px] text-white/45">{canvas.projects.client_name || "LV Branding internal"} · {canvas.name}</p></div></div><div className="flex items-center gap-2"><span className={`creative-save-state creative-save-state--${saveState}`}>{saveState === "saving" ? <Loader2 size={12} className="animate-spin" /> : saveState === "offline" ? <WifiOff size={12} /> : saveState === "error" ? <CloudOff size={12} /> : saveState === "saved" ? <Cloud size={12} /> : <Save size={12} />}{saveState}</span><Button size="icon" variant="ghost" className="h-8 w-8 text-white/55 hover:bg-white/10 hover:text-white" title="How nodes work" aria-label="How nodes work" onClick={() => setHelpOpen(true)}><HelpCircle size={16} /></Button><Select value={exportPreset} onValueChange={setExportPreset}><SelectTrigger className="h-8 w-[210px] border-white/10 bg-white/5 text-xs text-white" aria-label="Export size"><SelectValue /></SelectTrigger><SelectContent>{PRESET_GROUPS.map((group) => { const items = EXPORT_PRESETS.filter((preset) => preset.group === group); return items.length ? <SelectGroup key={group}><SelectLabel>{group}</SelectLabel>{items.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}</SelectGroup> : null; })}</SelectContent></Select><Button size="sm" variant="ghost" className="text-white/70" title={batchCount ? `Export ${batchCount} pieces as a ZIP of PNGs` : "Export the selected artwork as a PNG"} disabled={Boolean(exporting)} onClick={() => void exportSelection("png")}>{exporting === "png" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Download size={14} className="mr-1.5" />}{exporting === "png" && exportProgress ? `${exportProgress.done}/${exportProgress.total}` : batchCount ? `ZIP · ${batchCount}` : "PNG"}</Button><Button size="sm" className="bg-[#CB2039]" title={batchCount ? `Export ${batchCount} pieces as a ${batchCount}-page PDF` : "Export the selected artwork as a PDF"} disabled={Boolean(exporting)} onClick={() => void exportSelection("pdf")}>{exporting === "pdf" && <Loader2 size={14} className="mr-1.5 animate-spin" />}{exporting === "pdf" && exportProgress ? `${exportProgress.done}/${exportProgress.total}` : batchCount ? `PDF · ${batchCount} pages` : "Export PDF"}</Button></div></header>
     <div className="creative-canvas-stage">
-      <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>{leftOpen && <div className="space-y-1 p-2"><p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>{NODE_TOOLS.map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" onClick={() => addNode(type)}><Icon size={16} /><span>{label}</span></button>)}<button className="creative-tool-button" onClick={() => fileInput.current?.click()}><Upload size={16} /><span>Upload</span></button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => setSeriesOpen(true)} title="Combine selected objects into a grid of posts"><Grid3x3 size={16} /><span>Series</span></button><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} /><span>Fit selection</span></button><button className="creative-tool-button" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} /><span>Fit canvas</span></button></div>}</aside>
+      <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>{leftOpen && <div className="space-y-1 p-2"><p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>{NODE_TOOLS.filter((tool) => !tool.group).map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" onClick={() => addNode(type)}><Icon size={16} /><span>{label}</span></button>)}<div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => setUgcOpen(!ugcOpen)} aria-expanded={ugcOpen}><Video size={16} /><span>UGC</span>{ugcOpen ? <ChevronLeft size={13} className="ml-auto rotate-90 opacity-50" /> : <ChevronRight size={13} className="ml-auto opacity-50" />}</button>{ugcOpen && NODE_TOOLS.filter((tool) => tool.group === "ugc").map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button pl-5" onClick={() => addNode(type)}><Icon size={15} /><span>{label}</span></button>)}<button className="creative-tool-button" onClick={() => fileInput.current?.click()}><Upload size={16} /><span>Upload</span></button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => { setPaletteQuery(""); setPaletteOpen(true); }} title="Search the LV Creative Command System"><Slash size={16} /><span>Commands</span></button><button className="creative-tool-button" onClick={() => setSeriesOpen(true)} title="Combine selected objects into a grid of posts"><Grid3x3 size={16} /><span>Series</span></button><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} /><span>Fit selection</span></button><button className="creative-tool-button" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} /><span>Fit canvas</span></button></div>}</aside>
       {selection.length > 0 && <div className="creative-selection-actions"><span className="max-w-40 truncate text-xs text-white/55">{selection.length === 1 ? selection[0].data.title : `${selection.length} selected`}</span><Button size="icon" variant="ghost" className="h-8 w-8" title="Group" disabled={selection.length < 2} onClick={groupSelection}><Group size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Ungroup" onClick={ungroupSelection}><Ungroup size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Bring forward" onClick={() => changeOrder(1)}><ArrowUpToLine size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Send backward" onClick={() => changeOrder(-1)}><ArrowDownToLine size={14} /></Button>{selection.length === 1 && <Select value={["favorite","shortlisted","rejected","needs_revision","client_selected","approved_final"].includes(selection[0].data.status) ? selection[0].data.status : undefined} onValueChange={(value) => void applyDecision(value as CreativeDecision)}><SelectTrigger className="h-8 w-36 border-white/10 bg-white/5 text-xs text-white"><SelectValue placeholder="Set decision" /></SelectTrigger><SelectContent><SelectItem value="favorite">Favorite</SelectItem><SelectItem value="shortlisted">Shortlisted</SelectItem><SelectItem value="needs_revision">Needs revision</SelectItem><SelectItem value="rejected">Rejected</SelectItem><SelectItem value="client_selected">Client selected</SelectItem><SelectItem value="approved_final">Approved final</SelectItem></SelectContent></Select>}{selectedAsset?.signedUrl && <Button size="sm" variant="ghost" className="h-8 text-white/65" onClick={async () => { try { const response = await fetch(selectedAsset.signedUrl!); downloadBlob(await response.blob(), selectedAsset.original_filename); } catch { toast({ title: "Download failed", variant: "destructive" }); } }}><Download size={13} className="mr-1.5" />Original</Button>}</div>}
       <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (hydrated.current) { setPendingScene(flowToScene(nodesRef.current, edgesRef.current, viewport)); setSaveState(navigator.onLine ? "unsaved" : "offline"); } }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
       <aside className={`creative-inspector ${rightOpen ? "creative-inspector--open" : ""}`}><button className="creative-panel-toggle creative-panel-toggle--right" onClick={() => setRightOpen(!rightOpen)} aria-label={rightOpen ? "Collapse inspector" : "Open inspector"}>{rightOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>{rightOpen && <Tabs defaultValue="properties" className="flex h-full flex-col"><TabsList className="m-2 grid grid-cols-4 bg-white/5"><TabsTrigger value="properties">Object</TabsTrigger><TabsTrigger value="brand">Brand</TabsTrigger><TabsTrigger value="assets">Assets</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList><ScrollArea className="flex-1"><TabsContent value="properties" className="m-0 p-4">{selection.length === 1 ? <div className="space-y-4"><div><p className="creative-inspector-label">Selected object</p><p className="mt-1 text-sm font-medium capitalize text-white">{selection[0].data.nodeType.replaceAll("_", " ")}</p></div><div className="space-y-1.5"><Label className="text-white/70">Title</Label><Input value={selection[0].data.title} onChange={(event) => updateNodeData(selection[0].id, { title: event.target.value })} /></div><div className="space-y-1.5"><Label className="text-white/70">Content</Label><Textarea className="min-h-32" value={selection[0].data.body} onChange={(event) => updateNodeData(selection[0].id, { body: event.target.value })} /></div></div> : !selection.length && edgeSelection.length === 1 ? <ConnectionInspector kind={edgeKindOf(edgeSelection[0])} sourceTitle={nodes.find((node) => node.id === edgeSelection[0].source)?.data.title ?? ""} targetTitle={nodes.find((node) => node.id === edgeSelection[0].target)?.data.title ?? ""} onChange={(kind) => setEdgeKind(edgeSelection[0].id, kind)} /> : <div className="py-10 text-center text-sm text-white/45">{selection.length ? `${selection.length} objects selected` : edgeSelection.length ? `${edgeSelection.length} connections selected` : "Select an object or a connection to edit it."}</div>}</TabsContent>
         <TabsContent value="brand" className="m-0 space-y-4 p-4"><div><p className="text-sm font-semibold text-white">Project source of truth</p><p className="mt-1 text-xs leading-5 text-white/45">Only relevant fields and selected objects are sent to AI providers.</p></div>{BRAND_FIELDS.map((field) => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-white/65">{field.label}</Label><Textarea value={brandDraft[field.key] ?? ""} placeholder={field.placeholder} className="min-h-16 bg-white/5 text-xs text-white" onChange={(event) => setBrandDraft((current) => ({ ...current, [field.key]: event.target.value }))} /></div>)}<Button className="w-full bg-[#CB2039]" disabled={saveBrand.isPending} onClick={async () => { try { await saveBrand.mutateAsync(brandDraft); toast({ description: "Brand context saved." }); } catch (error) { toast({ title: "Brand context was not saved", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } }}>{saveBrand.isPending && <Loader2 size={14} className="mr-2 animate-spin" />}Save brand context</Button></TabsContent>
         <TabsContent value="assets" className="m-0 space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Asset library</p><p className="text-xs text-white/45">Private · {assets.length} assets</p></div><Button size="icon" variant="outline" onClick={() => fileInput.current?.click()} aria-label="Upload asset"><Plus size={14} /></Button></div>{assets.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No uploaded or generated assets.</p> : <div className="grid grid-cols-2 gap-2">{assets.map((asset) => <button key={asset.id} className="overflow-hidden rounded-lg border border-white/10 bg-white/5 text-left" onClick={() => addNode(asset.source_type === "reference" ? "reference" : "image", { title: asset.original_filename, body: `${asset.source_type} asset`, assetId: asset.id, assetUrl: asset.signedUrl ?? "", width: 360, height: 340 })}>{asset.signedUrl ? <img src={asset.signedUrl} alt="" className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-white/5" />}<p className="truncate p-2 text-[10px] text-white/60">{asset.original_filename}</p></button>)}</div>}</TabsContent>
         <TabsContent value="history" className="m-0 space-y-3 p-4"><div className="rounded-lg border border-white/10 bg-white/5 p-3"><div className="flex items-center gap-2 text-xs text-white/60"><CircleDollarSign size={14} className="text-[#CB2039]" />Estimated project usage</div><p className="mt-1 text-xl font-semibold text-white">${(usage?.total ?? 0).toFixed(4)}</p><p className="text-[10px] text-white/35">Estimates may differ from provider billing.</p></div>{generations.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No generations yet.</p> : generations.map((item) => <div key={item.id} className="rounded-lg border border-white/10 bg-white/[.03] p-3"><div className="flex items-center justify-between"><Badge variant="outline" className="border-white/15 text-[10px] text-white/65">{item.provider}</Badge><span className={`text-[10px] ${item.status === "failed" ? "text-red-400" : "text-white/40"}`}>{item.status}</span></div><p className="mt-2 line-clamp-2 text-xs text-white/75">{item.original_instruction}</p><div className="mt-2 flex justify-between text-[10px] text-white/35"><span>{item.model}</span><span>${Number(item.estimated_cost_usd ?? 0).toFixed(4)}</span></div>{item.error_message && <p className="mt-2 text-[10px] text-red-400">{item.error_message}</p>}</div>)}</TabsContent></ScrollArea></Tabs>}</aside>
-      <section className="creative-ai-bar"><div className="flex items-center gap-2 border-r border-white/10 pr-3"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#CB2039]"><Bot size={16} /></div><div><p className="text-xs font-semibold text-white">LV Intelligence</p><p className="text-[10px] text-white/40">{selection.length ? `${selection.length} selected${inherited.length ? ` · ${inherited.length} connected` : ""}${isImageOperation ? ` · ${referenceAssetIds.length} image${referenceAssetIds.length === 1 ? "" : "s"} sent` : ""}` : "Project context"}</p></div></div><Select value={operation} onValueChange={(value) => setOperation(value as CreativeOperation)}><SelectTrigger className="h-9 w-[170px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent>{AI_ACTIONS.map((action) => <SelectItem key={action.value} value={action.value}>{action.label}</SelectItem>)}</SelectContent></Select><Input className="h-9 min-w-52 flex-1 border-white/10 bg-white/5 text-xs text-white placeholder:text-white/30" value={instruction} onChange={(event) => setInstruction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void runGeneration(); }} placeholder="Direct the next strategic or creative move…" /><Select value={provider} onValueChange={(value) => setProvider(value as CreativeProvider)}><SelectTrigger className="h-9 w-[128px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem>{enabledProviders.map((item) => <SelectItem key={item.id} value={item.id}>{PROVIDER_LABELS[item.id] ?? item.id}</SelectItem>)}</SelectContent></Select><Button size="sm" className="h-9 bg-[#CB2039]" disabled={!instruction.trim() || generate.isPending || saveState === "offline"} onClick={() => void runGeneration()}>{generate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}<span className="ml-1.5">Create</span></Button></section>
+      <section className="creative-ai-bar"><div className="flex items-center gap-2 border-r border-white/10 pr-3"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#CB2039]"><Bot size={16} /></div><div><p className="text-xs font-semibold text-white">LV Intelligence</p><p className={`text-[10px] ${imageBlocker ? "text-[#F2495F]" : "text-white/40"}`}>{selection.length ? `${selection.length} selected${inherited.length ? ` · ${inherited.length} connected` : ""}${isImageOperation ? ` · ${referenceAssetIds.length} image${referenceAssetIds.length === 1 ? "" : "s"} sent` : ""}` : imageBlocker ? "No picture selected to edit" : "Project context"}</p></div></div><Select value={operation} onValueChange={(value) => setOperation(value as CreativeOperation)}><SelectTrigger className="h-9 w-[170px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent>{AI_ACTIONS.map((action) => <SelectItem key={action.value} value={action.value}>{action.label}</SelectItem>)}</SelectContent></Select><Input className="h-9 min-w-52 flex-1 border-white/10 bg-white/5 text-xs text-white placeholder:text-white/30" value={instruction} onChange={(event) => { const next = event.target.value; setInstruction(next); const parsed = parseSlash(next); if (parsed.isCommand) { setPaletteQuery(parsed.query); setPaletteOpen(true); } }} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void runGeneration(); }} placeholder="Direct the next move, or type / for commands…" /><Select value={provider} onValueChange={(value) => setProvider(value as CreativeProvider)}><SelectTrigger className="h-9 w-[128px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem>{enabledProviders.map((item) => <SelectItem key={item.id} value={item.id}>{PROVIDER_LABELS[item.id] ?? item.id}</SelectItem>)}</SelectContent></Select><Button size="sm" className="h-9 bg-[#CB2039]" disabled={!instruction.trim() || generate.isPending || saveState === "offline"} onClick={() => void runGeneration()}>{generate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}<span className="ml-1.5">Create</span></Button></section>
     </div>
     <CanvasHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+    <CommandPalette open={paletteOpen} onOpenChange={(next) => { setPaletteOpen(next); if (!next && instruction.startsWith("/")) setInstruction(""); }} initialQuery={paletteQuery} onPick={(command) => { setInstruction(""); setActiveCommand(command); }} />
+    <CommandPanel command={activeCommand} open={Boolean(activeCommand)} onOpenChange={(next) => { if (!next && !commandProgress) setActiveCommand(null); }} selection={commandSelection} running={Boolean(commandProgress)} progress={commandProgress} onRun={(values, chosenProvider, permission) => void runCommand(values, chosenProvider, permission)} />
     <SeriesDialog open={seriesOpen} onOpenChange={setSeriesOpen} candidates={seriesCandidates} running={Boolean(seriesProgress)} progress={seriesProgress} onRun={(plan) => void runSeriesGeneration(plan)} />
   </div>;
 }

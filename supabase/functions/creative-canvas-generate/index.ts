@@ -27,6 +27,9 @@ function validate(body: any): CreativeRequest {
   if (body.referenceAssetIds && (!Array.isArray(body.referenceAssetIds) || body.referenceAssetIds.length > 4 || body.referenceAssetIds.some((id: unknown) => typeof id !== "string" || !UUID.test(id)))) throw Object.assign(new Error("Provide up to four valid reference assets"), { status: 400 });
   if (body.placement && (!Number.isFinite(body.placement.x) || !Number.isFinite(body.placement.y))) throw Object.assign(new Error("Invalid canvas placement"), { status: 400 });
   if (body.aspect && !["square", "portrait", "landscape"].includes(body.aspect)) throw Object.assign(new Error("Invalid aspect"), { status: 400 });
+  // The command that produced this, kept so any piece of work can be traced
+  // back to the exact instruction and settings that made it.
+  if (body.command && (typeof body.command !== "object" || typeof body.command.commandId !== "string" || body.command.commandId.length > 80 || typeof body.command.trigger !== "string" || body.command.trigger.length > 80 || (body.command.values != null && typeof body.command.values !== "object"))) throw Object.assign(new Error("Invalid command metadata"), { status: 400 });
   if (body.series && (typeof body.series !== "object" || typeof body.series.id !== "string" || body.series.id.length > 80 || (body.series.label != null && (typeof body.series.label !== "string" || body.series.label.length > 300)))) throw Object.assign(new Error("Invalid series"), { status: 400 });
   return body as CreativeRequest;
 }
@@ -104,7 +107,7 @@ serve(async (req) => {
       provider: providerConfig.id, model: capability.startsWith("image_") ? providerConfig.imageModel : providerConfig.textModel,
       operation: body.operation, status: "queued", original_instruction: body.instruction,
       system_instructions: prepared.systemInstructions, structured_context: prepared.structuredContext,
-      context_manifest: prepared.manifest, normalized_request: { operation: body.operation, language: body.language, placement: body.placement, aspect: body.aspect ?? null, series: body.series ?? null },
+      context_manifest: prepared.manifest, normalized_request: { operation: body.operation, language: body.language, placement: body.placement, aspect: body.aspect ?? null, series: body.series ?? null, command: body.command ?? null },
       enhanced_prompt: promptForModel, reference_asset_ids: body.referenceAssetIds ?? [], idempotency_key: body.idempotencyKey,
     }).select().single();
     if (insertError?.code === "23505") {

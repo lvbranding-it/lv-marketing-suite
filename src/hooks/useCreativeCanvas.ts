@@ -145,7 +145,7 @@ export function useCreativeProviderStatus() {
 
 export function useGenerateCreative() {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: async (request: { projectId: string; canvasId: string; orgId: string; operation: CreativeOperation; instruction: string; provider: CreativeProvider; idempotencyKey: string; selectedNodes: unknown[]; brandContext?: BrandContext; referenceAssetIds?: string[]; language?: "en" | "es"; placement?: { x: number; y: number }; aspect?: CreativeAspect; series?: { id: string; label?: string; index?: number; total?: number } }) => {
+  return useMutation({ mutationFn: async (request: { projectId: string; canvasId: string; orgId: string; operation: CreativeOperation; instruction: string; provider: CreativeProvider; idempotencyKey: string; selectedNodes: unknown[]; brandContext?: BrandContext; referenceAssetIds?: string[]; language?: "en" | "es"; placement?: { x: number; y: number }; aspect?: CreativeAspect; series?: { id: string; label?: string; index?: number; total?: number }; command?: { commandId: string; trigger: string; values: Record<string, unknown> } }) => {
     const { data, error } = await supabase.functions.invoke("creative-canvas-generate", { body: request }); if (error) throw error; if (data?.error) throw new Error(data.error); return data as { generation: CreativeGeneration; asset?: CreativeAsset; budget?: { monthTotalUsd: number; softLimitUsd: number; warning: boolean } };
   }, onSettled: (_data, _error, variables) => { queryClient.invalidateQueries({ queryKey: ["creative-generations", variables.canvasId] }); queryClient.invalidateQueries({ queryKey: ["creative-assets", variables.projectId] }); } });
 }

@@ -1,6 +1,12 @@
 export const CREATIVE_NODE_TYPES = [
   "text", "image", "reference", "brand_context", "creative_direction",
   "palette", "typography", "conversation", "decision", "export_frame", "generation",
+  // UGC production blocks. A UGC campaign has its own vocabulary — a hook bank
+  // is not a text card, and a usage-rights record is not a note — and naming
+  // them is what lets a command find the right one and a person read a canvas.
+  "creator_profile", "ugc_brief", "hook_bank", "ugc_script", "talking_points",
+  "shot_list", "storyboard", "raw_footage", "transcript", "claim_disclosure",
+  "platform_adaptation", "performance_result", "usage_rights",
 ] as const;
 
 export type CreativeNodeType = typeof CREATIVE_NODE_TYPES[number];

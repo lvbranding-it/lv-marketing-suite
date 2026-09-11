@@ -107,3 +107,31 @@ describe("the prompt an image model receives", () => {
     expect(enhancedPrompt.trimEnd().endsWith("Create a launch headline")).toBe(true);
   });
 });
+
+describe("one image in, one image out", () => {
+  it("tells every image request to return a single image", () => {
+    // Two references handed to the edits endpoint will otherwise sometimes come
+    // back as a diptych of the inputs rather than the edit that was asked for.
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "edit_image",
+      instruction: "Replace the clothing with the outfit from the second image",
+      referenceAssetIds: ["asset-person", "asset-outfit"],
+    }));
+    expect(imagePrompt).toContain("Return exactly one finished image");
+    expect(imagePrompt).toContain("do not include the reference images themselves");
+  });
+
+  it("keeps the rule even when the context is long enough to be trimmed", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "generate_image",
+      instruction: "x".repeat(5_000),
+      brandContext: { visualPrinciples: "y".repeat(5_000), approvedColors: "z".repeat(5_000) },
+    }));
+    expect(imagePrompt.endsWith("in the output.")).toBe(true);
+    expect(imagePrompt.length).toBeLessThanOrEqual(2_400);
+  });
+
+  it("leaves writing prompts alone", () => {
+    expect(buildCreativeContext(request()).enhancedPrompt).not.toContain("Return exactly one finished image");
+  });
+});

@@ -45,6 +45,12 @@ export interface CanvasContextNode {
   sequence?: { step: number; total: number; follows?: string };
 }
 
+export interface CreativeCommandAudit {
+  commandId: string;
+  trigger: string;
+  values?: Record<string, unknown>;
+}
+
 export interface CreativeRequest {
   projectId: string;
   canvasId: string;
@@ -71,6 +77,8 @@ export interface CreativeRequest {
    * Each cell is still an ordinary generation with its own cost and retry.
    */
   series?: { id: string; label?: string; index?: number; total?: number };
+  /** The command that produced this request, for the audit trail. */
+  command?: CreativeCommandAudit;
 }
 
 /**

@@ -112,14 +112,24 @@ export function planSeries(
  * a wide matrix is paced rather than fired all at once — otherwise the later
  * cells come back rate-limited and look like failures.
  */
-export async function runSeries<T>(
-  cells: SeriesCell[],
-  run: (cell: SeriesCell, index: number) => Promise<T>,
-  options: { concurrency?: number; minSpacingMs?: number; signal?: AbortSignal } = {},
-): Promise<Array<{ cell: SeriesCell; value?: T; error?: unknown }>> {
+export interface PacedOptions { concurrency?: number; minSpacingMs?: number; signal?: AbortSignal }
+
+/**
+ * Runs a list of paid calls a few at a time, spaced out.
+ *
+ * The gateway allows two concurrent generations per person and ten a minute, so
+ * a wide run is paced rather than fired all at once — otherwise the later ones
+ * come back rate-limited and look like failures. A failure is captured per item
+ * rather than thrown, because the others are already paid for.
+ */
+export async function runPaced<T, R>(
+  items: T[],
+  run: (item: T, index: number) => Promise<R>,
+  options: PacedOptions = {},
+): Promise<Array<{ item: T; value?: R; error?: unknown }>> {
   const concurrency = Math.max(1, options.concurrency ?? 2);
   const spacing = options.minSpacingMs ?? 6_500;
-  const results: Array<{ cell: SeriesCell; value?: T; error?: unknown }> = [];
+  const results: Array<{ item: T; value?: R; error?: unknown }> = [];
   let next = 0;
   let lastStart = 0;
 
@@ -127,20 +137,27 @@ export async function runSeries<T>(
     for (;;) {
       if (options.signal?.aborted) return;
       const index = next++;
-      if (index >= cells.length) return;
+      if (index >= items.length) return;
       const wait = lastStart + spacing - Date.now();
       if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
       lastStart = Date.now();
       try {
-        results[index] = { cell: cells[index], value: await run(cells[index], index) };
+        results[index] = { item: items[index], value: await run(items[index], index) };
       } catch (error) {
-        // One failed cell must not abandon the rest: the others are already paid
-        // for, and a partial series is still useful.
-        results[index] = { cell: cells[index], error };
+        results[index] = { item: items[index], error };
       }
     }
   };
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, cells.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
   return results;
+}
+
+export async function runSeries<T>(
+  cells: SeriesCell[],
+  run: (cell: SeriesCell, index: number) => Promise<T>,
+  options: PacedOptions = {},
+): Promise<Array<{ cell: SeriesCell; value?: T; error?: unknown }>> {
+  const results = await runPaced(cells, run, options);
+  return results.map((entry) => ({ cell: entry.item, value: entry.value, error: entry.error }));
 }
