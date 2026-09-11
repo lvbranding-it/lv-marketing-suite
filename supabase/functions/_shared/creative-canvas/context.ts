@@ -5,6 +5,8 @@ const MAX_CONTEXT_CHARS = 36_000;
 export const LV_CANVAS_SYSTEM = `You are the LV Creative Canvas intelligence layer for LV Branding.
 Strategy first. Every recommendation and artifact must connect audience, positioning, objective, and execution.
 Use only the supplied project context. Do not invent performance claims or confidential facts.
+Objects listed as selectedObjects are what the request is about. Objects listed as inheritedDirection were connected to them on the canvas and govern how the work should be executed: honour them as direction, not as subject matter.
+An object carrying a sequence field is one step of a running order: continue from the step it follows rather than repeating it, and do not treat the earlier step as creative direction.
 For bilingual adaptation, preserve intent, positioning, voice, cultural relevance, and market fit rather than translating literally.
 Never expose hidden reasoning. Return only the useful creative result and concise rationale requested by the user.`;
 
@@ -16,15 +18,24 @@ function cleanText(value: unknown, max = 8_000) {
 export function buildCreativeContext(request: CreativeRequest, project?: ProjectContext): PreparedContext {
   const included = request.selectedNodes.filter((node) => node.includeInAiContext !== false);
   const excluded = request.selectedNodes.filter((node) => node.includeInAiContext === false);
-  const selected = included.map((node) => ({
+  const shape = (node: typeof included[number]) => ({
     id: node.id,
     type: node.type,
     title: cleanText(node.title, 400),
     text: cleanText(node.text),
     assetId: node.assetId,
     parentDirectionId: node.parentDirectionId,
+    sequence: node.sequence,
     metadata: node.metadata,
-  }));
+  });
+  // Objects the person picked, and objects the canvas contributed by following
+  // connections upstream. Kept apart so the model can tell the subject of the
+  // request from the direction governing it.
+  const selected = included.filter((node) => node.role !== "inherited").map(shape);
+  const inherited = included
+    .filter((node) => node.role === "inherited")
+    .sort((first, second) => (first.depth ?? 1) - (second.depth ?? 1))
+    .map((node) => ({ ...shape(node), inheritedVia: node.parentDirectionId, depth: node.depth ?? 1 }));
   const structuredContext: Record<string, unknown> = {
     // The client record leads, because it is the part nobody typed into this
     // canvas: the intake brief and the brand snapshot the LV agents maintain.
@@ -44,6 +55,7 @@ export function buildCreativeContext(request: CreativeRequest, project?: Project
     brand: request.brandContext ?? {},
     creativeDirection: request.parentDirection ?? {},
     selectedObjects: selected,
+    inheritedDirection: inherited,
     previousGeneration: request.previousGeneration ?? null,
     language: request.language ?? "en",
     market: cleanText(request.market, 300) ?? null,

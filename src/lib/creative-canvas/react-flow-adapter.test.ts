@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { flowToScene, sceneToFlow } from "./react-flow-adapter";
+import { edgeKindOf, flowToScene, sceneToFlow, SEQUENCE_EDGE_LABEL } from "./react-flow-adapter";
+import { collectInheritedContext } from "./graph";
 import { serializeScene } from "./scene";
 
 describe("React Flow scene adapter", () => {
@@ -21,5 +22,60 @@ describe("React Flow scene adapter", () => {
     const roundTrip = flowToScene(flow.nodes, flow.edges, flow.viewport);
     expect(roundTrip.nodes[1].parentId).toBe("frame");
     expect(roundTrip.edges[0]).toMatchObject({ kind: "reference", label: "contains" });
+  });
+});
+
+describe("arrow kinds through the adapter", () => {
+  const sceneWith = (kind?: "association" | "sequence") => serializeScene({
+    schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, nodes: [],
+    edges: [{ id: "edge-1", source: "a", target: "b", ...(kind ? { kind } : {}) }],
+  });
+
+  it("keeps the kind across a round trip", () => {
+    const flow = sceneToFlow(sceneWith("sequence"));
+    expect(flow.edges[0].data?.kind).toBe("sequence");
+    expect(flowToScene([], flow.edges, flow.viewport).edges[0].kind).toBe("sequence");
+  });
+
+  it("reads an edge saved before kinds existed as informing", () => {
+    expect(sceneToFlow(sceneWith()).edges[0].data?.kind).toBe("association");
+  });
+
+  it("draws a running order differently from a direction", () => {
+    const sequence = sceneToFlow(sceneWith("sequence")).edges[0];
+    const association = sceneToFlow(sceneWith("association")).edges[0];
+    expect(sequence.label).toBe(SEQUENCE_EDGE_LABEL);
+    expect(sequence.style?.strokeDasharray).toBeTruthy();
+    expect(association.label).toBeUndefined();
+    expect(association.style?.strokeDasharray).toBeUndefined();
+  });
+
+  it("does not persist the derived label as content", () => {
+    const flow = sceneToFlow(sceneWith("sequence"));
+    expect(flowToScene([], flow.edges, flow.viewport).edges[0].label).toBeUndefined();
+  });
+
+  it("keeps a label someone actually typed", () => {
+    const scene = serializeScene({
+      schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, nodes: [],
+      edges: [{ id: "edge-1", source: "a", target: "b", kind: "sequence", label: "after approval" }],
+    });
+    const flow = sceneToFlow(scene);
+    expect(flow.edges[0].label).toBe("after approval");
+    expect(flowToScene([], flow.edges, flow.viewport).edges[0].label).toBe("after approval");
+  });
+
+  it("hands the graph helpers a kind they can actually read", () => {
+    // A flow edge keeps its kind under `data`, so passing one straight to the
+    // graph helpers reads `undefined` and silently treats a running order as
+    // direction. `edgeKindOf` is the conversion that must be used.
+    const flow = sceneToFlow(sceneWith("sequence"));
+    expect((flow.edges[0] as { kind?: string }).kind).toBeUndefined();
+    expect(edgeKindOf(flow.edges[0])).toBe("sequence");
+
+    const flat = flow.edges.map((edge) => ({ source: edge.source, target: edge.target, kind: edgeKindOf(edge) }));
+    expect(collectInheritedContext(flat, ["b"])).toEqual([]);
+    // Whereas handing the flow edge over unconverted is the bug this guards.
+    expect(collectInheritedContext(flow.edges, ["b"])).toHaveLength(1);
   });
 });

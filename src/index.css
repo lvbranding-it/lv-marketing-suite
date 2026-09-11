@@ -216,10 +216,17 @@
   box-shadow: 0 10px 30px rgba(0,0,0,.25);
 }
 
-.creative-flow-wrap .react-flow__controls { left: 174px; bottom: 92px; }
+/* React Flow's stylesheet is imported by the workspace component, which loads
+   after src/index.css, so its `.react-flow__panel.bottom.left { left: 0 }` beat
+   these rules on source order alone. Both overlays collapsed into the corners
+   and sat underneath the toolbar and inspector, which are z-index 20 — the zoom
+   controls became unclickable. Naming the panel class too raises specificity
+   enough to win, and `:has()` keeps each offset in step with whether the panel
+   beside it is open or collapsed. */
+.creative-flow-wrap .react-flow__panel.react-flow__controls { left: 68px; bottom: 92px; }
 .creative-flow-wrap .react-flow__controls-button { border-color: rgba(255,255,255,.1); background: #2c2829; fill: rgba(255,255,255,.72); }
 .creative-flow-wrap .react-flow__controls-button:hover { background: #3a3536; }
-.creative-flow-wrap .react-flow__minimap { right: 384px; bottom: 92px; }
+.creative-flow-wrap .react-flow__panel.react-flow__minimap { right: 68px; bottom: 92px; }
 .creative-flow-wrap .react-flow__attribution { background: rgba(35,31,32,.8); color: rgba(255,255,255,.58); }
 .creative-flow-wrap .react-flow__attribution a { color: rgba(255,255,255,.75); }
 .creative-flow-handle { height: 8px !important; width: 8px !important; border-color: #fff !important; background: #cb2039 !important; }
@@ -789,3 +796,40 @@
     print-color-adjust: exact;
   }
 }
+
+/* ── Export mode ──────────────────────────────────────────────────────────────
+   Applied to the stage only while an export is being captured.
+
+   Workspace chrome comes off everything: the type label, status badge, context
+   checkbox, connection handles and resize affordances are editing scaffolding
+   and never part of a deliverable.
+
+   Beyond that the two kinds of object are treated differently. For a picture the
+   artwork *is* the deliverable, so the card around it disappears entirely and
+   the title and notes go with it — those hold the prompt and working notes. For
+   a text, palette or direction object the card is the design: it keeps its
+   surface, or dark type would be exported onto a dark canvas and vanish. */
+.creative-exporting .creative-shape__header,
+.creative-exporting .creative-shape__context,
+.creative-exporting .react-flow__handle,
+.creative-exporting .react-flow__resize-control { display: none !important; }
+.creative-exporting .react-flow__node { box-shadow: none !important; }
+
+.creative-exporting .creative-shape--image,
+.creative-exporting .creative-shape--reference,
+.creative-exporting .creative-shape--generation {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.creative-exporting .creative-shape--image .creative-shape__title,
+.creative-exporting .creative-shape--image .creative-shape__body,
+.creative-exporting .creative-shape--reference .creative-shape__title,
+.creative-exporting .creative-shape--reference .creative-shape__body,
+.creative-exporting .creative-shape--generation .creative-shape__title,
+.creative-exporting .creative-shape--generation .creative-shape__body { display: none !important; }
+.creative-exporting .creative-shape__image { height: 100%; object-fit: contain; }
+
+.creative-canvas-stage:has(.creative-toolbar--open) .react-flow__panel.react-flow__controls { left: 180px; }
+.creative-canvas-stage:has(.creative-inspector--open) .react-flow__panel.react-flow__minimap { right: 386px; }

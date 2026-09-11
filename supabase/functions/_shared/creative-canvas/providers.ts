@@ -1,4 +1,11 @@
-import type { CreativeAIProvider, NormalizedResult, ProviderConfig, ProviderId } from "./types.ts";
+import type { CreativeAIProvider, CreativeAspect, NormalizedResult, ProviderConfig, ProviderId } from "./types.ts";
+
+/** The shapes the image endpoint accepts, nearest to each delivery format. */
+const OPENAI_IMAGE_SIZE: Record<CreativeAspect, string> = {
+  square: "1024x1024",
+  portrait: "1024x1536",
+  landscape: "1536x1024",
+};
 
 type EnvReader = (key: string) => string | undefined;
 type Fetcher = typeof fetch;
@@ -36,7 +43,7 @@ export function createOpenAIProvider(config: ProviderConfig, apiKey: string, fet
         durationMs: Date.now() - started,
       };
     },
-    async generateImage({ prompt, referenceDataUrls, signal }) {
+    async generateImage({ prompt, referenceDataUrls, aspect, signal }) {
       const started = Date.now();
       const endpoint = referenceDataUrls?.length ? "https://api.openai.com/v1/images/edits" : "https://api.openai.com/v1/images/generations";
       let body: BodyInit;
@@ -45,6 +52,7 @@ export function createOpenAIProvider(config: ProviderConfig, apiKey: string, fet
         const form = new FormData();
         form.append("model", config.imageModel!);
         form.append("prompt", prompt);
+        form.append("size", OPENAI_IMAGE_SIZE[aspect ?? "landscape"]);
         referenceDataUrls.forEach((url, index) => {
           const part = dataUrlParts(url);
           const bytes = Uint8Array.from(atob(part.data), (char) => char.charCodeAt(0));
@@ -53,12 +61,12 @@ export function createOpenAIProvider(config: ProviderConfig, apiKey: string, fet
         body = form;
       } else {
         headers = { ...headers, "Content-Type": "application/json" };
-        body = JSON.stringify({ model: config.imageModel, prompt, size: "1536x1024", quality: "high", output_format: "png" });
+        body = JSON.stringify({ model: config.imageModel, prompt, size: OPENAI_IMAGE_SIZE[aspect ?? "landscape"], quality: "high", output_format: "png" });
       }
       const payload = await jsonOrError(await fetcher(endpoint, { method: "POST", signal, headers, body }));
       return { provider: "openai", model: config.imageModel!, imageBase64: payload.data?.[0]?.b64_json, imageMimeType: "image/png", providerRequestId: payload.id, durationMs: Date.now() - started };
     },
-    async editImage(request) { return this.generateImage!({ ...request, referenceDataUrls: request.referenceDataUrls }); },
+    async editImage(request) { return this.generateImage!({ ...request, referenceDataUrls: request.referenceDataUrls, aspect: request.aspect }); },
   };
 }
 

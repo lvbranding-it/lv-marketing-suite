@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
-import type { BrandContext, CreativeAsset, CreativeCanvasRecord, CreativeDecision, CreativeGeneration, CreativeOperation, CreativeProvider, ProviderStatus } from "@/lib/creative-canvas/types";
+import type { BrandContext, CreativeAspect, CreativeAsset, CreativeCanvasRecord, CreativeDecision, CreativeGeneration, CreativeOperation, CreativeProvider, ProviderStatus } from "@/lib/creative-canvas/types";
 import { sanitizeCreativeFilename, validateCreativeUpload } from "@/lib/creative-canvas/types";
 
 const db = supabase as any;
@@ -145,7 +145,7 @@ export function useCreativeProviderStatus() {
 
 export function useGenerateCreative() {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: async (request: { projectId: string; canvasId: string; orgId: string; operation: CreativeOperation; instruction: string; provider: CreativeProvider; idempotencyKey: string; selectedNodes: unknown[]; brandContext?: BrandContext; referenceAssetIds?: string[]; language?: "en" | "es"; placement?: { x: number; y: number } }) => {
+  return useMutation({ mutationFn: async (request: { projectId: string; canvasId: string; orgId: string; operation: CreativeOperation; instruction: string; provider: CreativeProvider; idempotencyKey: string; selectedNodes: unknown[]; brandContext?: BrandContext; referenceAssetIds?: string[]; language?: "en" | "es"; placement?: { x: number; y: number }; aspect?: CreativeAspect; series?: { id: string; label?: string; index?: number; total?: number } }) => {
     const { data, error } = await supabase.functions.invoke("creative-canvas-generate", { body: request }); if (error) throw error; if (data?.error) throw new Error(data.error); return data as { generation: CreativeGeneration; asset?: CreativeAsset; budget?: { monthTotalUsd: number; softLimitUsd: number; warning: boolean } };
   }, onSettled: (_data, _error, variables) => { queryClient.invalidateQueries({ queryKey: ["creative-generations", variables.canvasId] }); queryClient.invalidateQueries({ queryKey: ["creative-assets", variables.projectId] }); } });
 }

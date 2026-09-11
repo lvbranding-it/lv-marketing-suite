@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
+import JSZip from "jszip";
 import { toPng } from "html-to-image";
 import { addEdge, Background, BackgroundVariant, Controls, getNodesBounds, getViewportForBounds, MiniMap, ReactFlow, type Connection, type ReactFlowInstance, type Viewport, useEdgesState, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowDownToLine, ArrowLeft, ArrowUpToLine, Bot, Check, ChevronLeft, ChevronRight, CircleDollarSign, Cloud, CloudOff, Download, FileText, Focus, Group, Image as ImageIcon, Layers3, Loader2, Maximize2, Palette, Plus, Save, Sparkles, Type, Ungroup, Upload, WifiOff } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowUpToLine, Bot, Check, ChevronLeft, ChevronRight, CircleDollarSign, Cloud, CloudOff, Download, FileText, Focus, Grid3x3, Group, HelpCircle, Image as ImageIcon, Layers3, Loader2, Maximize2, Palette, Plus, Save, Sparkles, Type, Ungroup, Upload, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { CreativeNodeActionsProvider, creativeNodeTypes } from "@/components/creative-canvas/CreativeNodes";
+import SeriesDialog, { type SeriesCandidate } from "@/components/creative-canvas/SeriesDialog";
+import CanvasHelpDialog from "@/components/creative-canvas/CanvasHelpDialog";
+import ConnectionInspector from "@/components/creative-canvas/ConnectionInspector";
 import { toast } from "@/hooks/use-toast";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useBrandContext, useCreativeAssets, useCreativeCanvas, useCreativeGenerations, useCreateDecision, useCreativeProviderStatus, useCreativeUsage, useGenerateCreative, useSaveBrandContext, useSaveCreativeCanvas, useUploadCreativeAsset } from "@/hooks/useCreativeCanvas";
-import { flowToScene, sceneToFlow, type CreativeFlowEdge, type CreativeFlowNode, type CreativeNodeData } from "@/lib/creative-canvas/react-flow-adapter";
+import { edgeAppearance, edgeKindOf, flowToScene, sceneToFlow, type CreativeFlowEdge, type CreativeFlowNode, type CreativeNodeData } from "@/lib/creative-canvas/react-flow-adapter";
 import { createEmptyScene, makeIdempotencyKey, restoreScene, serializeScene, type CreativeSceneDocument } from "@/lib/creative-canvas/scene";
+import { collectInheritedContext, sequencePosition, type CreativeEdgeKind } from "@/lib/creative-canvas/graph";
+import { runSeries, type SeriesPlan } from "@/lib/creative-canvas/series";
+import { exportFileName, planExport } from "@/lib/creative-canvas/export-batch";
 import type { BrandContext, CreativeDecision, CreativeNodeType, CreativeOperation, CreativeProvider } from "@/lib/creative-canvas/types";
 
 const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Type; title: string; body: string; accent?: string; size?: [number, number] }> = [
@@ -32,6 +39,60 @@ const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Ty
   { type: "decision", label: "Decision", icon: Check, title: "Decision", body: "Status, owner, rationale, and next revision." },
   { type: "export_frame", label: "Export", icon: Maximize2, title: "Presentation frame", body: "Arrange approved work inside this export area.", size: [900, 600] },
 ];
+
+/**
+ * Delivery sizes creative work is actually handed over in.
+ *
+ * `actual` keeps the artwork's own dimensions; every other entry renders to
+ * exact pixels so a post or a hero never has to be resized by hand afterwards.
+ * Artwork is fitted inside the frame rather than cropped to it — silently
+ * trimming a client's composition is worse than a margin.
+ */
+const EXPORT_PRESETS: Array<{ value: string; label: string; group: string; size?: [number, number] }> = [
+  { value: "actual", label: "Actual size", group: "Canvas" },
+  { value: "ig-square", label: "Instagram post · 1080 × 1080", group: "Social", size: [1080, 1080] },
+  { value: "ig-portrait", label: "Instagram portrait · 1080 × 1350", group: "Social", size: [1080, 1350] },
+  { value: "story", label: "Story / Reel · 1080 × 1920", group: "Social", size: [1080, 1920] },
+  { value: "link-card", label: "Facebook / LinkedIn · 1200 × 630", group: "Social", size: [1200, 630] },
+  { value: "x-post", label: "X post · 1600 × 900", group: "Social", size: [1600, 900] },
+  { value: "og", label: "Open Graph · 1200 × 630", group: "Web", size: [1200, 630] },
+  { value: "hero", label: "Desktop hero · 1920 × 1080", group: "Web", size: [1920, 1080] },
+  { value: "hero-2x", label: "Retina hero · 2560 × 1440", group: "Web", size: [2560, 1440] },
+  { value: "email", label: "Email header · 1200 × 600", group: "Web", size: [1200, 600] },
+  { value: "hd", label: "HD 1080p · 1920 × 1080", group: "Video", size: [1920, 1080] },
+  { value: "uhd", label: "4K UHD · 3840 × 2160", group: "Video", size: [3840, 2160] },
+  { value: "vertical", label: "Vertical video · 1080 × 1920", group: "Video", size: [1080, 1920] },
+];
+const PRESET_GROUPS = ["Canvas", "Social", "Web", "Video"] as const;
+
+/** Decodes through a blob so a signed asset URL never taints the canvas. */
+async function loadBitmap(url: string): Promise<ImageBitmap> {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error("The artwork could not be read for export.");
+  return createImageBitmap(await response.blob());
+}
+
+/**
+ * Draws one stored asset into a delivery frame.
+ *
+ * Shared by the single and batch paths so a post exported on its own is byte
+ * identical to the same post exported as part of its series.
+ */
+async function renderArtwork(signedUrl: string, size?: [number, number]) {
+  const bitmap = await loadBitmap(signedUrl);
+  const [width, height] = size ?? [bitmap.width, bitmap.height];
+  const surface = document.createElement("canvas");
+  surface.width = width; surface.height = height;
+  const context = surface.getContext("2d");
+  if (!context) throw new Error("This browser cannot render the export.");
+  const scale = Math.min(width / bitmap.width, height / bitmap.height);
+  const drawWidth = bitmap.width * scale;
+  const drawHeight = bitmap.height * scale;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  bitmap.close();
+  return { dataUrl: surface.toDataURL("image/png"), width, height };
+}
 
 /** How each provider is named to a person, rather than by its API id. */
 const PROVIDER_LABELS: Record<string, string> = { openai: "OpenAI", anthropic: "Claude", google: "Google" };
@@ -84,9 +145,9 @@ export default function CreativeCanvasWorkspace() {
   const [nodes, setNodes, onNodesChange] = useNodesState<CreativeFlowNode>([]); const [edges, setEdges, onEdgesChange] = useEdgesState<CreativeFlowEdge>([]); const [flow, setFlow] = useState<ReactFlowInstance<CreativeFlowNode, CreativeFlowEdge> | null>(null);
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 }); const nodesRef = useRef(nodes); const edgesRef = useRef(edges); nodesRef.current = nodes; edgesRef.current = edges;
   const hydrated = useRef(false); const lastSavedScene = useRef<string>(""); const loadedCanvasId = useRef<string | null>(null); const history = useRef<{ past: FlowSnapshot[]; future: FlowSnapshot[] }>({ past: [], future: [] }); const clipboard = useRef<CreativeFlowNode[]>([]);
-  const [leftOpen, setLeftOpen] = useState(true); const [rightOpen, setRightOpen] = useState(true); const [pendingScene, setPendingScene] = useState<CreativeSceneDocument | null>(null); const [saveState, setSaveState] = useState<"saved" | "unsaved" | "saving" | "error" | "offline">("saved"); const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
+  const [leftOpen, setLeftOpen] = useState(true); const [rightOpen, setRightOpen] = useState(true); const [pendingScene, setPendingScene] = useState<CreativeSceneDocument | null>(null); const [saveState, setSaveState] = useState<"saved" | "unsaved" | "saving" | "error" | "offline">("saved"); const [exporting, setExporting] = useState<"png" | "pdf" | null>(null); const [exportPreset, setExportPreset] = useState("actual"); const [seriesOpen, setSeriesOpen] = useState(false); const [helpOpen, setHelpOpen] = useState(false); const [seriesProgress, setSeriesProgress] = useState<{ done: number; total: number } | null>(null); const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [instruction, setInstruction] = useState(""); const [operation, setOperation] = useState<CreativeOperation>("campaign_concept"); const [provider, setProvider] = useState<CreativeProvider>("auto"); const [brandDraft, setBrandDraft] = useState<BrandContext>({}); const fileInput = useRef<HTMLInputElement>(null);
-  const selection = useMemo(() => nodes.filter((node) => node.selected), [nodes]); const assetUrls = useMemo(() => new Map(assets.filter((asset) => asset.signedUrl).map((asset) => [asset.id, asset.signedUrl!])), [assets]);
+  const selection = useMemo(() => nodes.filter((node) => node.selected), [nodes]); const edgeSelection = useMemo(() => edges.filter((edge) => edge.selected), [edges]); const assetUrls = useMemo(() => new Map(assets.filter((asset) => asset.signedUrl).map((asset) => [asset.id, asset.signedUrl!])), [assets]);
 
   useEffect(() => { if (brandRecord?.content) setBrandDraft(brandRecord.content); else if (canvas?.projects) setBrandDraft({ brandName: canvas.projects.client_name ?? "", objective: canvas.projects.description ?? "" }); }, [brandRecord, canvas?.projects]);
   useEffect(() => { const online = () => setSaveState((state) => state === "offline" ? "unsaved" : state); const offline = () => setSaveState("offline"); window.addEventListener("online", online); window.addEventListener("offline", offline); return () => { window.removeEventListener("online", online); window.removeEventListener("offline", offline); }; }, []);
@@ -117,8 +178,10 @@ export default function CreativeCanvasWorkspace() {
   const updateNodeData = useCallback((id: string, values: Partial<CreativeNodeData>) => { recordHistory(); setNodes((current) => current.map((node) => node.id === id ? { ...node, data: { ...node.data, ...values } } : node)); }, [recordHistory, setNodes]);
   const canvasCenter = useCallback(() => flow?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 0, y: 0 }, [flow]);
   const addNode = useCallback((type: CreativeNodeType, options: Partial<CreativeNodeData> & { width?: number; height?: number } = {}, point = canvasCenter()) => { recordHistory(); const node = makeNode(type, point, options); setNodes((current) => [...current.map((item) => ({ ...item, selected: false })), node]); return node.id; }, [canvasCenter, recordHistory, setNodes]);
-  const connect = useCallback((connection: Connection) => { recordHistory(); setEdges((current) => addEdge({ ...connection, id: newId("edge"), type: "smoothstep" }, current)); }, [recordHistory, setEdges]);
-  const deleteSelection = useCallback(() => { if (!selection.length) return; recordHistory(); const ids = new Set(selection.map((node) => node.id)); setNodes((current) => current.filter((node) => !ids.has(node.id) && (!node.parentId || !ids.has(node.parentId)))); setEdges((current) => current.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))); }, [recordHistory, selection, setEdges, setNodes]);
+  const connect = useCallback((connection: Connection) => { recordHistory(); setEdges((current) => addEdge({ ...connection, id: newId("edge"), type: "smoothstep", data: { kind: "association" }, ...edgeAppearance("association") }, current)); }, [recordHistory, setEdges]);
+  /** Changes what an arrow claims, and redresses it to match. */
+  const setEdgeKind = useCallback((id: string, kind: CreativeEdgeKind) => { recordHistory(); setEdges((current) => current.map((edge) => edge.id === id ? { ...edge, data: { ...edge.data, kind }, ...edgeAppearance(kind) } : edge)); }, [recordHistory, setEdges]);
+  const deleteSelection = useCallback(() => { if (!selection.length && !edgesRef.current.some((edge) => edge.selected)) return; recordHistory(); const ids = new Set(selection.map((node) => node.id)); setNodes((current) => current.filter((node) => !ids.has(node.id) && (!node.parentId || !ids.has(node.parentId)))); setEdges((current) => current.filter((edge) => !edge.selected && !ids.has(edge.source) && !ids.has(edge.target))); }, [recordHistory, selection, setEdges, setNodes]);
   const copySelection = useCallback(() => { clipboard.current = structuredClone(selection); }, [selection]);
   const pasteSelection = useCallback(() => { if (!clipboard.current.length) return; recordHistory(); const idMap = new Map(clipboard.current.map((node) => [node.id, newId()])); const pasted = clipboard.current.map((node) => ({ ...node, id: idMap.get(node.id)!, parentId: node.parentId ? idMap.get(node.parentId) : undefined, position: { x: node.position.x + 36, y: node.position.y + 36 }, selected: true })); setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...pasted]); clipboard.current = structuredClone(pasted); }, [recordHistory, setNodes]);
   const duplicateSelection = useCallback(() => { copySelection(); pasteSelection(); }, [copySelection, pasteSelection]);
@@ -129,26 +192,264 @@ export default function CreativeCanvasWorkspace() {
   useEffect(() => { const keydown = (event: KeyboardEvent) => { const element = event.target as HTMLElement; if (["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName) || element.isContentEditable) return; const command = event.metaKey || event.ctrlKey; if (command && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); } else if (command && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); } else if (command && event.key.toLowerCase() === "c") { event.preventDefault(); copySelection(); } else if (command && event.key.toLowerCase() === "v") { event.preventDefault(); pasteSelection(); } else if (command && event.key.toLowerCase() === "d") { event.preventDefault(); duplicateSelection(); } else if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); deleteSelection(); } }; window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown); }, [copySelection, deleteSelection, duplicateSelection, pasteSelection, redo, undo]);
 
   const upload = async (files: FileList | File[], point?: { x: number; y: number }) => { let offset = 0; for (const file of Array.from(files)) { try { const asset = await uploadAsset.mutateAsync({ file, sourceType: "reference" }); addNode("reference", { title: asset.original_filename, body: "Reference notes", assetId: asset.id, assetUrl: asset.signedUrl ?? "", width: 360, height: 360 }, point ? { x: point.x + offset, y: point.y + offset } : undefined); offset += 36; } catch (error) { toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } } };
-  const selectedContext = selection.map((node) => ({ id: node.id, type: node.data.nodeType, title: node.data.title, text: node.data.body, assetId: node.data.assetId || undefined, includeInAiContext: node.data.includeInContext, metadata: { status: node.data.status } }));
+  // Connections carry meaning: an arrow from a direction to a product means the
+  // direction governs it, so selecting the product brings the direction along.
+  // React Flow keeps the kind inside `data`, the graph helpers take it flat. One
+  // conversion in one place: reading `edge.kind` off a flow edge silently yields
+  // undefined, which reads as "informs" and quietly undoes what a Then arrow is
+  // for.
+  const graphEdges = useMemo(
+    () => edges.map((edge) => ({ source: edge.source, target: edge.target, kind: edgeKindOf(edge) })),
+    [edges],
+  );
+  const inherited = useMemo(
+    () => collectInheritedContext(graphEdges, selection.map((node) => node.id), {
+      isExcluded: (id) => nodes.find((node) => node.id === id)?.data.includeInContext === false,
+    }),
+    [graphEdges, nodes, selection],
+  );
+  const contextNode = (node: CreativeFlowNode, role: "selected" | "inherited", depth?: number, into?: string) => {
+    // A card in a running order tells the model where it falls and what precedes
+    // it, so the second slide of a carousel can follow the first instead of
+    // restating it.
+    const position = sequencePosition(graphEdges, node.id);
+    const previous = position?.previousId ? nodes.find((item) => item.id === position.previousId) : undefined;
+    return {
+      id: node.id, type: node.data.nodeType, title: node.data.title, text: node.data.body,
+      assetId: node.data.assetId || undefined, includeInAiContext: node.data.includeInContext,
+      metadata: { status: node.data.status }, role, depth, parentDirectionId: into,
+      sequence: position ? { step: position.step, total: position.total, follows: previous?.data.title || undefined } : undefined,
+    };
+  };
+  const selectedContext = [
+    ...selection.map((node) => contextNode(node, "selected")),
+    ...inherited.flatMap((entry) => {
+      const node = nodes.find((item) => item.id === entry.id);
+      return node ? [contextNode(node, "inherited", entry.depth, entry.into)] : [];
+    }),
+  ];
   const selectedAsset = selection.length === 1 && selection[0].data.assetId ? assets.find((asset) => asset.id === selection[0].data.assetId) : undefined;
   const applyDecision = async (decision: CreativeDecision) => { if (!canvas || selection.length !== 1) return; const node = selection[0]; try { await createDecision.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, targetType: node.data.assetId ? "asset" : "shape", targetId: node.data.assetId || node.id, decision }); updateNodeData(node.id, { status: decision }); toast({ description: `Marked ${decision.replace(/_/g, " ")}.` }); } catch (error) { toast({ title: "Decision was not recorded", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
-  const runGeneration = async () => { if (!canvas || !instruction.trim()) return; const point = canvasCenter(); const originalInstruction = instruction.trim(); const placeholderId = addNode("generation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI generation", body: `Provider: ${provider}\n\n${originalInstruction}`, status: "processing", width: 360, height: 240 }, point); try { const referenceAssetIds = selection.filter((node) => ["image", "reference"].includes(node.data.nodeType) && node.data.assetId).map((node) => node.data.assetId); const result = await generate.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, operation, instruction: originalInstruction, provider, idempotencyKey: makeIdempotencyKey(canvas.id, operation), selectedNodes: selectedContext, brandContext: brandDraft, referenceAssetIds, language, placement: point }); setNodes((current) => current.filter((node) => node.id !== placeholderId)); if (result.asset?.signedUrl) addNode("image", { title: "Generated image", body: originalInstruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: 480, height: 420 }, point); else addNode("conversation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI response", body: `Instruction\n${originalInstruction}\n\nResponse\n${result.generation.output_text ?? "Generation completed."}`, status: "generated", width: 420, height: 320 }, point); setInstruction(""); if (result.budget?.warning) toast({ title: "Canvas AI budget warning", description: `$${result.budget.monthTotalUsd.toFixed(2)} estimated this month of a $${result.budget.softLimitUsd.toFixed(2)} soft limit.` }); } catch (error) { updateNodeData(placeholderId, { status: "failed", body: `${originalInstruction}\n\n${error instanceof Error ? error.message : "Generation failed"}` }); toast({ title: "Generation failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
-  const exportSelection = async (format: "png" | "pdf") => { if (!selection.length) { toast({ description: "Select one or more objects to export." }); return; } const viewportElement = document.querySelector<HTMLElement>(".creative-flow-wrap .react-flow__viewport"); if (!viewportElement) return; setExporting(format); try { const ids = new Set(selection.map((node) => node.id)); let expanded = true; while (expanded) { expanded = false; nodes.forEach((node) => { if (node.parentId && ids.has(node.parentId) && !ids.has(node.id)) { ids.add(node.id); expanded = true; } }); } const exportedNodes = nodes.filter((node) => ids.has(node.id)); const bounds = getNodesBounds(exportedNodes); const width = Math.min(2400, Math.max(640, Math.ceil(bounds.width + 120))); const height = Math.min(1800, Math.max(480, Math.ceil(bounds.height + 120))); const transform = getViewportForBounds(bounds, width, height, .25, 2, .08); const edgeIds = new Set(edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => edge.id)); const dataUrl = await toPng(viewportElement, { cacheBust: true, backgroundColor: "#191617", width, height, pixelRatio: 2, style: { width: `${width}px`, height: `${height}px`, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})` }, filter: (element) => { const html = element as HTMLElement; if (html.classList?.contains("react-flow__node")) return ids.has(html.dataset.id ?? ""); if (html.classList?.contains("react-flow__edge")) return edgeIds.has(html.dataset.id ?? ""); return true; } }); const blob = await (await fetch(dataUrl)).blob(); const name = canvas?.projects.name ?? "creative-direction"; if (format === "png") downloadBlob(blob, `${name}.png`); else { const orientation = width >= height ? "landscape" : "portrait"; const pdf = new jsPDF({ orientation, unit: "px", format: [width, height] }); pdf.addImage(dataUrl, "PNG", 0, 0, width, height); pdf.save(`${name}.pdf`); } } catch (error) { toast({ title: "Export failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } finally { setExporting(null); } };
+  const runGeneration = async () => { if (!canvas || !instruction.trim()) return; const point = canvasCenter(); const originalInstruction = instruction.trim(); const placeholderId = addNode("generation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI generation", body: `Provider: ${provider}\n\n${originalInstruction}`, status: "processing", width: 360, height: 240 }, point); try { // The context checkbox has to gate the artwork as well as the words. It only
+      // filtered the text, so unticking it on a picture still sent that picture to
+      // the provider — the control promised something it did not do.
+      const artworkFrom = (list: CreativeFlowNode[]) => list.filter((node) => ["image", "reference", "generation"].includes(node.data.nodeType) && node.data.assetId && node.data.includeInContext !== false).map((node) => node.data.assetId);
+        // What was selected leads; inherited artwork fills the remaining slots.
+        const referenceAssetIds = [...new Set([
+          ...artworkFrom(selection),
+          ...artworkFrom(inherited.flatMap((entry) => nodes.filter((node) => node.id === entry.id))),
+        ])].slice(0, 4); const result = await generate.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, operation, instruction: originalInstruction, provider, idempotencyKey: makeIdempotencyKey(canvas.id, operation), selectedNodes: selectedContext, brandContext: brandDraft, referenceAssetIds, language, placement: point }); setNodes((current) => current.filter((node) => node.id !== placeholderId)); if (result.asset?.signedUrl) addNode("image", { title: "Generated image", body: originalInstruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: 480, height: 420 }, point); else addNode("conversation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI response", body: `Instruction\n${originalInstruction}\n\nResponse\n${result.generation.output_text ?? "Generation completed."}`, status: "generated", width: 420, height: 320 }, point); setInstruction(""); if (result.budget?.warning) toast({ title: "Canvas AI budget warning", description: `$${result.budget.monthTotalUsd.toFixed(2)} estimated this month of a $${result.budget.softLimitUsd.toFixed(2)} soft limit.` }); } catch (error) { updateNodeData(placeholderId, { status: "failed", body: `${originalInstruction}\n\n${error instanceof Error ? error.message : "Generation failed"}` }); toast({ title: "Generation failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
+  /**
+   * What the export buttons would produce right now.
+   *
+   * Computed from the selection rather than discovered on click, so the buttons
+   * can say "ZIP" before someone commits to it instead of surprising them with
+   * an archive when they expected one image.
+   */
+  const exportCandidates = useMemo(() => selection.map((node) => ({
+    id: node.id,
+    nodeType: node.data.nodeType,
+    title: node.data.title,
+    assetId: node.data.assetId || undefined,
+    x: node.position.x,
+    y: node.position.y,
+    height: Number(node.measured?.height ?? node.height ?? node.style?.height ?? 0) || undefined,
+  })), [selection]);
+  const exportPlan = useMemo(() => planExport(exportCandidates, graphEdges), [exportCandidates, graphEdges]);
+  const batchCount = exportPlan.mode === "batch" && exportPlan.items.every((item) => assets.some((asset) => asset.id === item.assetId && asset.signedUrl))
+    ? exportPlan.items.length
+    : 0;
+
+  /** The objects on the canvas a series can be built from. */
+  const seriesCandidates: SeriesCandidate[] = selection.map((node) => ({
+    id: node.id,
+    label: node.data.title || node.data.nodeType.replace(/_/g, " "),
+    nodeType: node.data.nodeType,
+    text: node.data.body || node.data.title,
+    // Same rule as a single generation: a picture excluded from AI context is
+    // not handed to the provider as a reference either.
+    assetId: node.data.includeInContext === false ? undefined : (node.data.assetId || undefined),
+  }));
+
+  /**
+   * Runs a matrix, placing each result where its cell sits in the grid.
+   *
+   * Cells are generated one at a time against the ordinary endpoint, so a series
+   * carries the same budget, rate limit, lineage and retry behaviour a single
+   * generation does. A cell that fails leaves a failed object in its slot rather
+   * than collapsing the grid, because the rest of the set is already paid for.
+   */
+  const runSeriesGeneration = async (plan: SeriesPlan) => {
+    if (!canvas) return;
+    const origin = canvasCenter();
+    const size = plan.aspect === "square" ? [420, 420] : plan.aspect === "portrait" ? [400, 520] : [520, 360];
+    const gap = 48;
+    setSeriesProgress({ done: 0, total: plan.cells.length });
+    let done = 0;
+    await runSeries(plan.cells, async (cell) => {
+      const point = {
+        x: origin.x + cell.column * (size[0] + gap) - ((plan.columns - 1) * (size[0] + gap)) / 2,
+        y: origin.y + cell.row * (size[1] + gap) - ((plan.rows - 1) * (size[1] + gap)) / 2,
+      };
+      try {
+        const result = await generate.mutateAsync({
+          projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id,
+          operation: "generate_image", instruction: cell.instruction, provider,
+          idempotencyKey: `${plan.id}-${cell.column}-${cell.row}`,
+          selectedNodes: [], brandContext: brandDraft,
+          referenceAssetIds: cell.referenceAssetIds, language, placement: point,
+          aspect: plan.aspect,
+          series: { id: plan.id, label: cell.label, index: cell.column * plan.rows + cell.row, total: plan.cells.length },
+        });
+        if (result.asset?.signedUrl) {
+          addNode("image", { title: cell.label, body: cell.instruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: size[0], height: size[1] }, point);
+        }
+      } catch (error) {
+        addNode("generation", { title: cell.label, body: `${cell.instruction}\n\n${error instanceof Error ? error.message : "Generation failed"}`, status: "failed", width: size[0], height: size[1] }, point);
+        throw error;
+      } finally {
+        done += 1;
+        setSeriesProgress({ done, total: plan.cells.length });
+      }
+    }, { concurrency: 2 });
+    const failures = plan.cells.length - nodesRef.current.filter((node) => node.data.status === "generated").length;
+    setSeriesProgress(null);
+    setSeriesOpen(false);
+    toast({ description: `Series finished. ${plan.cells.length} post${plan.cells.length === 1 ? "" : "s"} requested${failures > 0 ? "; check the grid for any that failed." : "."}` });
+  };
+
+  /**
+   * Exports the selection at the chosen delivery size.
+   *
+   * Three shapes, decided by `planExport`: one piece on its own, several pieces
+   * as several files, or an arrangement flattened into one image. The middle
+   * case is what a generated series needs — nine posts are nine deliverables,
+   * and a contact sheet of them cannot be posted.
+   */
+  const exportSelection = async (format: "png" | "pdf") => {
+    if (!selection.length) { toast({ description: "Select one or more objects to export." }); return; }
+    const preset = EXPORT_PRESETS.find((item) => item.value === exportPreset);
+    const sizeSuffix = preset?.size ? ` ${preset.size[0]}x${preset.size[1]}` : "";
+    const baseName = canvas?.projects.name ?? "creative-direction";
+    setExporting(format);
+
+    const deliverImage = (dataUrl: string, width: number, height: number) => {
+      const name = `${baseName}${preset?.size ? ` ${width}x${height}` : ""}`;
+      if (format === "png") { void fetch(dataUrl).then((response) => response.blob()).then((blob) => downloadBlob(blob, `${name}.png`)); return; }
+      const pdf = new jsPDF({ orientation: width >= height ? "landscape" : "portrait", unit: "px", format: [width, height] });
+      pdf.addImage(dataUrl, "PNG", 0, 0, width, height);
+      pdf.save(`${name}.pdf`);
+    };
+
+    try {
+      const plan = planExport(exportCandidates, graphEdges);
+
+      // Everything planned must resolve to stored artwork before anything is
+      // rendered; a half-finished batch is worse than composing the view.
+      const sources = plan.items.map((item) => ({ item, url: assets.find((asset) => asset.id === item.assetId)?.signedUrl }));
+      const ready = sources.every((source) => Boolean(source.url));
+
+      if (plan.mode === "single" && ready) {
+        const { dataUrl, width, height } = await renderArtwork(sources[0].url!, preset?.size);
+        deliverImage(dataUrl, width, height);
+        return;
+      }
+
+      if (plan.mode === "batch" && ready) {
+        setExportProgress({ done: 0, total: sources.length });
+        const renders: Array<{ title: string; dataUrl: string; width: number; height: number }> = [];
+        // Sequential on purpose: a 4K preset holds a full bitmap per render, and
+        // a dozen at once is how a browser tab runs out of memory mid-export.
+        for (const [index, source] of sources.entries()) {
+          const rendered = await renderArtwork(source.url!, preset?.size);
+          renders.push({ title: source.item.title, ...rendered });
+          setExportProgress({ done: index + 1, total: sources.length });
+        }
+
+        if (format === "png") {
+          const zip = new JSZip();
+          renders.forEach((render, index) => {
+            zip.file(exportFileName(index, render.title, "png"), render.dataUrl.split(",")[1], { base64: true });
+          });
+          downloadBlob(await zip.generateAsync({ type: "blob" }), `${baseName} series${sizeSuffix}.zip`);
+        } else {
+          // One page per piece, each page the size of its own artwork, so a
+          // client review deck never letterboxes a portrait post.
+          const first = renders[0];
+          const pdf = new jsPDF({ orientation: first.width >= first.height ? "landscape" : "portrait", unit: "px", format: [first.width, first.height] });
+          renders.forEach((render, index) => {
+            if (index > 0) pdf.addPage([render.width, render.height], render.width >= render.height ? "landscape" : "portrait");
+            pdf.addImage(render.dataUrl, "PNG", 0, 0, render.width, render.height);
+          });
+          pdf.save(`${baseName} series${sizeSuffix}.pdf`);
+        }
+        const ordering = plan.ordering === "sequence" ? " in the order your arrows set" : "";
+        toast({ description: format === "png"
+          ? `Exported ${renders.length} pieces as a ZIP archive${ordering}.`
+          : `Exported ${renders.length} pieces as a ${renders.length}-page PDF${ordering}.` });
+        return;
+      }
+
+      const viewportElement = document.querySelector<HTMLElement>(".creative-flow-wrap .react-flow__viewport");
+      const stage = document.querySelector<HTMLElement>(".creative-flow-wrap");
+      if (!viewportElement || !stage) return;
+      const ids = new Set(selection.map((node) => node.id));
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        nodes.forEach((node) => { if (node.parentId && ids.has(node.parentId) && !ids.has(node.id)) { ids.add(node.id); expanded = true; } });
+      }
+      const bounds = getNodesBounds(nodes.filter((node) => ids.has(node.id)));
+      const [width, height] = preset?.size ?? [
+        Math.min(2400, Math.max(640, Math.ceil(bounds.width))),
+        Math.min(2400, Math.max(480, Math.ceil(bounds.height))),
+      ];
+      // No padding for a delivery size: the frame is the deliverable edge.
+      const transform = getViewportForBounds(bounds, width, height, .1, 4, preset?.size ? 0 : .04);
+      const edgeIds = new Set(edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => edge.id));
+      // Live class rather than a filter: html-to-image copies computed styles, so
+      // hiding the chrome here is what keeps it out of the capture.
+      stage.classList.add("creative-exporting");
+      try {
+        const dataUrl = await toPng(viewportElement, {
+          cacheBust: true,
+          backgroundColor: format === "pdf" ? "#ffffff" : undefined,
+          // A delivery preset means exact pixels; only a free-size capture of
+          // canvas cards benefits from the extra resolution.
+          width, height, pixelRatio: preset?.size ? 1 : 2,
+          style: { width: `${width}px`, height: `${height}px`, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})` },
+          filter: (element) => {
+            const html = element as HTMLElement;
+            if (html.classList?.contains("react-flow__node")) return ids.has(html.dataset.id ?? "");
+            if (html.classList?.contains("react-flow__edge")) return edgeIds.has(html.dataset.id ?? "");
+            return true;
+          },
+        });
+        deliverImage(dataUrl, width, height);
+      } finally {
+        stage.classList.remove("creative-exporting");
+      }
+    } catch (error) {
+      toast({ title: "Export failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" });
+    } finally { setExporting(null); setExportProgress(null); }
+  };
 
   if (isLoading) return <div className="flex h-screen items-center justify-center bg-[#171415] text-white"><Loader2 className="animate-spin text-[#CB2039]" /></div>;
   if (isError || !canvas) return <div className="flex h-screen flex-col items-center justify-center gap-4"><p className="font-medium">Canvas not found or access denied.</p><Button asChild variant="outline"><Link to="/dashboard/creative-canvas">Back to projects</Link></Button></div>;
 
   return <div className="creative-canvas-shell" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (!flow || !event.dataTransfer.files.length) return; void upload(event.dataTransfer.files, flow.screenToFlowPosition({ x: event.clientX, y: event.clientY })); }}>
-    <header className="creative-canvas-topbar"><div className="flex min-w-0 items-center gap-3"><Button asChild size="icon" variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white"><Link to="/dashboard/creative-canvas" aria-label="Back to Canvas projects"><ArrowLeft size={17} /></Link></Button><div className="h-5 w-px bg-white/10" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{canvas.projects.name}</p><p className="truncate text-[11px] text-white/45">{canvas.projects.client_name || "LV Branding internal"} · {canvas.name}</p></div></div><div className="flex items-center gap-2"><span className={`creative-save-state creative-save-state--${saveState}`}>{saveState === "saving" ? <Loader2 size={12} className="animate-spin" /> : saveState === "offline" ? <WifiOff size={12} /> : saveState === "error" ? <CloudOff size={12} /> : saveState === "saved" ? <Cloud size={12} /> : <Save size={12} />}{saveState}</span><Button size="sm" variant="ghost" className="text-white/70" title="Export selected content as a 2× PNG" disabled={Boolean(exporting)} onClick={() => void exportSelection("png")}>{exporting === "png" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Download size={14} className="mr-1.5" />}PNG</Button><Button size="sm" className="bg-[#CB2039]" title="Export selected content as a PDF with a 2× raster render" disabled={Boolean(exporting)} onClick={() => void exportSelection("pdf")}>{exporting === "pdf" && <Loader2 size={14} className="mr-1.5 animate-spin" />}Export PDF</Button></div></header>
+    <header className="creative-canvas-topbar"><div className="flex min-w-0 items-center gap-3"><Button asChild size="icon" variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white"><Link to="/dashboard/creative-canvas" aria-label="Back to Canvas projects"><ArrowLeft size={17} /></Link></Button><div className="h-5 w-px bg-white/10" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{canvas.projects.name}</p><p className="truncate text-[11px] text-white/45">{canvas.projects.client_name || "LV Branding internal"} · {canvas.name}</p></div></div><div className="flex items-center gap-2"><span className={`creative-save-state creative-save-state--${saveState}`}>{saveState === "saving" ? <Loader2 size={12} className="animate-spin" /> : saveState === "offline" ? <WifiOff size={12} /> : saveState === "error" ? <CloudOff size={12} /> : saveState === "saved" ? <Cloud size={12} /> : <Save size={12} />}{saveState}</span><Button size="icon" variant="ghost" className="h-8 w-8 text-white/55 hover:bg-white/10 hover:text-white" title="How nodes work" aria-label="How nodes work" onClick={() => setHelpOpen(true)}><HelpCircle size={16} /></Button><Select value={exportPreset} onValueChange={setExportPreset}><SelectTrigger className="h-8 w-[210px] border-white/10 bg-white/5 text-xs text-white" aria-label="Export size"><SelectValue /></SelectTrigger><SelectContent>{PRESET_GROUPS.map((group) => { const items = EXPORT_PRESETS.filter((preset) => preset.group === group); return items.length ? <SelectGroup key={group}><SelectLabel>{group}</SelectLabel>{items.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}</SelectGroup> : null; })}</SelectContent></Select><Button size="sm" variant="ghost" className="text-white/70" title={batchCount ? `Export ${batchCount} pieces as a ZIP of PNGs` : "Export the selected artwork as a PNG"} disabled={Boolean(exporting)} onClick={() => void exportSelection("png")}>{exporting === "png" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Download size={14} className="mr-1.5" />}{exporting === "png" && exportProgress ? `${exportProgress.done}/${exportProgress.total}` : batchCount ? `ZIP · ${batchCount}` : "PNG"}</Button><Button size="sm" className="bg-[#CB2039]" title={batchCount ? `Export ${batchCount} pieces as a ${batchCount}-page PDF` : "Export the selected artwork as a PDF"} disabled={Boolean(exporting)} onClick={() => void exportSelection("pdf")}>{exporting === "pdf" && <Loader2 size={14} className="mr-1.5 animate-spin" />}{exporting === "pdf" && exportProgress ? `${exportProgress.done}/${exportProgress.total}` : batchCount ? `PDF · ${batchCount} pages` : "Export PDF"}</Button></div></header>
     <div className="creative-canvas-stage">
-      <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>{leftOpen && <div className="space-y-1 p-2"><p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>{NODE_TOOLS.map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" onClick={() => addNode(type)}><Icon size={16} /><span>{label}</span></button>)}<button className="creative-tool-button" onClick={() => fileInput.current?.click()}><Upload size={16} /><span>Upload</span></button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} /><span>Fit selection</span></button><button className="creative-tool-button" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} /><span>Fit canvas</span></button></div>}</aside>
+      <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>{leftOpen && <div className="space-y-1 p-2"><p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>{NODE_TOOLS.map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" onClick={() => addNode(type)}><Icon size={16} /><span>{label}</span></button>)}<button className="creative-tool-button" onClick={() => fileInput.current?.click()}><Upload size={16} /><span>Upload</span></button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => setSeriesOpen(true)} title="Combine selected objects into a grid of posts"><Grid3x3 size={16} /><span>Series</span></button><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} /><span>Fit selection</span></button><button className="creative-tool-button" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} /><span>Fit canvas</span></button></div>}</aside>
       {selection.length > 0 && <div className="creative-selection-actions"><span className="max-w-40 truncate text-xs text-white/55">{selection.length === 1 ? selection[0].data.title : `${selection.length} selected`}</span><Button size="icon" variant="ghost" className="h-8 w-8" title="Group" disabled={selection.length < 2} onClick={groupSelection}><Group size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Ungroup" onClick={ungroupSelection}><Ungroup size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Bring forward" onClick={() => changeOrder(1)}><ArrowUpToLine size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Send backward" onClick={() => changeOrder(-1)}><ArrowDownToLine size={14} /></Button>{selection.length === 1 && <Select value={["favorite","shortlisted","rejected","needs_revision","client_selected","approved_final"].includes(selection[0].data.status) ? selection[0].data.status : undefined} onValueChange={(value) => void applyDecision(value as CreativeDecision)}><SelectTrigger className="h-8 w-36 border-white/10 bg-white/5 text-xs text-white"><SelectValue placeholder="Set decision" /></SelectTrigger><SelectContent><SelectItem value="favorite">Favorite</SelectItem><SelectItem value="shortlisted">Shortlisted</SelectItem><SelectItem value="needs_revision">Needs revision</SelectItem><SelectItem value="rejected">Rejected</SelectItem><SelectItem value="client_selected">Client selected</SelectItem><SelectItem value="approved_final">Approved final</SelectItem></SelectContent></Select>}{selectedAsset?.signedUrl && <Button size="sm" variant="ghost" className="h-8 text-white/65" onClick={async () => { try { const response = await fetch(selectedAsset.signedUrl!); downloadBlob(await response.blob(), selectedAsset.original_filename); } catch { toast({ title: "Download failed", variant: "destructive" }); } }}><Download size={13} className="mr-1.5" />Original</Button>}</div>}
       <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (hydrated.current) { setPendingScene(flowToScene(nodesRef.current, edgesRef.current, viewport)); setSaveState(navigator.onLine ? "unsaved" : "offline"); } }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
-      <aside className={`creative-inspector ${rightOpen ? "creative-inspector--open" : ""}`}><button className="creative-panel-toggle creative-panel-toggle--right" onClick={() => setRightOpen(!rightOpen)} aria-label={rightOpen ? "Collapse inspector" : "Open inspector"}>{rightOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>{rightOpen && <Tabs defaultValue="properties" className="flex h-full flex-col"><TabsList className="m-2 grid grid-cols-4 bg-white/5"><TabsTrigger value="properties">Object</TabsTrigger><TabsTrigger value="brand">Brand</TabsTrigger><TabsTrigger value="assets">Assets</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList><ScrollArea className="flex-1"><TabsContent value="properties" className="m-0 p-4">{selection.length === 1 ? <div className="space-y-4"><div><p className="creative-inspector-label">Selected object</p><p className="mt-1 text-sm font-medium capitalize text-white">{selection[0].data.nodeType.replaceAll("_", " ")}</p></div><div className="space-y-1.5"><Label className="text-white/70">Title</Label><Input value={selection[0].data.title} onChange={(event) => updateNodeData(selection[0].id, { title: event.target.value })} /></div><div className="space-y-1.5"><Label className="text-white/70">Content</Label><Textarea className="min-h-32" value={selection[0].data.body} onChange={(event) => updateNodeData(selection[0].id, { body: event.target.value })} /></div></div> : <div className="py-10 text-center text-sm text-white/45">{selection.length ? `${selection.length} objects selected` : "Select an object to edit its content and properties."}</div>}</TabsContent>
+      <aside className={`creative-inspector ${rightOpen ? "creative-inspector--open" : ""}`}><button className="creative-panel-toggle creative-panel-toggle--right" onClick={() => setRightOpen(!rightOpen)} aria-label={rightOpen ? "Collapse inspector" : "Open inspector"}>{rightOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>{rightOpen && <Tabs defaultValue="properties" className="flex h-full flex-col"><TabsList className="m-2 grid grid-cols-4 bg-white/5"><TabsTrigger value="properties">Object</TabsTrigger><TabsTrigger value="brand">Brand</TabsTrigger><TabsTrigger value="assets">Assets</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList><ScrollArea className="flex-1"><TabsContent value="properties" className="m-0 p-4">{selection.length === 1 ? <div className="space-y-4"><div><p className="creative-inspector-label">Selected object</p><p className="mt-1 text-sm font-medium capitalize text-white">{selection[0].data.nodeType.replaceAll("_", " ")}</p></div><div className="space-y-1.5"><Label className="text-white/70">Title</Label><Input value={selection[0].data.title} onChange={(event) => updateNodeData(selection[0].id, { title: event.target.value })} /></div><div className="space-y-1.5"><Label className="text-white/70">Content</Label><Textarea className="min-h-32" value={selection[0].data.body} onChange={(event) => updateNodeData(selection[0].id, { body: event.target.value })} /></div></div> : !selection.length && edgeSelection.length === 1 ? <ConnectionInspector kind={edgeKindOf(edgeSelection[0])} sourceTitle={nodes.find((node) => node.id === edgeSelection[0].source)?.data.title ?? ""} targetTitle={nodes.find((node) => node.id === edgeSelection[0].target)?.data.title ?? ""} onChange={(kind) => setEdgeKind(edgeSelection[0].id, kind)} /> : <div className="py-10 text-center text-sm text-white/45">{selection.length ? `${selection.length} objects selected` : edgeSelection.length ? `${edgeSelection.length} connections selected` : "Select an object or a connection to edit it."}</div>}</TabsContent>
         <TabsContent value="brand" className="m-0 space-y-4 p-4"><div><p className="text-sm font-semibold text-white">Project source of truth</p><p className="mt-1 text-xs leading-5 text-white/45">Only relevant fields and selected objects are sent to AI providers.</p></div>{BRAND_FIELDS.map((field) => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-white/65">{field.label}</Label><Textarea value={brandDraft[field.key] ?? ""} placeholder={field.placeholder} className="min-h-16 bg-white/5 text-xs text-white" onChange={(event) => setBrandDraft((current) => ({ ...current, [field.key]: event.target.value }))} /></div>)}<Button className="w-full bg-[#CB2039]" disabled={saveBrand.isPending} onClick={async () => { try { await saveBrand.mutateAsync(brandDraft); toast({ description: "Brand context saved." }); } catch (error) { toast({ title: "Brand context was not saved", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } }}>{saveBrand.isPending && <Loader2 size={14} className="mr-2 animate-spin" />}Save brand context</Button></TabsContent>
         <TabsContent value="assets" className="m-0 space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Asset library</p><p className="text-xs text-white/45">Private · {assets.length} assets</p></div><Button size="icon" variant="outline" onClick={() => fileInput.current?.click()} aria-label="Upload asset"><Plus size={14} /></Button></div>{assets.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No uploaded or generated assets.</p> : <div className="grid grid-cols-2 gap-2">{assets.map((asset) => <button key={asset.id} className="overflow-hidden rounded-lg border border-white/10 bg-white/5 text-left" onClick={() => addNode(asset.source_type === "reference" ? "reference" : "image", { title: asset.original_filename, body: `${asset.source_type} asset`, assetId: asset.id, assetUrl: asset.signedUrl ?? "", width: 360, height: 340 })}>{asset.signedUrl ? <img src={asset.signedUrl} alt="" className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-white/5" />}<p className="truncate p-2 text-[10px] text-white/60">{asset.original_filename}</p></button>)}</div>}</TabsContent>
         <TabsContent value="history" className="m-0 space-y-3 p-4"><div className="rounded-lg border border-white/10 bg-white/5 p-3"><div className="flex items-center gap-2 text-xs text-white/60"><CircleDollarSign size={14} className="text-[#CB2039]" />Estimated project usage</div><p className="mt-1 text-xl font-semibold text-white">${(usage?.total ?? 0).toFixed(4)}</p><p className="text-[10px] text-white/35">Estimates may differ from provider billing.</p></div>{generations.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No generations yet.</p> : generations.map((item) => <div key={item.id} className="rounded-lg border border-white/10 bg-white/[.03] p-3"><div className="flex items-center justify-between"><Badge variant="outline" className="border-white/15 text-[10px] text-white/65">{item.provider}</Badge><span className={`text-[10px] ${item.status === "failed" ? "text-red-400" : "text-white/40"}`}>{item.status}</span></div><p className="mt-2 line-clamp-2 text-xs text-white/75">{item.original_instruction}</p><div className="mt-2 flex justify-between text-[10px] text-white/35"><span>{item.model}</span><span>${Number(item.estimated_cost_usd ?? 0).toFixed(4)}</span></div>{item.error_message && <p className="mt-2 text-[10px] text-red-400">{item.error_message}</p>}</div>)}</TabsContent></ScrollArea></Tabs>}</aside>
-      <section className="creative-ai-bar"><div className="flex items-center gap-2 border-r border-white/10 pr-3"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#CB2039]"><Bot size={16} /></div><div><p className="text-xs font-semibold text-white">LV Intelligence</p><p className="text-[10px] text-white/40">{selection.length ? `${selection.length} selected` : "Project context"}</p></div></div><Select value={operation} onValueChange={(value) => setOperation(value as CreativeOperation)}><SelectTrigger className="h-9 w-[170px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent>{AI_ACTIONS.map((action) => <SelectItem key={action.value} value={action.value}>{action.label}</SelectItem>)}</SelectContent></Select><Input className="h-9 min-w-52 flex-1 border-white/10 bg-white/5 text-xs text-white placeholder:text-white/30" value={instruction} onChange={(event) => setInstruction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void runGeneration(); }} placeholder="Direct the next strategic or creative move…" /><Select value={provider} onValueChange={(value) => setProvider(value as CreativeProvider)}><SelectTrigger className="h-9 w-[128px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem>{enabledProviders.map((item) => <SelectItem key={item.id} value={item.id}>{PROVIDER_LABELS[item.id] ?? item.id}</SelectItem>)}</SelectContent></Select><Button size="sm" className="h-9 bg-[#CB2039]" disabled={!instruction.trim() || generate.isPending || saveState === "offline"} onClick={() => void runGeneration()}>{generate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}<span className="ml-1.5">Create</span></Button></section>
+      <section className="creative-ai-bar"><div className="flex items-center gap-2 border-r border-white/10 pr-3"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#CB2039]"><Bot size={16} /></div><div><p className="text-xs font-semibold text-white">LV Intelligence</p><p className="text-[10px] text-white/40">{selection.length ? `${selection.length} selected${inherited.length ? ` · ${inherited.length} connected` : ""}` : "Project context"}</p></div></div><Select value={operation} onValueChange={(value) => setOperation(value as CreativeOperation)}><SelectTrigger className="h-9 w-[170px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent>{AI_ACTIONS.map((action) => <SelectItem key={action.value} value={action.value}>{action.label}</SelectItem>)}</SelectContent></Select><Input className="h-9 min-w-52 flex-1 border-white/10 bg-white/5 text-xs text-white placeholder:text-white/30" value={instruction} onChange={(event) => setInstruction(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void runGeneration(); }} placeholder="Direct the next strategic or creative move…" /><Select value={provider} onValueChange={(value) => setProvider(value as CreativeProvider)}><SelectTrigger className="h-9 w-[128px] border-white/10 bg-white/5 text-xs text-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem>{enabledProviders.map((item) => <SelectItem key={item.id} value={item.id}>{PROVIDER_LABELS[item.id] ?? item.id}</SelectItem>)}</SelectContent></Select><Button size="sm" className="h-9 bg-[#CB2039]" disabled={!instruction.trim() || generate.isPending || saveState === "offline"} onClick={() => void runGeneration()}>{generate.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}<span className="ml-1.5">Create</span></Button></section>
     </div>
+    <CanvasHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+    <SeriesDialog open={seriesOpen} onOpenChange={setSeriesOpen} candidates={seriesCandidates} running={Boolean(seriesProgress)} progress={seriesProgress} onRun={(plan) => void runSeriesGeneration(plan)} />
   </div>;
 }

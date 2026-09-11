@@ -26,6 +26,23 @@ export interface CanvasContextNode {
   parentDirectionId?: string;
   includeInAiContext?: boolean;
   metadata?: Record<string, unknown>;
+  /**
+   * Whether the person chose this object or the canvas supplied it.
+   *
+   * `inherited` objects arrived by following connections upstream from the
+   * selection. The distinction is passed to the model so a direction that was
+   * pulled in reads as governing context rather than as the subject.
+   */
+  role?: "selected" | "inherited";
+  /** Hops from the selection, for inherited objects. */
+  depth?: number;
+  /**
+   * Where this object falls in a running order drawn on the canvas.
+   *
+   * Set only when sequence arrows form an unambiguous chain through it, so the
+   * model can continue from what came before instead of restating it.
+   */
+  sequence?: { step: number; total: number; follows?: string };
 }
 
 export interface CreativeRequest {
@@ -44,7 +61,26 @@ export interface CreativeRequest {
   market?: string;
   referenceAssetIds?: string[];
   placement?: { x: number; y: number };
+  /** Shape to generate at. Without it every image came out 3:2 landscape. */
+  aspect?: CreativeAspect;
+  /**
+   * Which cell of a series this generation is.
+   *
+   * Recorded on the row so a set stays identifiable after the fact: which run
+   * produced it, which combination it came from, and where it sat in the grid.
+   * Each cell is still an ordinary generation with its own cost and retry.
+   */
+  series?: { id: string; label?: string; index?: number; total?: number };
 }
+
+/**
+ * Shapes a social or web deliverable is actually produced in.
+ *
+ * Generating at the right shape matters more than it looks: letterboxing a
+ * landscape render into a square post wastes a third of the frame and moves the
+ * composition off centre, so the artwork has to be made square to begin with.
+ */
+export type CreativeAspect = "square" | "portrait" | "landscape";
 
 /**
  * What the project already knows about this client, loaded server-side.
@@ -102,6 +138,6 @@ export interface CreativeAIProvider {
   id: ProviderId;
   capabilities: ProviderCapability[];
   generateText(request: { system: string; prompt: string; signal: AbortSignal }): Promise<NormalizedResult>;
-  generateImage?(request: { prompt: string; referenceDataUrls?: string[]; signal: AbortSignal }): Promise<NormalizedResult>;
-  editImage?(request: { prompt: string; referenceDataUrls: string[]; signal: AbortSignal }): Promise<NormalizedResult>;
+  generateImage?(request: { prompt: string; referenceDataUrls?: string[]; aspect?: CreativeAspect; signal: AbortSignal }): Promise<NormalizedResult>;
+  editImage?(request: { prompt: string; referenceDataUrls: string[]; aspect?: CreativeAspect; signal: AbortSignal }): Promise<NormalizedResult>;
 }

@@ -19,12 +19,15 @@ function validate(body: any): CreativeRequest {
   if (body.provider && !["auto", "openai", "google", "anthropic"].includes(body.provider)) throw Object.assign(new Error("Invalid provider"), { status: 400 });
   for (const node of body.selectedNodes) {
     if (!node || typeof node.id !== "string" || node.id.length > 160 || typeof node.type !== "string" || node.type.length > 80 || (node.text != null && (typeof node.text !== "string" || node.text.length > 20_000))) throw Object.assign(new Error("Invalid selected canvas object"), { status: 400 });
+    if (node.sequence != null && (typeof node.sequence !== "object" || !Number.isInteger(node.sequence.step) || !Number.isInteger(node.sequence.total) || node.sequence.step < 1 || node.sequence.total < 1 || node.sequence.step > node.sequence.total || node.sequence.total > 200 || (node.sequence.follows != null && (typeof node.sequence.follows !== "string" || node.sequence.follows.length > 300)))) throw Object.assign(new Error("Invalid canvas sequence position"), { status: 400 });
   }
   // Checked here with the other caps rather than after the generation row is
   // opened: a rejection further down returned without throwing, so the row was
   // left in `processing` forever and permanently consumed a concurrency slot.
   if (body.referenceAssetIds && (!Array.isArray(body.referenceAssetIds) || body.referenceAssetIds.length > 4 || body.referenceAssetIds.some((id: unknown) => typeof id !== "string" || !UUID.test(id)))) throw Object.assign(new Error("Provide up to four valid reference assets"), { status: 400 });
   if (body.placement && (!Number.isFinite(body.placement.x) || !Number.isFinite(body.placement.y))) throw Object.assign(new Error("Invalid canvas placement"), { status: 400 });
+  if (body.aspect && !["square", "portrait", "landscape"].includes(body.aspect)) throw Object.assign(new Error("Invalid aspect"), { status: 400 });
+  if (body.series && (typeof body.series !== "object" || typeof body.series.id !== "string" || body.series.id.length > 80 || (body.series.label != null && (typeof body.series.label !== "string" || body.series.label.length > 300)))) throw Object.assign(new Error("Invalid series"), { status: 400 });
   return body as CreativeRequest;
 }
 
@@ -97,7 +100,7 @@ serve(async (req) => {
       provider: providerConfig.id, model: requiredCapability(body.operation).startsWith("image_") ? providerConfig.imageModel : providerConfig.textModel,
       operation: body.operation, status: "queued", original_instruction: body.instruction,
       system_instructions: prepared.systemInstructions, structured_context: prepared.structuredContext,
-      context_manifest: prepared.manifest, normalized_request: { operation: body.operation, language: body.language, placement: body.placement },
+      context_manifest: prepared.manifest, normalized_request: { operation: body.operation, language: body.language, placement: body.placement, aspect: body.aspect ?? null, series: body.series ?? null },
       enhanced_prompt: prepared.enhancedPrompt, reference_asset_ids: body.referenceAssetIds ?? [], idempotency_key: body.idempotencyKey,
     }).select().single();
     if (insertError?.code === "23505") {
@@ -128,9 +131,9 @@ serve(async (req) => {
       const capability = requiredCapability(body.operation);
       if (capability === "image_edit" && !referenceDataUrls.length) throw Object.assign(new Error("Image editing requires a selected reference asset"), { code: "REFERENCE_REQUIRED", status: 400 });
       result = capability === "image_generation"
-        ? await provider.generateImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, signal: controller.signal })
+        ? await provider.generateImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
         : capability === "image_edit"
-          ? await provider.editImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, signal: controller.signal })
+          ? await provider.editImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
         : await provider.generateText({ system: prepared.systemInstructions, prompt: prepared.enhancedPrompt, signal: controller.signal });
     } finally { clearTimeout(timeout); }
     const cost = estimateCost(result.provider, body.operation, result.inputTokens, result.outputTokens);

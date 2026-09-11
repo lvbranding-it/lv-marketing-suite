@@ -7,6 +7,7 @@ export type CreativeNodeType = typeof CREATIVE_NODE_TYPES[number];
 export type CreativeDecision = "favorite" | "shortlisted" | "rejected" | "needs_revision" | "client_selected" | "approved_final";
 export type CreativeOperation = "generate_image" | "edit_image" | "variations" | "campaign_concept" | "write_copy" | "rewrite" | "shorten" | "expand" | "adapt_en_es" | "adapt_es_en" | "visual_critique" | "compare_concepts" | "recommend_direction" | "creative_rationale" | "production_prompt";
 export type CreativeProvider = "auto" | "openai" | "google" | "anthropic";
+export type CreativeAspect = "square" | "portrait" | "landscape";
 
 export interface CreativeCanvasRecord {
   id: string;
