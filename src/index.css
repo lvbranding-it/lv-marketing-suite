@@ -250,8 +250,30 @@
   backdrop-filter: blur(16px);
 }
 
-.creative-toolbar { left: 14px; }
+.creative-toolbar { left: 14px; display: flex; flex-direction: column; }
 .creative-toolbar--open { width: 154px; }
+
+/*
+ * The UGC group nearly triples the tool list, and the rail is a fixed height
+ * between the top bar and the AI bar. Without this the extra buttons render
+ * past the bottom edge and simply cannot be reached.
+ */
+.creative-toolbar > div {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent;
+}
+.creative-toolbar > div::-webkit-scrollbar { width: 8px; }
+.creative-toolbar > div::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+  background-color: rgba(255,255,255,.18);
+}
+.creative-toolbar > div::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.3); }
 .creative-inspector { right: 14px; }
 .creative-inspector--open { width: min(360px, calc(100vw - 28px)); }
 
@@ -283,6 +305,16 @@
   color: rgba(255,255,255,.62);
   font-size: 12px;
   transition: .15s ease;
+}
+
+/*
+ * Collapsed, the rail is an icon strip rather than an empty gutter. The label
+ * is what goes away; the tool stays reachable, with its name on hover.
+ */
+.creative-toolbar:not(.creative-toolbar--open) .creative-tool-button {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .creative-tool-button:hover,
