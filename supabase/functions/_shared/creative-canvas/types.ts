@@ -111,6 +111,8 @@ export interface PreparedContext {
   systemInstructions: string;
   structuredContext: Record<string, unknown>;
   enhancedPrompt: string;
+  /** The short, instruction-first prompt image models get instead. */
+  imagePrompt: string;
   manifest: ContextManifest;
 }
 

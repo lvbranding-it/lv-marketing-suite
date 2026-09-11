@@ -53,6 +53,15 @@ export function createOpenAIProvider(config: ProviderConfig, apiKey: string, fet
         form.append("model", config.imageModel!);
         form.append("prompt", prompt);
         form.append("size", OPENAI_IMAGE_SIZE[aspect ?? "landscape"]);
+        form.append("output_format", "png");
+        // Both of these were missing, and both matter most on exactly the job
+        // this endpoint exists for. `quality` was set on the text-to-image call
+        // but not here, so every edit ran at the default. `input_fidelity` is
+        // what preserves a face, a logo or a garment's detail from the input
+        // instead of reinterpreting it — without it, "keep the person, change
+        // the clothes" comes back as a different person wearing the clothes.
+        form.append("quality", "high");
+        form.append("input_fidelity", "high");
         referenceDataUrls.forEach((url, index) => {
           const part = dataUrlParts(url);
           const bytes = Uint8Array.from(atob(part.data), (char) => char.charCodeAt(0));

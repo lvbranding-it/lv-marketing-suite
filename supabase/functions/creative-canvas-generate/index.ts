@@ -95,13 +95,17 @@ serve(async (req) => {
       marketingContext: (projectRecord.marketing_context ?? undefined) as Record<string, unknown> | undefined,
       brandSnapshot: (projectRecord.brand_snapshot ?? undefined) as Record<string, unknown> | undefined,
     } : undefined);
+    const capability = requiredCapability(body.operation);
+    // Image models get the short, instruction-first prompt; the lineage row
+    // records the prompt that was actually sent rather than one nobody used.
+    const promptForModel = capability.startsWith("image_") ? prepared.imagePrompt : prepared.enhancedPrompt;
     const { data: generation, error: insertError } = await db.from("ai_generations").insert({
       project_id: body.projectId, canvas_id: body.canvasId, org_id: body.orgId, user_id: auth.user.id,
-      provider: providerConfig.id, model: requiredCapability(body.operation).startsWith("image_") ? providerConfig.imageModel : providerConfig.textModel,
+      provider: providerConfig.id, model: capability.startsWith("image_") ? providerConfig.imageModel : providerConfig.textModel,
       operation: body.operation, status: "queued", original_instruction: body.instruction,
       system_instructions: prepared.systemInstructions, structured_context: prepared.structuredContext,
       context_manifest: prepared.manifest, normalized_request: { operation: body.operation, language: body.language, placement: body.placement, aspect: body.aspect ?? null, series: body.series ?? null },
-      enhanced_prompt: prepared.enhancedPrompt, reference_asset_ids: body.referenceAssetIds ?? [], idempotency_key: body.idempotencyKey,
+      enhanced_prompt: promptForModel, reference_asset_ids: body.referenceAssetIds ?? [], idempotency_key: body.idempotencyKey,
     }).select().single();
     if (insertError?.code === "23505") {
       const { data: replay } = await db.from("ai_generations").select("*").eq("user_id", auth.user.id).eq("idempotency_key", body.idempotencyKey).single();
@@ -117,7 +121,14 @@ serve(async (req) => {
     if (body.referenceAssetIds?.length) {
       const { data: referenceAssets } = await db.from("creative_assets").select("id, storage_path, mime_type").eq("project_id", body.projectId).is("deleted_at", null).in("id", body.referenceAssetIds);
       if ((referenceAssets?.length ?? 0) !== body.referenceAssetIds.length) throw Object.assign(new Error("One or more reference assets are unavailable"), { code: "INVALID_REFERENCE", status: 400 });
-      for (const asset of referenceAssets ?? []) {
+      // `in (...)` returns rows in whatever order Postgres likes, so the first
+      // image handed to the model was effectively arbitrary. For an edit the
+      // first image is the one being edited, so the caller's order is restored
+      // here before anything is downloaded.
+      const byId = new Map((referenceAssets ?? []).map((asset) => [asset.id, asset]));
+      for (const assetId of body.referenceAssetIds) {
+        const asset = byId.get(assetId);
+        if (!asset) throw Object.assign(new Error("One or more reference assets are unavailable"), { code: "INVALID_REFERENCE", status: 400 });
         const { data: file, error: downloadError } = await db.storage.from("creative-canvas-assets").download(asset.storage_path);
         if (downloadError || !file) throw Object.assign(new Error("Reference asset could not be loaded"), { code: "REFERENCE_LOAD_FAILED", status: 502 });
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -128,12 +139,11 @@ serve(async (req) => {
     }
     let result;
     try {
-      const capability = requiredCapability(body.operation);
       if (capability === "image_edit" && !referenceDataUrls.length) throw Object.assign(new Error("Image editing requires a selected reference asset"), { code: "REFERENCE_REQUIRED", status: 400 });
       result = capability === "image_generation"
-        ? await provider.generateImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
+        ? await provider.generateImage!({ prompt: promptForModel, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
         : capability === "image_edit"
-          ? await provider.editImage!({ prompt: prepared.enhancedPrompt, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
+          ? await provider.editImage!({ prompt: promptForModel, referenceDataUrls, aspect: body.aspect, signal: controller.signal })
         : await provider.generateText({ system: prepared.systemInstructions, prompt: prepared.enhancedPrompt, signal: controller.signal });
     } finally { clearTimeout(timeout); }
     const cost = estimateCost(result.provider, body.operation, result.inputTokens, result.outputTokens);

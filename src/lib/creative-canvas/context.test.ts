@@ -36,3 +36,74 @@ describe("LV Intelligence context selection", () => {
     expect(result.manifest.selectedObjectIds).toHaveLength(12);
   });
 });
+
+describe("the prompt an image model receives", () => {
+  const outfitTransfer = () => request({
+    operation: "edit_image",
+    instruction: "Keep the person and face from the first image. Replace only the clothing with the outfit from the second image.",
+    referenceAssetIds: ["asset-person", "asset-outfit"],
+    selectedNodes: [
+      { id: "n1", type: "reference", title: "PHOTO-2026-09-10.jpg", text: "Reference notes", assetId: "asset-person", role: "selected" },
+      { id: "n2", type: "reference", title: "76a80de17cb2.jpg", text: "Reference notes", assetId: "asset-outfit", role: "selected" },
+    ],
+    brandContext: {
+      brandName: "LV Branding",
+      visualPrinciples: "Warm, natural light. Real people.",
+      prohibitedElements: "No watermarks",
+      // Copy guidance has no business in a picture prompt.
+      voiceTone: "Confident, never boastful",
+      competitors: "A long list of competitors that says nothing about a photograph",
+    },
+  });
+
+  it("leads with the instruction instead of burying it", () => {
+    const { imagePrompt } = buildCreativeContext(outfitTransfer());
+    expect(imagePrompt.startsWith("Keep the person and face from the first image")).toBe(true);
+  });
+
+  it("stays short enough for the model to weigh it", () => {
+    // The text prompt for the same request is tens of thousands of characters.
+    const prepared = buildCreativeContext(outfitTransfer());
+    expect(prepared.imagePrompt.length).toBeLessThan(2_500);
+    expect(prepared.imagePrompt.length).toBeLessThan(prepared.enhancedPrompt.length);
+  });
+
+  it("names the attached images in the order they are sent", () => {
+    const { imagePrompt } = buildCreativeContext(outfitTransfer());
+    expect(imagePrompt).toContain("Image 1: PHOTO-2026-09-10.jpg");
+    expect(imagePrompt).toContain("Image 2: 76a80de17cb2.jpg");
+    expect(imagePrompt.indexOf("Image 1")).toBeLessThan(imagePrompt.indexOf("Image 2"));
+  });
+
+  it("keeps brand guidance that can be seen and drops guidance that cannot", () => {
+    const { imagePrompt } = buildCreativeContext(outfitTransfer());
+    expect(imagePrompt).toContain("Warm, natural light");
+    expect(imagePrompt).not.toContain("never boastful");
+    expect(imagePrompt).not.toContain("competitors that says nothing");
+  });
+
+  it("says nothing about images when none are attached", () => {
+    const { imagePrompt } = buildCreativeContext(request({ operation: "generate_image", instruction: "Make a red goat", referenceAssetIds: [] }));
+    expect(imagePrompt).toContain("Make a red goat");
+    expect(imagePrompt).not.toContain("Image 1");
+  });
+
+  it("carries connected direction as a line, not as the subject", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "generate_image",
+      instruction: "A product shot of the bottle",
+      selectedNodes: [
+        { id: "n1", type: "image", title: "Bottle", text: "the bottle", role: "selected" },
+        { id: "n2", type: "creative_direction", title: "Warm", text: "Low golden light, shallow depth", role: "inherited", depth: 1 },
+      ],
+    }));
+    expect(imagePrompt.indexOf("A product shot of the bottle")).toBe(0);
+    expect(imagePrompt).toContain("Low golden light");
+  });
+
+  it("leaves the writing prompt alone", () => {
+    const { enhancedPrompt } = buildCreativeContext(request());
+    expect(enhancedPrompt).toContain("Project context:");
+    expect(enhancedPrompt.trimEnd().endsWith("Create a launch headline")).toBe(true);
+  });
+});

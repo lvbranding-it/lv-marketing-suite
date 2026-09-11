@@ -1,6 +1,21 @@
 import type { CreativeRequest, PreparedContext, ProjectContext } from "./types.ts";
 
 const MAX_CONTEXT_CHARS = 36_000;
+/**
+ * An image prompt is not a text prompt with pictures attached.
+ *
+ * A writing model reads 28,000 characters of brand JSON and uses what it needs.
+ * An image model spreads its attention across the whole prompt, so the same
+ * block buries the one sentence that describes the picture — "transfer the
+ * outfit, do not modify the face" arriving as the tail of a positioning
+ * document comes back as a mood, not an edit. Images get the instruction first
+ * and only the context that can be seen.
+ */
+const MAX_IMAGE_PROMPT_CHARS = 2_400;
+/** Brand fields that describe how a picture should look, not how copy reads. */
+const VISUAL_BRAND_FIELDS = [
+  "visualPrinciples", "approvedColors", "requiredElements", "prohibitedElements", "typography", "brandName",
+] as const;
 
 export const LV_CANVAS_SYSTEM = `You are the LV Creative Canvas intelligence layer for LV Branding.
 Strategy first. Every recommendation and artifact must connect audience, positioning, objective, and execution.
@@ -93,6 +108,7 @@ export function buildCreativeContext(request: CreativeRequest, project?: Project
     systemInstructions: LV_CANVAS_SYSTEM,
     structuredContext,
     enhancedPrompt,
+    imagePrompt: buildImagePrompt(request, selected, inherited),
     manifest: {
       selectedObjectIds: included.map((node) => node.id),
       excludedObjectIds: excluded.map((node) => node.id),
@@ -102,4 +118,48 @@ export function buildCreativeContext(request: CreativeRequest, project?: Project
       characterCount: serialized.length,
     },
   };
+}
+
+/**
+ * The prompt an image model actually receives.
+ *
+ * The instruction leads, because it is the subject. Attached pictures are named
+ * in the order they are sent so an instruction can refer to "the first image"
+ * and mean something. Everything else is trimmed to what is visible in a
+ * picture and capped hard — a long prompt does not make a more faithful edit,
+ * it makes a vaguer one.
+ */
+function buildImagePrompt(
+  request: CreativeRequest,
+  selected: Array<Record<string, unknown>>,
+  inherited: Array<Record<string, unknown>>,
+): string {
+  const parts: string[] = [cleanText(request.instruction, 1_200) as string];
+
+  const references = request.referenceAssetIds ?? [];
+  if (references.length) {
+    const titleFor = (assetId: string) => {
+      const match = [...selected, ...inherited].find((node) => node.assetId === assetId);
+      return typeof match?.title === "string" && match.title.trim() ? match.title.trim().slice(0, 80) : "untitled";
+    };
+    parts.push(references.map((assetId, index) => `Image ${index + 1}: ${titleFor(assetId)}`).join("\n"));
+  }
+
+  const brand = (request.brandContext ?? {}) as Record<string, unknown>;
+  const visual = VISUAL_BRAND_FIELDS
+    .map((field) => [field, cleanText(brand[field], 220)] as const)
+    .filter(([, value]) => typeof value === "string" && value.trim());
+  if (visual.length) {
+    parts.push(`Brand constraints — ${visual.map(([field, value]) => `${field}: ${value}`).join("; ")}`);
+  }
+
+  // Direction that arrived through an arrow is guidance for the look, kept to a
+  // line each so it cannot outweigh the instruction.
+  const direction = inherited
+    .map((node) => cleanText(node.text ?? node.title, 200))
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    .slice(0, 3);
+  if (direction.length) parts.push(`Creative direction — ${direction.join("; ")}`);
+
+  return parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS);
 }
