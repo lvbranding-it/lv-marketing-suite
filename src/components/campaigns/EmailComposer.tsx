@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import {
   Sparkles, Loader2, Copy, Check, RefreshCw,
-  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone, Upload, Link2, GripVertical,
+  BookOpen, ChevronDown, ChevronUp, Trash2, Monitor, Smartphone, Upload, Link2, GripVertical, Maximize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,9 @@ import RichEmailEditor, { type RichEmailEditorHandle } from "@/components/campai
 import { useEmailBlocks, useSaveEmailBlock, useDeleteEmailBlock } from "@/hooks/useEmailBlocks";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import {
+  applyFullBleed, EMAIL_BODY_PADDING, EMAIL_SIDE_PADDING, isFullBleed,
+} from "@/lib/campaigns/email-layout";
 
 const SYSTEM_PROMPT = `You are an expert B2B email marketing copywriter for LV Branding, a Houston-based full-service marketing agency.
 
@@ -98,7 +101,9 @@ function buildPreviewDoc(bodyHtml: string, previewWidth: "desktop" | "mobile") {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     overflow: hidden;
   }
-  .body { padding: 32px 36px; }
+  /* Same inset the send function uses — these had drifted, so the preview was
+     showing a 36px margin where the real email had 32px. */
+  .body { padding: ${EMAIL_BODY_PADDING}; }
   img { max-width: 100%; height: auto; display: block; }
   a { color: #CB2039; }
   table { border-collapse: collapse; width: 100%; }
@@ -121,12 +126,12 @@ function buildPreviewDoc(bodyHtml: string, previewWidth: "desktop" | "mobile") {
 
 // Editable block — designMode iframe + contextual toolbars for images and links
 type ActiveEdit =
-  | { type: "img";  el: HTMLImageElement;   urlDraft: string }
+  | { type: "img";  el: HTMLImageElement;   urlDraft: string; fullBleed: boolean }
   | { type: "link"; el: HTMLAnchorElement;  hrefDraft: string };
 
 const BLOCK_CSS = `
   *{box-sizing:border-box;}
-  body{margin:0;padding:12px 16px;
+  body{margin:0;padding:12px ${EMAIL_SIDE_PADDING}px;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
     font-size:14px;line-height:1.6;color:#1a1a1a;background:#fff;outline:none;}
   img{max-width:100%;height:auto;display:block;cursor:pointer;}
@@ -187,7 +192,7 @@ function BlockEditor({
         if (target.tagName === "IMG") {
           e.preventDefault();
           const img = target as HTMLImageElement;
-          setActiveEdit({ type: "img", el: img, urlDraft: img.getAttribute("src") ?? "" });
+          setActiveEdit({ type: "img", el: img, urlDraft: img.getAttribute("src") ?? "", fullBleed: isFullBleed(img) });
           return;
         }
         // Link / button click → show URL editor
@@ -347,6 +352,23 @@ function BlockEditor({
           />
           <button onClick={applyImgUrl}
             className="text-[11px] px-2 py-1 bg-primary text-primary-foreground rounded font-medium">Apply</button>
+          <button
+            onClick={() => {
+              const next = !activeEdit.fullBleed;
+              applyFullBleed(activeEdit.el, next);
+              setActiveEdit({ ...activeEdit, fullBleed: next });
+              onChange(readBody());
+            }}
+            title={activeEdit.fullBleed ? "Inset this image again" : "Run this image edge to edge"}
+            className={cn(
+              "flex items-center gap-1 text-[11px] px-2 py-1 rounded font-medium border",
+              activeEdit.fullBleed
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-white text-foreground/70 border-border hover:text-foreground",
+            )}
+          >
+            <Maximize2 size={10} /> Full width
+          </button>
           <button onClick={() => setActiveEdit(null)}
             className="text-[11px] text-muted-foreground hover:text-foreground px-1">✕</button>
         </div>

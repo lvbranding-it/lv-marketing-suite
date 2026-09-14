@@ -12,11 +12,14 @@ import {
   Bold, Italic, UnderlineIcon, Link2, Image as ImageIcon,
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight,
   Heading1, Heading2, Heading3, Minus, Undo, Redo,
-  Palette, Link2Off, Loader2, LayoutList, Columns2, Columns3,
+  Palette, Link2Off, Loader2, LayoutList, Columns2, Columns3, Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import {
+  FULL_BLEED_ATTR, FULL_BLEED_FALLBACK_WIDTH, FULL_BLEED_STYLE, IMAGE_STYLE,
+} from "@/lib/campaigns/email-layout";
 
 export interface RichEmailEditorHandle {
   insertHtml: (html: string) => void;
@@ -28,6 +31,28 @@ interface Props {
   placeholder?: string;
   onInsertBlock?: (name: string, html: string) => void;
 }
+
+/**
+ * Image, plus whether it runs to the edges of the email.
+ *
+ * Stored as an attribute rather than inferred from the style, because the style
+ * is what an email client reads and the attribute is what the toolbar reads —
+ * and a style string is a fragile thing to pattern-match on later.
+ */
+const EmailImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fullBleed: {
+        default: false,
+        parseHTML: (element) => element.getAttribute(FULL_BLEED_ATTR) === "true",
+        renderHTML: (attributes) => (attributes.fullBleed
+          ? { [FULL_BLEED_ATTR]: "true", style: FULL_BLEED_STYLE, width: FULL_BLEED_FALLBACK_WIDTH }
+          : { style: IMAGE_STYLE }),
+      },
+    };
+  },
+});
 
 function ToolbarBtn({
   onClick,
@@ -99,8 +124,8 @@ const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEm
         openOnClick: false,
         HTMLAttributes: { style: "color:#CB2039;text-decoration:underline;" },
       }),
-      Image.configure({
-        HTMLAttributes: { style: "max-width:100%;height:auto;display:block;margin:8px 0;" },
+      EmailImage.configure({
+        HTMLAttributes: { style: IMAGE_STYLE },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Placeholder.configure({
@@ -268,6 +293,21 @@ const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEm
             }}
           />
         </label>
+
+        {/* Only meaningful with an image selected, so it appears only then. */}
+        {editor.isActive("image") && (
+          <ToolbarBtn
+            onClick={() => editor.chain().focus().updateAttributes("image", {
+              fullBleed: !editor.getAttributes("image").fullBleed,
+            }).run()}
+            active={Boolean(editor.getAttributes("image").fullBleed)}
+            title={editor.getAttributes("image").fullBleed
+              ? "Image runs edge to edge — click to inset it"
+              : "Run this image edge to edge"}
+          >
+            <Maximize2 size={13} />
+          </ToolbarBtn>
+        )}
 
         <Divider />
 

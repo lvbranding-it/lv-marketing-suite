@@ -47,6 +47,10 @@ function wrapHtml(bodyHtml: string, unsubUrl: string): string {
         </td></tr>
 
         <!-- ── Body card ── -->
+        <!-- The 32px horizontal inset is what a full-bleed image cancels with a
+             negative margin. It is EMAIL_SIDE_PADDING in
+             src/lib/campaigns/email-layout.ts — change both or neither, or
+             edge-to-edge images will sit a few pixels off the edge. -->
         <tr><td style="background:#ffffff;border-radius:12px;padding:36px 32px;border:1px solid #e4e4e7;line-height:1.75;color:#231F20;font-size:15px;">
           ${bodyHtml}
         </td></tr>
