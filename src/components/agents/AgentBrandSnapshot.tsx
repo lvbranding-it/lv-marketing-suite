@@ -1,11 +1,18 @@
 import React, { useState } from "react";
-import { Database, Download, Copy, Check, UserPlus } from "lucide-react";
+import { Database, Download, Copy, Check, UserPlus, FileText, FileType2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  buildBrandedDocument, documentFileName, downloadAsText, downloadAsWord,
+  markdownToHtml, printAsPdf,
+} from "@/lib/agents/document-export";
 
 interface Props {
   snapshot:  Record<string, unknown> | null;
@@ -76,6 +83,36 @@ function renderValue(value: unknown, depth = 0): React.ReactElement {
 }
 
 /** Convert snapshot to a readable plain-text string for export */
+/**
+ * The same snapshot as Markdown, for the document exports.
+ *
+ * `snapshotToText` produces a plain dump with indentation, which is right for a
+ * .txt and wrong for a page: nesting becomes headings, lists become lists, and
+ * a value keeps its label beside it.
+ */
+function snapshotToMarkdown(snapshot: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const label = (key: string) => key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  function walk(node: Record<string, unknown>, depth: number): void {
+    for (const [key, value] of Object.entries(node)) {
+      if (Array.isArray(value)) {
+        lines.push(`${"#".repeat(Math.min(depth + 2, 3))} ${label(key)}`, "");
+        value.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`));
+        lines.push("");
+      } else if (value && typeof value === "object") {
+        lines.push(`${"#".repeat(Math.min(depth + 2, 3))} ${label(key)}`, "");
+        walk(value as Record<string, unknown>, depth + 1);
+      } else {
+        lines.push(`**${label(key)}:** ${value ?? "—"}`, "");
+      }
+    }
+  }
+
+  walk(snapshot, 0);
+  return lines.join("\n").trim();
+}
+
 function snapshotToText(snapshot: Record<string, unknown>): string {
   const lines: string[] = ["BRAND SNAPSHOT", "==============", ""];
   function walk(obj: Record<string, unknown>, indent = 0): void {
@@ -210,16 +247,29 @@ export default function AgentBrandSnapshot({ snapshot, projectId }: Props) {
     }
   };
 
-  const handleExport = () => {
+  /** The snapshot as a branded document, shared by the PDF and Word exports. */
+  const snapshotDocument = () => buildBrandedDocument({
+    title: "Brand Snapshot",
+    meta: `Brand Snapshot · Project context · ${new Date().toLocaleDateString()}`,
+    bodyHtml: markdownToHtml(snapshotToMarkdown(snapshot as Record<string, unknown>)),
+    qrTarget: projectId ? `${window.location.origin}/agents/${projectId}` : undefined,
+  });
+
+  const handleExportPdf = () => {
     if (!snapshot) return;
-    const text = snapshotToText(snapshot);
-    const blob = new Blob([text], { type: "text/plain" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = "brand-snapshot.txt";
-    a.click();
-    URL.revokeObjectURL(url);
+    if (printAsPdf(snapshotDocument())) toast({ description: "Opening the print dialog — choose “Save as PDF”." });
+    else toast({ description: "Failed to generate PDF", variant: "destructive" });
+  };
+
+  const handleExportWord = () => {
+    if (!snapshot) return;
+    downloadAsWord(snapshotDocument(), documentFileName("Brand Snapshot", "doc"));
+    toast({ description: "Brand Snapshot exported as Word (.doc)" });
+  };
+
+  const handleExportText = () => {
+    if (!snapshot) return;
+    downloadAsText(snapshotToText(snapshot), documentFileName("Brand Snapshot", "txt"));
     toast({ description: "Brand Snapshot exported as .txt" });
   };
 
@@ -239,13 +289,27 @@ export default function AgentBrandSnapshot({ snapshot, projectId }: Props) {
               >
                 {copied ? <Check size={11} className="text-green-500" /> : <Copy size={11} />}
               </button>
-              <button
-                onClick={handleExport}
-                title="Export as .txt"
-                className="flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
-              >
-                <Download size={11} />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    title="Export the context"
+                    className="flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+                  >
+                    <Download size={11} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="text-xs">
+                  <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportPdf}>
+                    <FileText size={12} /> Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportWord}>
+                    <FileType2 size={12} /> Export as Word
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2 text-xs" onClick={handleExportText}>
+                    <Download size={12} /> Export as plain text
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>

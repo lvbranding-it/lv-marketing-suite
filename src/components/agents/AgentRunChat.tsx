@@ -16,6 +16,10 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  buildBrandedDocument, downloadAsMarkdown, downloadAsWord, documentFileName,
+  markdownToHtml, printAsPdf, transcriptToHtml, type TranscriptTurn,
+} from "@/lib/agents/document-export";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -133,146 +137,59 @@ function RunLoader({ runId, onLoad }: { runId: string; onLoad: (msgs: ChatMessag
 
 // ── Shared: markdown → styled HTML (used by PDF and Word) ────────────────────
 function buildExportHtml(content: string, runId: string, agentIdForExport?: string, projectId?: string): string {
-  const agentName  = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
-  const projectUrl = `${window.location.origin}/agents/${projectId}`;
-  const qrCodeUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(projectUrl)}&bgcolor=FFFFFF&color=231F20&margin=4`;
-  const lvLogoSvg  = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250.1 250.1" width="48" height="48"><circle cx="125.05" cy="125.05" r="125.05" fill="#fff"/><path fill="#CB2039" d="M125.05,16.67c-27.38,0-52.38,10.15-71.46,26.9v75.86c0,2.73,2.21,4.95,4.95,4.95h35.88c3.7.03,4.58,2.56,4.9,5.59.33,3.2.57,6.07,1.06,10.21.55,4.71-1.97,6.04-5.85,6.04h-57.49c-2.73,0-4.95-2.21-4.95-4.95v-71.95c-9.79,16.29-15.41,35.35-15.41,55.74,0,59.86,48.52,108.38,108.38,108.38.39,0,.77,0,1.16,0-3.84-30.87-11.01-75.15-14.66-104.58-.29-2.39,1.07-4.62,3.48-4.62h11.07c1.68,0,3.13,1.16,3.51,2.79,0,0,6.42,51,9.08,72.65.52,4.22,4.49,8.51,9.26-.05,12.67-22.75,28.78-51.64,41-72.55.86-1.47,2.4-2.72,4.1-2.7,5.12.07,12.08,0,15.73,0,3.37,0,4.57,2.3,3.48,4.45-15.39,30.22-42.66,69.2-59.08,100.94,46.23-12.38,80.27-54.56,80.27-104.7,0-59.86-48.52-108.38-108.38-108.38Z"/></svg>`;
-
-  // markdown → HTML
-  let html = content
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^---$/gm, "<hr/>")
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/^(\d+)\. (.+)$/gm, "<li>$2</li>");
-
-  // Tables
-  html = html.replace(/(\|.+\|[\r\n]+\|[\s:|-]+\|[\r\n]+((?:\|.+\|[\r\n]*)+))/g, (match) => {
-    const lines = match.trim().split("\n").filter((l) => l.trim());
-    if (lines.length < 2) return match;
-    const parseRow = (line: string) =>
-      line.split("|").filter((_, i, arr) => i > 0 && i < arr.length - 1).map((c) => c.trim());
-    const headers = parseRow(lines[0]);
-    const dataRows = lines.slice(2);
-    let table = "<table><thead><tr>";
-    headers.forEach((h) => { table += `<th>${h}</th>`; });
-    table += "</tr></thead><tbody>";
-    dataRows.forEach((row) => {
-      const cells = parseRow(row);
-      table += "<tr>"; cells.forEach((c) => { table += `<td>${c}</td>`; }); table += "</tr>";
-    });
-    return table + "</tbody></table>";
+  const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
+  return buildBrandedDocument({
+    title: `${agentName} — Run ${runId.slice(0, 8)}`,
+    meta: `${agentName} · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}`,
+    bodyHtml: markdownToHtml(content),
+    qrTarget: projectId ? `${window.location.origin}/agents/${projectId}` : undefined,
   });
-
-  html = html.split("\n").map((line) => {
-    const t = line.trim();
-    if (!t) return "";
-    if (t.startsWith("<")) return t;
-    return `<p>${t}</p>`;
-  }).join("\n");
-
-  return `<!DOCTYPE html><html><head>
-<meta charset="utf-8">
-<title>${agentName} — Run ${runId.slice(0, 8)}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;600;700&display=swap');
-  @page { margin:0.75in 1in;size:letter; }
-  body { font-family:'Fira Sans','Segoe UI',system-ui,sans-serif;font-size:11pt;line-height:1.6;color:#231F20;max-width:100%; }
-  h1 { font-size:18pt;margin:0 0 2pt;color:#231F20;font-weight:700; }
-  h2 { font-size:14pt;margin:16pt 0 6pt;color:#231F20;border-left:3px solid #CB2039;padding-left:8px; }
-  h3 { font-size:12pt;margin:12pt 0 4pt;color:#231F20; }
-  p { margin:4pt 0; }
-  strong { font-weight:600; }
-  table { border-collapse:collapse;width:100%;margin:8pt 0;font-size:10pt; }
-  th,td { border:1px solid #ddd;padding:6px 10px;text-align:left; }
-  th { background:#231F20;color:#fff;font-weight:600; }
-  tr:nth-child(even) td { background:#f9f9f9; }
-  li { margin:2pt 0; }
-  hr { border:none;border-top:1px solid #ddd;margin:12pt 0; }
-  .header-bar { display:flex;align-items:center;gap:16px;border-bottom:3px solid #CB2039;padding-bottom:12pt;margin-bottom:20pt; }
-  .header-logo { flex-shrink:0;width:48px;height:48px;background:#231F20;border-radius:8px;padding:4px; }
-  .header-text { flex:1; }
-  .header-brand { font-size:16pt;font-weight:700;color:#231F20;margin:0; }
-  .header-slogan { font-size:9pt;color:#CB2039;font-weight:600;letter-spacing:.5px;margin:2pt 0 0;text-transform:uppercase; }
-  .header-meta { font-size:9pt;color:#888;margin-top:4pt; }
-  .header-qr { flex-shrink:0;text-align:center; }
-  .header-qr img { width:80px;height:80px;border:1px solid #eee;border-radius:4px; }
-  .header-qr-label { font-size:7pt;color:#999;margin-top:2pt; }
-  .confidential { margin-top:32pt;padding-top:12pt;border-top:1px solid #ddd;font-size:8pt;color:#999;text-align:center;line-height:1.4; }
-  .confidential strong { color:#CB2039; }
-  @media print {
-    .header-logo,.header-qr img { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-    th { -webkit-print-color-adjust:exact;print-color-adjust:exact; }
-  }
-</style></head><body>
-<div class="header-bar">
-  <div class="header-logo">${lvLogoSvg}</div>
-  <div class="header-text">
-    <div class="header-brand">LV Branding</div>
-    <div class="header-slogan">Strategy that works. Creativity that moves.</div>
-    <div class="header-meta">${agentName} · Run ${runId.slice(0, 8)} · ${new Date().toLocaleDateString()}</div>
-  </div>
-  <div class="header-qr">
-    <img src="${qrCodeUrl}" alt="Project QR" />
-    <div class="header-qr-label">Scan to open project</div>
-  </div>
-</div>
-${html}
-<div class="confidential">
-  <strong>CONFIDENTIAL</strong><br/>
-  This document is the property of LV Branding and is intended solely for the use of the individual or entity to whom it is addressed.
-  Unauthorized reproduction, distribution, or disclosure is strictly prohibited.
-  © ${new Date().getFullYear()} LV Branding. All rights reserved.
-</div>
-</body></html>`;
 }
 
-// ── PDF export ────────────────────────────────────────────────────────────────
 function exportPdf(content: string, runId: string, agentIdForExport?: string, projectId?: string) {
-  const fullHtml = buildExportHtml(content, runId, agentIdForExport, projectId);
-  const iframe   = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:800px;height:600px;";
-  document.body.appendChild(iframe);
-  const doc = iframe.contentDocument;
-  if (!doc) { toast({ description: "Failed to generate PDF", variant: "destructive" }); return; }
-  doc.open(); doc.write(fullHtml); doc.close();
-  iframe.onload = () => {
-    setTimeout(() => {
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    }, 250);
-  };
-  setTimeout(() => {
-    try { iframe.contentWindow?.print(); } catch { /* ignore */ }
-    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ignore */ } }, 1000);
-  }, 500);
+  if (!printAsPdf(buildExportHtml(content, runId, agentIdForExport, projectId))) {
+    toast({ description: "Failed to generate PDF", variant: "destructive" });
+  }
 }
 
 function exportMarkdown(content: string, runId: string) {
-  const blob = new Blob([content], { type: "text/markdown" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `run-${runId.slice(0, 8)}.md`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadAsMarkdown(content, `run-${runId.slice(0, 8)}.md`);
 }
 
-// ── Word export — uses same branded HTML as PDF, downloaded as .doc ───────────
 function exportWord(content: string, runId: string, agentIdForExport?: string, projectId?: string) {
   const agentName = getAgent(agentIdForExport || "")?.shortName || "Agent Output";
-  const fullHtml  = buildExportHtml(content, runId, agentIdForExport, projectId);
-  // Word opens HTML files natively — the BOM ensures correct UTF-8 recognition
-  const blob = new Blob(["﻿", fullHtml], { type: "application/msword" });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), {
-    href: url, download: `${agentName}-${runId.slice(0, 8)}.doc`,
-  });
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  downloadAsWord(
+    buildExportHtml(content, runId, agentIdForExport, projectId),
+    `${agentName}-${runId.slice(0, 8)}.doc`,
+  );
+}
+
+/**
+ * The whole conversation, not one answer inside it.
+ *
+ * A run result was already exportable; the thread around it — the questions
+ * asked, the revisions, the replies that were never a formal run — was not,
+ * and that is usually the part worth keeping.
+ */
+function conversationDocument(messages: ChatMessage[], projectName?: string, projectId?: string) {
+  const turns: TranscriptTurn[] = messages.map((message) => ({
+    role: message.type === "user" ? "user" : "assistant",
+    content: message.content,
+    meta: message.type === "agent" ? getAgent(message.agentId || "")?.shortName : undefined,
+  }));
+  const label = projectName ? `${projectName} — conversation` : "LV Intelligence conversation";
+  return {
+    label,
+    html: buildBrandedDocument({
+      title: label,
+      meta: `Conversation · ${turns.length} message${turns.length === 1 ? "" : "s"} · ${new Date().toLocaleDateString()}`,
+      bodyHtml: transcriptToHtml(turns),
+      qrTarget: projectId ? `${window.location.origin}/agents/${projectId}` : undefined,
+    }),
+    markdown: messages
+      .map((message) => `## ${message.type === "user" ? "You" : getAgent(message.agentId || "")?.shortName || "LV Intelligence"}\n\n${message.content}`)
+      .join("\n\n---\n\n"),
+  };
 }
 
 // ── PowerPoint export (.pptx) ────────────────────────────────────────────────
@@ -806,14 +723,55 @@ export default function AgentRunChat({
         </Select>
 
         {messages.length > 0 && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 text-xs ml-auto text-muted-foreground"
-            onClick={() => setMessages([])}
-          >
-            Clear chat
-          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs text-muted-foreground">
+                  <FileDown size={12} /> Export chat
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs">
+                <DropdownMenuItem
+                  className="gap-2 text-xs"
+                  onClick={() => {
+                    const document_ = conversationDocument(messages, projectName, projectId);
+                    if (printAsPdf(document_.html)) toast({ description: "Opening the print dialog — choose “Save as PDF”." });
+                    else toast({ description: "Failed to generate PDF", variant: "destructive" });
+                  }}
+                >
+                  <FileText size={12} /> Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-xs"
+                  onClick={() => {
+                    const document_ = conversationDocument(messages, projectName, projectId);
+                    downloadAsWord(document_.html, documentFileName(document_.label, "doc"));
+                    toast({ description: "Chat exported as Word (.doc)" });
+                  }}
+                >
+                  <FileType2 size={12} /> Export as Word
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 text-xs"
+                  onClick={() => {
+                    const document_ = conversationDocument(messages, projectName, projectId);
+                    downloadAsMarkdown(document_.markdown, documentFileName(document_.label, "md"));
+                    toast({ description: "Chat exported as Markdown" });
+                  }}
+                >
+                  <FileDown size={12} /> Export as Markdown
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs text-muted-foreground"
+              onClick={() => setMessages([])}
+            >
+              Clear chat
+            </Button>
+          </div>
         )}
       </div>
 

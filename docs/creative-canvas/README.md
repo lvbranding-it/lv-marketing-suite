@@ -1,6 +1,6 @@
 # LV Creative Canvas™
 
-LV Creative Canvas is LV Branding's authenticated creative-direction workspace. It keeps strategy, brand context, references, copy, imagery, decisions, generation records, and exports together in the existing project and organization boundary.
+LV Creative Canvas is LV Branding's authenticated creative-direction workspace. Developed by Luis Velasquez. It keeps strategy, brand context, references, copy, imagery, decisions, generation records, and exports together in the existing project and organization boundary. 
 
 Product statement: **From strategic direction to finished creative, in one intelligent workspace.**
 
@@ -63,11 +63,7 @@ It adds:
 - `creative_comments`: future-ready basic collaboration records; real-time collaboration is not enabled.
 - `ai_usage_ledger`: server-owned estimated usage entries.
 
-Every table has RLS. A `creative_project_members` override always wins, including the read-only Viewer. Otherwise the org role decides, but only for members granted Creative Canvas in team setup (`team_members.feature_access.creativeCanvas`): owners and admins bypass that grant as they bypass every feature flag, manager → Creative Director, member → Collaborator, and anyone without the grant gets no role at all. Because `creative_project_role` enforces it, hiding the navigation entry is not the gate — a member without the grant is refused by the database and by the Edge Function, which evaluates `can_edit_creative_project` as the calling user.
-
-Every Canvas table carries a denormalized `org_id` that drives the usage ledger and the monthly budget query, so each insert **and update** policy re-checks it against the owning project through `creative_org_matches_project`. Storage path segments pass through `creative_path_uuid`, which returns null for a malformed path so the policy denies cleanly instead of raising a cast error.
-
-The Edge Function repeats authorization before provider usage. Browser grants cannot update provider results or write the usage ledger.
+Every table has RLS. Existing team roles map as follows when no Canvas-specific override exists: owner/admin → Owner/Admin, manager → Creative Director, member → Collaborator. A Canvas-specific Viewer override is read-only. The Edge Function repeats authorization before provider usage. Browser grants cannot update provider results or write the usage ledger.
 
 The repository has documented local/remote migration-history divergence. Do **not** run a blanket `supabase db push --include-all` against production. Rehearse this exact additive migration on a reconciled staging baseline, record it in the canonical migration history, verify RLS with two organizations, and only then promote it.
 
@@ -89,25 +85,24 @@ SVG and PDF uploads are intentionally excluded until a server-side sanitization/
 
 Set Edge Function secrets, never `VITE_` browser variables:
 
-**No new credentials are required.** `CLAUDE_API_KEY` (already set for `skill-run` and `agent-run`) covers Anthropic, and `OPENAI_API_KEY` (already set for `advisor-speak`) covers OpenAI. Edge secrets are project-wide, so both providers are live on deploy. Between them they satisfy every declared capability: text, vision, image generation and image edit.
-
-Google is supported but deliberately not configured. Without `GOOGLE_GENERATIVE_AI_API_KEY` the provider reports itself disabled and the router never selects it; no code change is needed to leave it off, and none to turn it on later.
-
-Optional overrides:
-
 ```bash
+supabase secrets set OPENAI_API_KEY=...
 supabase secrets set OPENAI_TEXT_MODEL=...
 supabase secrets set OPENAI_IMAGE_MODEL=...
+supabase secrets set GOOGLE_GENERATIVE_AI_API_KEY=...
+supabase secrets set GOOGLE_TEXT_MODEL=...
+supabase secrets set GOOGLE_IMAGE_MODEL=...
+supabase secrets set ANTHROPIC_API_KEY=...
 supabase secrets set ANTHROPIC_TEXT_MODEL=...
 supabase secrets set CREATIVE_CANVAS_DEFAULT_TEXT_PROVIDER=anthropic
 supabase secrets set CREATIVE_CANVAS_DEFAULT_IMAGE_PROVIDER=openai
 ```
 
-Claude reuses the existing `CLAUDE_API_KEY` when `ANTHROPIC_API_KEY` is absent. The defaults in the registry are fallbacks, not model identifiers scattered through workflow code. Override them for the models approved in the target environment.
+Claude can reuse the existing `CLAUDE_API_KEY` when `ANTHROPIC_API_KEY` is absent. The defaults in the registry are fallbacks, not model identifiers scattered through workflow code. Override them for the models approved in the target environment.
 
 Operations are routed deterministically:
 
-- Images and edits: configured default image provider, then OpenAI or Google. With Google unconfigured this resolves to OpenAI.
+- Images and edits: configured default image provider, then OpenAI or Google.
 - Brand strategy, long synthesis, and copy: configured default text provider, then Anthropic, OpenAI, or Google.
 - Visual critique: an enabled vision-capable provider.
 - Explicit provider without the required capability: `PROVIDER_UNAVAILABLE`; no silent fallback.
@@ -118,7 +113,7 @@ Provider adapters normalize text, images, request IDs, token use, durations, and
 
 Estimated prices live in `config.ts` as one updateable table and are never used as final billing. Configure:
 
-- `CREATIVE_CANVAS_MONTHLY_BUDGET_USD`: organization soft stop. Defaults to **100**, deliberately low; raise it from what the ledger actually shows rather than guessing upward.
+- `CREATIVE_CANVAS_MONTHLY_BUDGET_USD`: organization soft stop.
 - `CREATIVE_CANVAS_BUDGET_WARNING_PERCENT`: warning threshold.
 - `CREATIVE_CANVAS_MAX_CONCURRENT`: simultaneous user requests.
 - `CREATIVE_CANVAS_REQUESTS_PER_MINUTE`: basic per-user request limit.
