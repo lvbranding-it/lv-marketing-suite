@@ -45,6 +45,7 @@ const EventExperienceEditor  = lazy(() => import("@/pages/EventExperienceEditor"
 const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration"));
 const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
 const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
+const EventScheduler         = lazy(() => import("@/pages/EventScheduler"));
 const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 const MotionPalette          = lazy(() => import("@/pages/MotionPalette"));
 const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
@@ -359,6 +360,9 @@ function AppRoutes() {
       {/* Event Experiences — public pages (no auth) */}
       <Route path="/event/:eventSlug/upload"      element={<Suspense fallback={null}><EventUploadPage /></Suspense>} />
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />
+      {/* Event Scheduler — public booking with authenticated administration */}
+      <Route path="/events" element={<Suspense fallback={null}><EventScheduler /></Suspense>} />
+      <Route path="/events/admin" element={<ProtectedRoute><Suspense fallback={null}><EventScheduler adminMode /></Suspense></ProtectedRoute>} />
       {/* Contests — admin (protected) */}
       <Route
         path="/contests"

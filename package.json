@@ -8,6 +8,7 @@
     "build": "tsc && vite build && node scripts/prerender-website-audit.mjs && node scripts/generate-sitemap.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "migrate:event-scheduler": "node scripts/import-event-scheduler-from-firebase.mjs",
     "test:browser": "playwright test"
   },
   "devDependencies": {

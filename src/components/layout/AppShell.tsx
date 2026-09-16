@@ -33,6 +33,7 @@ import {
   Calculator,
   Handshake,
   PenTool,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -71,6 +72,7 @@ const NAV_ITEMS = [
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
   { to: "/contests",          labelKey: "nav.contests",          icon: Trophy },
   { to: "/event-experiences", labelKey: "nav.eventExperiences",  icon: Sparkles },
+  { to: "/events/admin",      labelKey: "nav.eventScheduling",   icon: CalendarDays },
   { to: "/photo-sessions",    labelKey: "nav.photoSessions",     icon: Camera },
   { to: "/files", labelKey: "nav.fileDrop", icon: FolderDown },
   { to: "/history", labelKey: "nav.history", icon: History },
