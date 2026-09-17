@@ -51,6 +51,9 @@ beforeAll(async () => {
   await db.exec(
     readFileSync(new URL("../migrations/20260916181000_event_scheduler.sql", import.meta.url), "utf8"),
   );
+  await db.exec(
+    readFileSync(new URL("../migrations/20260917143000_event_scheduler_slot_controls.sql", import.meta.url), "utf8"),
+  );
 }, 30000);
 
 afterAll(async () => {
@@ -60,7 +63,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.exec(`
     reset role;
-    truncate public.event_schedule_bookings, public.event_schedule_events,
+    truncate public.event_schedule_blocked_slots, public.event_schedule_bookings, public.event_schedule_events,
       public.team_members, public.organizations, auth.users cascade;
   `);
   await db.query("insert into auth.users values($1,'admin@example.test'),($2,'outside@example.test')", [admin, outsider]);
@@ -134,5 +137,60 @@ describe("event scheduler database boundary", () => {
     await expect(
       db.query("select set_event_schedule_featured($1)", [eventId]),
     ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("enforces the event's configured slot duration", async () => {
+    await as(admin);
+    await db.query(
+      "update event_schedule_events set slot_duration_minutes = 15 where id = $1",
+      [eventId],
+    );
+    await as("", "anon");
+    await expect(
+      db.query(
+        "select book_event_schedule_slot($1,'Misaligned','misaligned@example.test','2026-12-13','10:05')",
+        [eventId],
+      ),
+    ).rejects.toThrow(/INVALID_EVENT_TIME/);
+    await expect(
+      db.query(
+        "select book_event_schedule_slot($1,'Aligned','aligned@example.test','2026-12-13','10:15')",
+        [eventId],
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("lets an organization member block and reopen availability without exposing block records", async () => {
+    await as(admin);
+    await db.query(
+      "select set_event_schedule_slot_blocked($1,'2026-12-13','10:20',true)",
+      [eventId],
+    );
+
+    await as("", "anon");
+    const slots = await db.query("select * from event_schedule_booked_slots($1)", [eventId]);
+    expect(slots.rows).toHaveLength(1);
+    expect(slots.rows[0].slot_time).toBe("10:20");
+    await expect(db.query("select * from event_schedule_blocked_slots")).rejects.toMatchObject({
+      code: "42501",
+    });
+    await expect(
+      db.query(
+        "select book_event_schedule_slot($1,'Blocked','blocked@example.test','2026-12-13','10:20')",
+        [eventId],
+      ),
+    ).rejects.toThrow(/SLOT_UNAVAILABLE/);
+
+    await as(outsider);
+    await expect(
+      db.query("select set_event_schedule_slot_blocked($1,'2026-12-13','10:25',true)", [eventId]),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    await as(admin);
+    await db.query(
+      "select set_event_schedule_slot_blocked($1,'2026-12-13','10:20',false)",
+      [eventId],
+    );
+    expect(await scalar("select count(*) from event_schedule_blocked_slots")).toBe(0);
   });
 });

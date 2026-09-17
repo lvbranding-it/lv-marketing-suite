@@ -33,6 +33,13 @@ asset path. The browser accepts PNG, JPG, and WebP logos up to 5 MB. Public
 event links can read only active event settings and occupied slot times; guest
 names, email addresses, and administrative actions remain protected by RLS.
 
+Migration `supabase/migrations/20260917143000_event_scheduler_slot_controls.sql`
+adds configurable 5–120 minute appointment intervals and organization-scoped
+blocked slots. Administrators manage blocks from the saved event editor. The
+public availability RPC merges bookings and administrative blocks into the same
+date/time-only response, and row locking prevents a block and guest booking from
+claiming the same time concurrently.
+
 ## One-time legacy import
 
 Apply the event scheduler migration through the repository's reconciled production migration

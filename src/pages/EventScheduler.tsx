@@ -38,6 +38,26 @@ const convertTo12Hour = (time24h) => {
     return `${displayHour}:${minutes} ${ampm}`;
 };
 
+const buildEventTimeSlots = (ranges = [], durationMinutes = 5) => {
+    const slots = [];
+    ranges.forEach(range => {
+        const [start, end] = range.split('-');
+        if (!start || !end) return;
+        const [startHour, startMinute] = start.split(':').map(Number);
+        const [endHour, endMinute] = end.split(':').map(Number);
+        const startTotal = startHour * 60 + startMinute;
+        const endTotal = endHour * 60 + endMinute;
+        for (let total = startTotal; total + durationMinutes <= endTotal; total += durationMinutes) {
+            const hour = Math.floor(total / 60);
+            const minute = String(total % 60).padStart(2, '0');
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const displayHour = hour % 12 || 12;
+            slots.push(`${displayHour}:${minute} ${ampm}`);
+        }
+    });
+    return slots;
+};
+
 const mapEventRow = (row) => ({
     id: row.id,
     orgId: row.org_id,
@@ -47,6 +67,7 @@ const mapEventRow = (row) => ({
     themeColor: row.theme_color,
     dates: row.dates || [],
     timeSlots: row.time_slots || [],
+    slotDurationMinutes: row.slot_duration_minutes || 5,
     logoUrl: row.logo_url || '',
     isFeatured: row.is_featured,
     isActive: row.is_active,
@@ -64,6 +85,14 @@ const mapBookingRow = (row) => ({
     eventName: row.event_schedule_events?.name || row.eventName || '',
 });
 
+const mapBlockedSlotRow = (row) => ({
+    id: row.id,
+    orgId: row.org_id,
+    eventId: row.event_id,
+    date: row.booking_date,
+    time: String(row.slot_time).slice(0, 5),
+});
+
 // --- Main Application Component ---
 export default function EventScheduler({ adminMode = false }) {
   const { org, loading: orgLoading } = useOrg();
@@ -76,6 +105,7 @@ export default function EventScheduler({ adminMode = false }) {
   const [email, setEmail] = useState('');
   const [bookingError, setBookingError] = useState('');
   const [allBookings, setAllBookings] = useState([]);
+  const [allBlockedSlots, setAllBlockedSlots] = useState([]);
   const [events, setEvents] = useState([]);
   const [activeEvent, setActiveEvent] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
@@ -138,7 +168,7 @@ export default function EventScheduler({ adminMode = false }) {
       setDataError('');
       let eventsQuery = supabase
         .from('event_schedule_events')
-        .select('id, org_id, name, location, placement, theme_color, dates, time_slots, logo_url, is_featured, is_active')
+        .select('id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, is_featured, is_active')
         .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false });
       eventsQuery = adminMode
@@ -163,17 +193,31 @@ export default function EventScheduler({ adminMode = false }) {
       }
 
       if (adminMode) {
-        const bookingsResult = await supabase
-          .from('event_schedule_bookings')
-          .select('id, org_id, event_id, guest_name, guest_email, booking_date, slot_time, checked_in, event_schedule_events(name)')
-          .eq('org_id', org.id)
-          .order('booking_date', { ascending: true })
-          .order('slot_time', { ascending: true });
+        const [bookingsResult, blockedSlotsResult] = await Promise.all([
+          supabase
+            .from('event_schedule_bookings')
+            .select('id, org_id, event_id, guest_name, guest_email, booking_date, slot_time, checked_in, event_schedule_events(name)')
+            .eq('org_id', org.id)
+            .order('booking_date', { ascending: true })
+            .order('slot_time', { ascending: true }),
+          supabase
+            .from('event_schedule_blocked_slots')
+            .select('id, org_id, event_id, booking_date, slot_time')
+            .eq('org_id', org.id)
+            .order('booking_date', { ascending: true })
+            .order('slot_time', { ascending: true }),
+        ]);
         if (bookingsResult.error) {
           console.error('Unable to load event bookings:', bookingsResult.error);
           if (!cancelled) setDataError('Some booking information could not be loaded. Please refresh and try again.');
         } else if (!cancelled) {
           setAllBookings((bookingsResult.data || []).map(mapBookingRow));
+        }
+        if (blockedSlotsResult.error) {
+          console.error('Unable to load blocked event slots:', blockedSlotsResult.error);
+          if (!cancelled) setDataError('Some blocked availability could not be loaded. Please refresh and try again.');
+        } else if (!cancelled) {
+          setAllBlockedSlots((blockedSlotsResult.data || []).map(mapBlockedSlotRow));
         }
       }
       if (!cancelled) setEventsLoading(false);
@@ -185,6 +229,7 @@ export default function EventScheduler({ adminMode = false }) {
         .channel(`event-scheduler-admin-${org.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_schedule_events', filter: `org_id=eq.${org.id}` }, () => void load())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'event_schedule_bookings', filter: `org_id=eq.${org.id}` }, () => void load())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'event_schedule_blocked_slots', filter: `org_id=eq.${org.id}` }, () => void load())
         .subscribe();
     }
 
@@ -231,23 +276,7 @@ export default function EventScheduler({ adminMode = false }) {
 
   const timeSlots = useMemo(() => {
     if (!selectedDate || !activeEvent || !activeEvent.timeSlots) return [];
-    const slots = [];
-    activeEvent.timeSlots.forEach(slot => {
-        const [start, end] = slot.split('-');
-        if (!start || !end) return;
-        const [startHour, startMinute] = start.split(':').map(Number);
-        const [endHour, endMinute] = end.split(':').map(Number);
-        const startTotal = startHour * 60 + startMinute;
-        const endTotal = endHour * 60 + endMinute;
-        for (let total = startTotal; total < endTotal; total += 5) {
-            const hour = Math.floor(total / 60);
-            const minute = String(total % 60).padStart(2, '0');
-            const ampm = hour >= 12 ? 'PM' : 'AM';
-            const displayHour = hour % 12 || 12;
-            slots.push(`${displayHour}:${minute} ${ampm}`);
-        }
-    });
-    return slots;
+    return buildEventTimeSlots(activeEvent.timeSlots, activeEvent.slotDurationMinutes);
   }, [selectedDate, activeEvent]);
 
   const bookedSlotsForSelectedDate = useMemo(() => {
@@ -382,6 +411,7 @@ export default function EventScheduler({ adminMode = false }) {
 
   const handleSaveEvent = async (eventData) => {
     if (!org?.id) return;
+    const eventFields = 'id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, is_featured, is_active';
     const row = {
       name: eventData.name,
       location: eventData.location,
@@ -389,18 +419,21 @@ export default function EventScheduler({ adminMode = false }) {
       theme_color: eventData.themeColor,
       dates: eventData.dates,
       time_slots: eventData.timeSlots,
+      slot_duration_minutes: eventData.slotDurationMinutes,
       logo_url: eventData.logoUrl || null,
       is_active: eventData.isActive !== false,
     };
     const result = editingEvent?.id
-      ? await supabase.from('event_schedule_events').update(row).eq('id', editingEvent.id)
-      : await supabase.from('event_schedule_events').insert({ ...row, org_id: org.id, is_featured: false });
+      ? await supabase.from('event_schedule_events').update(row).eq('id', editingEvent.id).select(eventFields).single()
+      : await supabase.from('event_schedule_events').insert({ ...row, org_id: org.id, is_featured: false }).select(eventFields).single();
     if (result.error) {
       console.error('Unable to save event:', result.error);
       setDataError('The event could not be saved.');
       return;
     }
-    setEditingEvent(null);
+    setEditingEvent(mapEventRow(result.data));
+    setShareMessage('Event saved. You can now manage blocked times below.');
+    window.setTimeout(() => setShareMessage(''), 3000);
     setAdminRefreshVersion(version => version + 1);
   };
 
@@ -416,6 +449,25 @@ export default function EventScheduler({ adminMode = false }) {
     const { error } = await supabase.rpc('set_event_schedule_featured', { p_event_id: eventIdToFeature });
     if (error) setDataError('The featured event could not be updated.');
     else setAdminRefreshVersion(version => version + 1);
+  };
+
+  const handleToggleBlockedSlot = async (eventId, date, time, shouldBlock) => {
+    setDataError('');
+    const { error } = await supabase.rpc('set_event_schedule_slot_blocked', {
+      p_event_id: eventId,
+      p_booking_date: date,
+      p_slot_time: convertTo24Hour(time),
+      p_blocked: shouldBlock,
+    });
+    if (error) {
+      const message = `${error.message || ''} ${error.details || ''}`;
+      setDataError(message.includes('SLOT_ALREADY_BOOKED')
+        ? 'That time already has a guest booking and cannot be blocked.'
+        : 'The blocked availability could not be updated.');
+      return false;
+    }
+    setAdminRefreshVersion(version => version + 1);
+    return true;
   };
 
   const handleUpdateBooking = async (bookingId, updatedData) => {
@@ -532,7 +584,15 @@ export default function EventScheduler({ adminMode = false }) {
             )}
 
             {editingEvent ? (
-                <EventForm event={editingEvent} orgId={org?.id} onSave={handleSaveEvent} onCancel={() => setEditingEvent(null)} />
+                <EventForm
+                  event={editingEvent}
+                  orgId={org?.id}
+                  bookings={allBookings.filter(booking => booking.eventId === editingEvent.id)}
+                  blockedSlots={allBlockedSlots.filter(slot => slot.eventId === editingEvent.id)}
+                  onToggleBlockedSlot={handleToggleBlockedSlot}
+                  onSave={handleSaveEvent}
+                  onCancel={() => setEditingEvent(null)}
+                />
             ) : editingBooking ? (
                 <BookingEditForm booking={editingBooking} onSave={handleUpdateBooking} onCancel={() => setEditingBooking(null)} />
             ) : (
@@ -613,7 +673,7 @@ export default function EventScheduler({ adminMode = false }) {
 
                                 <div className="text-xs text-muted-foreground space-y-1">
                                   <p>{event.dates.length ? event.dates.map(date => format(new Date(`${date}T00:00:00`), 'MMM d, yyyy')).join(' · ') : 'No dates configured'}</p>
-                                  <p>{eventBookings.length} bookings · {eventCheckedIn} checked in</p>
+                                  <p>{eventBookings.length} bookings · {eventCheckedIn} checked in · {event.slotDurationMinutes}-minute slots</p>
                                 </div>
 
                                 <div className="flex items-center gap-1.5 pt-3 border-t border-border/60">
@@ -943,12 +1003,13 @@ export default function EventScheduler({ adminMode = false }) {
 }
 
 // --- Event Form Component ---
-const EventForm = ({ event, orgId, onSave, onCancel }) => {
+const EventForm = ({ event, orgId, bookings = [], blockedSlots = [], onToggleBlockedSlot, onSave, onCancel }) => {
     const [name, setName] = useState(event.name || '');
     const [location, setLocation] = useState(event.location || '');
     const [placement, setPlacement] = useState(event.placement || '');
     const [themeColor, setThemeColor] = useState(event.themeColor || '#f97316');
     const [dates, setDates] = useState(event.dates ? event.dates.join(', ') : '');
+    const [slotDurationMinutes, setSlotDurationMinutes] = useState(event.slotDurationMinutes || 5);
     const [logoUrl, setLogoUrl] = useState(event.logoUrl || '');
     const [isActive, setIsActive] = useState(event.isActive !== false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -1046,6 +1107,7 @@ const EventForm = ({ event, orgId, onSave, onCancel }) => {
                 themeColor,
                 dates: dates.split(',').map(d => d.trim()),
                 timeSlots: formattedTimeSlots,
+                slotDurationMinutes,
                 logoUrl,
                 isActive,
             });
@@ -1119,6 +1181,19 @@ const EventForm = ({ event, orgId, onSave, onCancel }) => {
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Availability Cycles (12h Ranges)</label>
                         <input type="text" value={timeSlots} onChange={e => setTimeSlots(e.target.value)} className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all" placeholder="10AM-2PM, 5PM-8PM" required />
                     </div>
+                    <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Appointment Slot Size</label>
+                        <select
+                            value={slotDurationMinutes}
+                            onChange={event => setSlotDurationMinutes(Number(event.target.value))}
+                            className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all"
+                        >
+                            {[5, 10, 15, 20, 30, 45, 60, 90, 120].map(minutes => (
+                                <option key={minutes} value={minutes}>{minutes} minutes</option>
+                            ))}
+                        </select>
+                        <p className="mt-2 text-xs text-gray-400">Each public booking reserves one slot of this length.</p>
+                    </div>
                     <label className="flex items-center justify-between gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 cursor-pointer">
                         <span>
                             <span className="block text-sm font-bold text-gray-800">Public booking page</span>
@@ -1133,7 +1208,101 @@ const EventForm = ({ event, orgId, onSave, onCancel }) => {
                     </div>
                 </div>
             </form>
+            {event.id && (
+                <BlockedSlotsManager
+                    event={event}
+                    bookings={bookings}
+                    blockedSlots={blockedSlots}
+                    onToggle={onToggleBlockedSlot}
+                />
+            )}
         </div>
+    );
+};
+
+const BlockedSlotsManager = ({ event, bookings, blockedSlots, onToggle }) => {
+    const [selectedDate, setSelectedDate] = useState(event.dates?.[0] || '');
+    const [pendingKey, setPendingKey] = useState('');
+    const slots = buildEventTimeSlots(event.timeSlots, event.slotDurationMinutes);
+
+    useEffect(() => {
+        if (!event.dates?.includes(selectedDate)) setSelectedDate(event.dates?.[0] || '');
+    }, [event.dates, selectedDate]);
+
+    const bookedTimes = new Set(
+        bookings
+            .filter(booking => booking.date === selectedDate)
+            .map(booking => booking.time),
+    );
+    const blockedTimes = new Set(
+        blockedSlots
+            .filter(slot => slot.date === selectedDate)
+            .map(slot => slot.time),
+    );
+
+    const toggle = async (displayTime) => {
+        const time = convertTo24Hour(displayTime);
+        const key = `${selectedDate}-${time}`;
+        setPendingKey(key);
+        await onToggle(event.id, selectedDate, displayTime, !blockedTimes.has(time));
+        setPendingKey('');
+    };
+
+    return (
+        <section className="mt-8 pt-8 border-t-2 border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+                <div>
+                    <h3 className="text-lg font-black tracking-tight text-gray-800">Block Appointment Times</h3>
+                    <p className="text-sm text-gray-500 mt-1">Select an available time to block it. Select a blocked time again to reopen it.</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] font-bold whitespace-nowrap">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-white border border-gray-300" /> Available</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Blocked</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-300" /> Booked</span>
+                </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+                {(event.dates || []).map(date => (
+                    <button
+                        key={date}
+                        type="button"
+                        onClick={() => setSelectedDate(date)}
+                        className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-bold transition-colors ${selectedDate === date ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}
+                    >
+                        {format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}
+                    </button>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                {slots.map(displayTime => {
+                    const time = convertTo24Hour(displayTime);
+                    const isBooked = bookedTimes.has(time);
+                    const isBlocked = blockedTimes.has(time);
+                    const isPending = pendingKey === `${selectedDate}-${time}`;
+                    return (
+                        <button
+                            key={displayTime}
+                            type="button"
+                            disabled={isBooked || isPending}
+                            onClick={() => void toggle(displayTime)}
+                            title={isBooked ? 'This slot already has a guest booking' : isBlocked ? 'Reopen this time' : 'Block this time'}
+                            className={`rounded-xl border px-2 py-3 text-xs font-bold transition-all disabled:cursor-not-allowed ${
+                                isBooked
+                                    ? 'border-gray-200 bg-gray-200 text-gray-500'
+                                    : isBlocked
+                                        ? 'border-amber-400 bg-amber-400 text-amber-950 hover:bg-amber-300'
+                                        : 'border-gray-200 bg-white text-gray-700 hover:border-amber-300 hover:bg-amber-50'
+                            } ${isPending ? 'opacity-50' : ''}`}
+                        >
+                            {isPending ? 'Saving…' : displayTime}
+                        </button>
+                    );
+                })}
+            </div>
+            <p className="text-xs text-gray-400 mt-4">Using {event.slotDurationMinutes}-minute slots. Save changes above before blocking times if you changed dates, hours, or slot size.</p>
+        </section>
     );
 };
 
