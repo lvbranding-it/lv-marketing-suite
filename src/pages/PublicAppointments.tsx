@@ -30,6 +30,11 @@ const dateLabel = (iso: string, timezone: string) =>
   new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", month: "short", day: "numeric" })
     .format(new Date(iso));
 
+const dateParts = (iso: string, timezone: string) => ({
+  weekday: new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(new Date(iso)),
+  monthDay: new Intl.DateTimeFormat("en-US", { timeZone: timezone, month: "short", day: "numeric" }).format(new Date(iso)),
+});
+
 const timeLabel = (iso: string, timezone: string) =>
   new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" })
     .format(new Date(iso));
@@ -51,6 +56,7 @@ export default function PublicAppointments() {
   const [selectedStart, setSelectedStart] = useState("");
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [visibleDateCount, setVisibleDateCount] = useState(10);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -81,6 +87,7 @@ export default function PublicAppointments() {
       setSlotsLoading(true);
       setSelectedDate("");
       setSelectedStart("");
+      setVisibleDateCount(10);
       setError("");
       const from = new Date();
       const to = new Date(Date.now() + 90 * 86400000);
@@ -151,77 +158,92 @@ export default function PublicAppointments() {
     setConfirmed(true);
   };
 
-  if (loading) return <main className="min-h-screen grid place-items-center bg-zinc-50"><Loader2 className="animate-spin text-zinc-400" /></main>;
-  if (!page) return <main className="min-h-screen grid place-items-center bg-zinc-50 p-6"><p className="text-zinc-600">{error}</p></main>;
+  if (loading) return <main className="grid min-h-screen place-items-center bg-[#FBFAF8]"><Loader2 className="animate-spin text-[#CB2039]" /></main>;
+  if (!page) return <main className="grid min-h-screen place-items-center bg-[#FBFAF8] p-6"><p className="text-[#514A4C]">{error}</p></main>;
 
   return (
-    <main className={`min-h-screen bg-zinc-50 ${embedded ? "p-2" : "px-4 py-10 sm:py-16"}`}>
-      <section className="mx-auto max-w-5xl overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-xl shadow-zinc-200/50">
-        <div className="grid md:grid-cols-[0.85fr_1.4fr]">
-          <aside className="p-7 text-white sm:p-10" style={{ background: `linear-gradient(145deg, ${page.brand_color}, #18181b 88%)` }}>
-            <LVLogo size={48} className="mb-10" />
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-white/65">LV Branding</p>
-            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">{page.title}</h1>
-            <p className="mt-4 leading-relaxed text-white/75">{page.description}</p>
-            <div className="mt-8 space-y-3 text-sm text-white/80">
-              <p className="flex items-center gap-2"><Clock3 size={17} /> {page.duration_minutes} minutes</p>
-              <p className="flex items-center gap-2"><CalendarDays size={17} /> Times shown in {page.timezone.replace("_", " ")}</p>
-              {selectedHost && <p className="flex items-center gap-2"><UserRound size={17} /> With {selectedHost.display_name}</p>}
+    <main className={`min-h-screen overflow-x-hidden bg-[#FBFAF8] text-[#231F20] ${embedded ? "p-2" : "px-3 py-5 sm:px-6 sm:py-10 lg:py-14"}`}>
+      <section className="mx-auto w-full max-w-7xl overflow-hidden rounded-[28px] border border-[#E8E1DE] bg-white shadow-[0_24px_70px_rgba(35,31,32,0.10)]">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
+          <aside className="relative min-w-0 overflow-hidden bg-[#231F20] p-6 text-white sm:p-8 lg:p-10">
+            <div className="absolute inset-x-0 top-0 h-2" style={{ backgroundColor: page.brand_color }} />
+            <div className="flex items-center justify-between gap-4 lg:block">
+              <div className="flex items-center gap-3 lg:block">
+                <LVLogo size={54} className="shrink-0 lg:mb-10" />
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70 lg:mb-4">LV Branding</p>
+              </div>
+              <span className="hidden shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-medium text-white/65 min-[480px]:inline-flex lg:hidden">Project consultation</span>
+            </div>
+            <div className="mt-7 max-w-sm lg:mt-0">
+              <p className="mb-3 hidden text-[11px] font-semibold uppercase tracking-[0.22em] lg:block" style={{ color: page.brand_color }}>Project consultation</p>
+              <h1 className="text-3xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-4xl lg:text-[42px]">{page.title}</h1>
+              <p className="mt-4 max-w-xs text-[15px] leading-7 text-white/70">{page.description}</p>
+            </div>
+            <div className="mt-7 grid gap-2.5 sm:grid-cols-3 lg:mt-10 lg:grid-cols-1">
+              <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><Clock3 size={17} style={{ color: page.brand_color }} /> {page.duration_minutes} minutes</p>
+              <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><CalendarDays size={17} style={{ color: page.brand_color }} /> Central Time</p>
+              {selectedHost && <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><UserRound size={17} style={{ color: page.brand_color }} /> With {selectedHost.display_name}</p>}
             </div>
           </aside>
 
-          <div className="p-6 sm:p-10">
+          <div className="min-w-0 p-5 sm:p-8 lg:p-10 xl:p-12">
             {confirmed ? (
-              <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
-                <CheckCircle2 size={70} className="text-emerald-500" />
-                <h2 className="mt-6 text-3xl font-bold text-zinc-900">Appointment confirmed</h2>
-                <p className="mt-3 max-w-md text-zinc-600">{page.confirmation_message}</p>
+              <div className="flex min-h-[600px] flex-col items-center justify-center text-center">
+                <span className="grid h-20 w-20 place-items-center rounded-full bg-[#CB2039]/10"><CheckCircle2 size={52} style={{ color: page.brand_color }} /></span>
+                <p className="mt-7 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: page.brand_color }}>You are all set</p>
+                <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#231F20]">Appointment confirmed</h2>
+                <p className="mt-3 max-w-md leading-7 text-[#6C6466]">{page.confirmation_message}</p>
                 {selectedSlot && (
-                  <div className="mt-7 rounded-2xl bg-zinc-50 px-6 py-4 text-sm text-zinc-700">
+                  <div className="mt-7 rounded-2xl border border-[#E8E1DE] bg-[#FBFAF8] px-6 py-4 text-sm text-[#514A4C]">
                     <strong>{dateLabel(selectedSlot.starts_at, page.timezone)}</strong> at {timeLabel(selectedSlot.starts_at, page.timezone)} with {selectedHost?.display_name}
                   </div>
                 )}
-                <Button className="mt-8 gap-2" style={{ backgroundColor: page.brand_color }} asChild>
+                <Button className="mt-8 h-12 gap-2 rounded-xl px-6 hover:opacity-90" style={{ backgroundColor: page.brand_color }} asChild>
                   <a href={page.confirmation_url || "https://www.lvbranding.com"} target="_top" rel="noopener noreferrer">
                     Visit LV Branding <ExternalLink size={16} />
                   </a>
                 </Button>
               </div>
             ) : (
-              <form onSubmit={submit} className="space-y-7">
-                <div>
-                  <Label className="text-sm font-semibold">Choose a team member</Label>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <form onSubmit={submit} className="min-w-0 space-y-8">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>1</span><div><Label className="text-base font-semibold text-[#231F20]">Choose a team member</Label><p className="mt-0.5 text-xs text-[#82797B]">Admin is recommended for website inquiries.</p></div></div>
+                  <div className={`mt-4 grid min-w-0 gap-3 ${page.hosts.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
                     {page.hosts.map((host) => (
                       <button key={host.id} type="button" onClick={() => setHostId(host.id)}
-                        className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${hostId === host.id ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 hover:border-zinc-400"}`}>
-                        <span className={`grid h-9 w-9 place-items-center rounded-full ${hostId === host.id ? "bg-white/15" : "bg-zinc-100"}`}>
-                          {host.avatar_url ? <img src={host.avatar_url} className="h-9 w-9 rounded-full object-cover" alt="" /> : <UserRound size={17} />}
+                        style={hostId === host.id ? { borderColor: page.brand_color, backgroundColor: `${page.brand_color}0D` } : undefined}
+                        className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3.5 text-left transition focus:outline-none focus:ring-2 focus:ring-[#CB2039]/25 ${hostId === host.id ? "text-[#231F20] shadow-sm" : "border-[#E8E1DE] hover:border-[#CB2039]/45 hover:bg-[#FBFAF8]"}`}>
+                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${hostId === host.id ? "text-white" : "bg-[#F2EEEE] text-[#6C6466]"}`} style={hostId === host.id ? { backgroundColor: page.brand_color } : undefined}>
+                          {host.avatar_url ? <img src={host.avatar_url} className="h-11 w-11 rounded-full object-cover" alt="" /> : <UserRound size={18} />}
                         </span>
-                        <span><span className="block font-medium">{host.display_name}</span>{host.is_default && <span className="text-xs opacity-65">Recommended</span>}</span>
+                        <span className="min-w-0"><span className="block truncate font-semibold">{host.display_name}</span>{host.is_default && <span className="text-xs font-medium" style={{ color: page.brand_color }}>Recommended</span>}</span>
+                        {hostId === host.id && <CheckCircle2 size={18} className="ml-auto shrink-0" style={{ color: page.brand_color }} />}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <Label className="text-sm font-semibold">Choose a date</Label>
+                <div className="min-w-0 border-t border-[#EEE9E6] pt-7">
+                  <div className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>2</span><div><Label className="text-base font-semibold text-[#231F20]">Choose a date</Label><p className="mt-0.5 text-xs text-[#82797B]">Available dates in Central Time.</p></div></div>
                   {slotsLoading ? <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500"><Loader2 size={16} className="animate-spin" /> Checking calendars…</div> :
-                    grouped.length ? <div className="mt-3 flex gap-2 overflow-x-auto pb-2">{grouped.slice(0, 14).map((group) => (
-                      <button key={group.key} type="button" onClick={() => { setSelectedDate(group.key); setSelectedStart(""); }}
-                        className={`min-w-[96px] rounded-xl border px-3 py-3 text-sm font-medium transition ${selectedDate === group.key ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 hover:border-zinc-400"}`}>
-                        {group.label}
-                      </button>
-                    ))}</div> : <p className="mt-3 text-sm text-zinc-500">No open times are currently available.</p>}
+                    grouped.length ? <><div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">{grouped.slice(0, visibleDateCount).map((group) => {
+                      const parts = dateParts(group.slots[0].starts_at, page.timezone);
+                      return <button key={group.key} type="button" onClick={() => { setSelectedDate(group.key); setSelectedStart(""); }}
+                        style={selectedDate === group.key ? { borderColor: page.brand_color, backgroundColor: page.brand_color } : undefined}
+                        className={`min-w-0 rounded-xl border px-2 py-3 text-center transition focus:outline-none focus:ring-2 focus:ring-[#CB2039]/25 ${selectedDate === group.key ? "text-white shadow-sm" : "border-[#E8E1DE] bg-white text-[#514A4C] hover:border-[#CB2039]/50 hover:bg-[#CB2039]/[0.03]"}`}>
+                        <span className={`block text-[11px] font-semibold uppercase tracking-[0.12em] ${selectedDate === group.key ? "text-white/75" : "text-[#948A8C]"}`}>{parts.weekday}</span><span className="mt-0.5 block text-sm font-bold">{parts.monthDay}</span>
+                      </button>;
+                    })}</div>{visibleDateCount < grouped.length && <Button type="button" variant="ghost" size="sm" onClick={() => setVisibleDateCount((count) => count + 10)} className="mt-3 px-0 text-[#CB2039] hover:bg-transparent hover:text-[#A71930]">Show more dates</Button>}</> : <p className="mt-4 rounded-xl bg-[#FBFAF8] p-4 text-sm text-[#6C6466]">No open times are currently available.</p>}
                 </div>
 
                 {selectedDate && (
-                  <div>
-                    <Label className="text-sm font-semibold">Choose a time</Label>
-                    <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  <div className="min-w-0 border-t border-[#EEE9E6] pt-7">
+                    <div className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>3</span><div><Label className="text-base font-semibold text-[#231F20]">Choose a time</Label><p className="mt-0.5 text-xs text-[#82797B]">{visibleSlots[0] ? dateLabel(visibleSlots[0].starts_at, page.timezone) : "Available times"}</p></div></div>
+                    <div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4">
                       {visibleSlots.map((slot) => (
                         <button key={slot.starts_at} type="button" onClick={() => setSelectedStart(slot.starts_at)}
-                          className={`rounded-lg border px-2 py-2.5 text-sm font-medium ${selectedStart === slot.starts_at ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-200 hover:border-zinc-400"}`}>
+                          style={selectedStart === slot.starts_at ? { borderColor: page.brand_color, backgroundColor: page.brand_color } : undefined}
+                          className={`min-w-0 rounded-xl border px-2 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-[#CB2039]/25 ${selectedStart === slot.starts_at ? "text-white shadow-sm" : "border-[#E8E1DE] text-[#514A4C] hover:border-[#CB2039]/50 hover:bg-[#CB2039]/[0.03]"}`}>
                           {timeLabel(slot.starts_at, page.timezone)}
                         </button>
                       ))}
@@ -230,18 +252,19 @@ export default function PublicAppointments() {
                 )}
 
                 {selectedStart && (
-                  <div className="grid gap-4 border-t border-zinc-100 pt-6 sm:grid-cols-2">
-                    <div className="sm:col-span-2"><Label htmlFor="appointment-name">Name</Label><Input id="appointment-name" required maxLength={160} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5" /></div>
-                    <div><Label htmlFor="appointment-email">Email</Label><Input id="appointment-email" required type="email" maxLength={320} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1.5" /></div>
-                    <div><Label htmlFor="appointment-phone">Phone</Label><Input id="appointment-phone" type="tel" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1.5" /></div>
-                    <div className="sm:col-span-2"><Label htmlFor="appointment-company">Company</Label><Input id="appointment-company" maxLength={160} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="mt-1.5" /></div>
-                    <div className="sm:col-span-2"><Label htmlFor="appointment-notes">Tell us about your project</Label><Textarea id="appointment-notes" required maxLength={3000} rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1.5" /></div>
+                  <div className="grid min-w-0 gap-4 border-t border-[#EEE9E6] pt-7 sm:grid-cols-2">
+                    <div className="flex items-center gap-3 sm:col-span-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>4</span><div><p className="text-base font-semibold text-[#231F20]">Tell us about your project</p><p className="mt-0.5 text-xs text-[#82797B]">We’ll send the confirmation to your email.</p></div></div>
+                    <div className="sm:col-span-2"><Label htmlFor="appointment-name">Name</Label><Input id="appointment-name" required maxLength={160} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5 h-11 border-[#DDD5D2] focus-visible:ring-[#CB2039]" /></div>
+                    <div><Label htmlFor="appointment-email">Email</Label><Input id="appointment-email" required type="email" maxLength={320} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1.5 h-11 border-[#DDD5D2] focus-visible:ring-[#CB2039]" /></div>
+                    <div><Label htmlFor="appointment-phone">Phone</Label><Input id="appointment-phone" type="tel" maxLength={40} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1.5 h-11 border-[#DDD5D2] focus-visible:ring-[#CB2039]" /></div>
+                    <div className="sm:col-span-2"><Label htmlFor="appointment-company">Company</Label><Input id="appointment-company" maxLength={160} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="mt-1.5 h-11 border-[#DDD5D2] focus-visible:ring-[#CB2039]" /></div>
+                    <div className="sm:col-span-2"><Label htmlFor="appointment-notes">Project details</Label><Textarea id="appointment-notes" required maxLength={3000} rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1.5 border-[#DDD5D2] focus-visible:ring-[#CB2039]" placeholder="What are you hoping to build or improve?" /></div>
                   </div>
                 )}
 
-                {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-                {selectedStart && <Button type="submit" disabled={submitting} className="h-12 w-full text-base" style={{ backgroundColor: page.brand_color }}>{submitting ? <><Loader2 size={18} className="mr-2 animate-spin" /> Confirming…</> : "Schedule appointment"}</Button>}
-                <p className="text-center text-xs text-zinc-400">Secure scheduling powered by LV Branding</p>
+                {error && <p role="alert" className="rounded-xl border border-[#CB2039]/15 bg-[#CB2039]/[0.05] p-3 text-sm text-[#A71930]">{error}</p>}
+                {selectedStart && <Button type="submit" disabled={submitting} className="h-12 w-full rounded-xl text-base font-semibold shadow-sm hover:opacity-90" style={{ backgroundColor: page.brand_color }}>{submitting ? <><Loader2 size={18} className="mr-2 animate-spin" /> Confirming…</> : "Schedule appointment"}</Button>}
+                <div className="flex items-center justify-center gap-2 border-t border-[#EEE9E6] pt-5 text-center text-xs text-[#948A8C]"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: page.brand_color }} /> Secure scheduling by LV Branding</div>
               </form>
             )}
           </div>
