@@ -89,6 +89,14 @@ describe("prospect appointment scheduler database boundary", () => {
     expect(await scalar("select count(*) from appointment_host_availability where host_id=$1", [hostId])).toBe(5);
   });
 
+  it("does not restore weekdays an administrator removed", async () => {
+    await db.query("delete from appointment_host_availability where host_id=$1 and weekday in (1,5)", [hostId]);
+    await db.query("select ensure_appointment_booking_page($1)", [org]);
+    expect(await scalar("select count(*) from appointment_host_availability where host_id=$1", [hostId])).toBe(3);
+    expect((await db.query("select weekday from appointment_host_availability where host_id=$1 order by weekday", [hostId])).rows)
+      .toEqual([{ weekday: 2 }, { weekday: 3 }, { weekday: 4 }]);
+  });
+
   it("exposes only a public-safe page and available slots", async () => {
     await db.query("update appointment_booking_pages set minimum_notice_hours=0, booking_window_days=365 where id=$1", [pageId]);
     await as("", "anon");

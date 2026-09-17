@@ -210,12 +210,11 @@ begin
     values (v_page_id, p_org_id, case when lower(coalesce((select email from auth.users where id = auth.uid()), '')) = lower(p_admin_email) then auth.uid() else null end,
             'Admin', lower(p_admin_email), true)
     returning id into v_host_id;
-  end if;
 
-  insert into public.appointment_host_availability(host_id, org_id, weekday, start_time, end_time)
-  select v_host_id, p_org_id, weekday, '09:00'::time, '17:00'::time
-  from generate_series(1, 5) weekday
-  on conflict do nothing;
+    insert into public.appointment_host_availability(host_id, org_id, weekday, start_time, end_time)
+    select v_host_id, p_org_id, weekday, '09:00'::time, '17:00'::time
+    from generate_series(1, 5) weekday;
+  end if;
 
   return v_page_id;
 end

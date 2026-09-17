@@ -81,9 +81,20 @@ export default function AppointmentSchedulerAdmin() {
     setAvailability(availabilityResult.data || []);
     setBookings(bookingsResult.data || []);
     setConnections(connectionsResult.data || []);
-    const firstHost = hostsResult.data?.[0]?.id || "";
+    const loadedHosts = (hostsResult.data || []) as HostRow[];
+    const loadedAvailability = (availabilityResult.data || []) as AvailabilityRow[];
+    const firstHost = loadedHosts[0]?.id || "";
     setBlockDraft((draft) => ({ ...draft, host_id: draft.host_id || firstHost }));
-    setAvailabilityDraft((draft) => ({ ...draft, host_id: draft.host_id || firstHost }));
+    setAvailabilityDraft((draft) => {
+      const hostId = loadedHosts.some((host) => host.id === draft.host_id) ? draft.host_id : firstHost;
+      const rows = loadedAvailability.filter((row) => row.host_id === hostId);
+      return {
+        host_id: hostId,
+        weekdays: rows.map((row) => row.weekday),
+        start: rows[0]?.start_time?.slice(0, 5) || "09:00",
+        end: rows[0]?.end_time?.slice(0, 5) || "17:00",
+      };
+    });
     setLoading(false);
   }, [org?.id, toast]);
 
