@@ -69,6 +69,7 @@ const mapEventRow = (row) => ({
     timeSlots: row.time_slots || [],
     slotDurationMinutes: row.slot_duration_minutes || 5,
     logoUrl: row.logo_url || '',
+    confirmationRedirectUrl: row.confirmation_redirect_url || '',
     isFeatured: row.is_featured,
     isActive: row.is_active,
 });
@@ -168,7 +169,7 @@ export default function EventScheduler({ adminMode = false }) {
       setDataError('');
       let eventsQuery = supabase
         .from('event_schedule_events')
-        .select('id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, is_featured, is_active')
+        .select('id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, confirmation_redirect_url, is_featured, is_active')
         .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false });
       eventsQuery = adminMode
@@ -400,18 +401,9 @@ export default function EventScheduler({ adminMode = false }) {
     else setAdminRefreshVersion(version => version + 1);
   };
 
-  const resetBookingProcess = () => {
-    setSelectedDate(undefined);
-    setSelectedTime(null);
-    setName('');
-    setEmail('');
-    setBookingError('');
-    setView('booking');
-  };
-
   const handleSaveEvent = async (eventData) => {
     if (!org?.id) return;
-    const eventFields = 'id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, is_featured, is_active';
+    const eventFields = 'id, org_id, name, location, placement, theme_color, dates, time_slots, slot_duration_minutes, logo_url, confirmation_redirect_url, is_featured, is_active';
     const row = {
       name: eventData.name,
       location: eventData.location,
@@ -421,6 +413,7 @@ export default function EventScheduler({ adminMode = false }) {
       time_slots: eventData.timeSlots,
       slot_duration_minutes: eventData.slotDurationMinutes,
       logo_url: eventData.logoUrl || null,
+      confirmation_redirect_url: eventData.confirmationRedirectUrl || null,
       is_active: eventData.isActive !== false,
     };
     const result = editingEvent?.id
@@ -561,13 +554,13 @@ export default function EventScheduler({ adminMode = false }) {
           <p className="flex items-center"><Clock className="w-4 h-4 mr-3 text-gray-500" /><strong>Time:</strong><span className="ml-auto text-gray-700">{lastBooking?.selectedTime}</span></p>
           <p className="flex items-center"><User className="w-4 h-4 mr-3 text-gray-500" /><strong>Name:</strong><span className="ml-auto text-gray-700">{lastBooking?.name}</span></p>
         </div>
-        <button 
-            onClick={resetBookingProcess} 
+        <a
+            href={activeEvent?.confirmationRedirectUrl || 'https://www.lvbranding.com'}
             style={{ backgroundColor: themeColor }}
             className="w-full mt-8 text-white py-3 rounded-lg font-semibold hover:brightness-110 transition-all duration-300 flex items-center justify-center shadow-lg"
         >
-          <ArrowLeft className="w-5 h-5 mr-2" /> Book Another Slot
-        </button>
+          Continue
+        </a>
       </div>
     );
   } else if (view === 'admin' && adminMode) {
@@ -1011,6 +1004,7 @@ const EventForm = ({ event, orgId, bookings = [], blockedSlots = [], onToggleBlo
     const [dates, setDates] = useState(event.dates ? event.dates.join(', ') : '');
     const [slotDurationMinutes, setSlotDurationMinutes] = useState(event.slotDurationMinutes || 5);
     const [logoUrl, setLogoUrl] = useState(event.logoUrl || '');
+    const [confirmationRedirectUrl, setConfirmationRedirectUrl] = useState(event.confirmationRedirectUrl || '');
     const [isActive, setIsActive] = useState(event.isActive !== false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [assetId] = useState(() => event.id || crypto.randomUUID());
@@ -1074,6 +1068,18 @@ const EventForm = ({ event, orgId, bookings = [], blockedSlots = [], onToggleBlo
         e.preventDefault();
         setFormError('');
         try {
+            let normalizedRedirectUrl = '';
+            if (confirmationRedirectUrl.trim()) {
+                normalizedRedirectUrl = /^https:\/\//i.test(confirmationRedirectUrl.trim())
+                    ? confirmationRedirectUrl.trim()
+                    : `https://${confirmationRedirectUrl.trim()}`;
+                const parsedRedirect = new URL(normalizedRedirectUrl);
+                if (parsedRedirect.protocol !== 'https:' || !parsedRedirect.hostname) {
+                    throw new Error('Confirmation destination must be a valid HTTPS link.');
+                }
+                normalizedRedirectUrl = parsedRedirect.toString();
+            }
+
             // Robust parsing to handle various inputs (e.g. 10AM, 10:00AM, 10 AM)
             const formattedTimeSlots = timeSlots.split(',').map(t => {
                 const parts = t.trim().split('-');
@@ -1109,6 +1115,7 @@ const EventForm = ({ event, orgId, bookings = [], blockedSlots = [], onToggleBlo
                 timeSlots: formattedTimeSlots,
                 slotDurationMinutes,
                 logoUrl,
+                confirmationRedirectUrl: normalizedRedirectUrl,
                 isActive,
             });
         } catch (error) {
@@ -1201,6 +1208,18 @@ const EventForm = ({ event, orgId, bookings = [], blockedSlots = [], onToggleBlo
                         </span>
                         <input type="checkbox" checked={isActive} onChange={event => setIsActive(event.target.checked)} className="h-5 w-5 accent-blue-600" />
                     </label>
+                    <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Confirmation Button Destination</label>
+                        <input
+                            type="text"
+                            inputMode="url"
+                            value={confirmationRedirectUrl}
+                            onChange={event => setConfirmationRedirectUrl(event.target.value)}
+                            className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all"
+                            placeholder="https://example.com/next-step"
+                        />
+                        <p className="mt-2 text-xs text-gray-400">Optional. The confirmation button goes to www.lvbranding.com when this is blank.</p>
+                    </div>
                     {formError && <div className="text-xs text-red-600 font-black bg-red-50 p-4 rounded-2xl border border-red-100">{formError}</div>}
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="button" onClick={onCancel} className="px-8 py-4 bg-white text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-gray-100 transition-all">Discard</button>

@@ -54,6 +54,9 @@ beforeAll(async () => {
   await db.exec(
     readFileSync(new URL("../migrations/20260917143000_event_scheduler_slot_controls.sql", import.meta.url), "utf8"),
   );
+  await db.exec(
+    readFileSync(new URL("../migrations/20260917151500_event_scheduler_confirmation_redirect.sql", import.meta.url), "utf8"),
+  );
 }, 30000);
 
 afterAll(async () => {
@@ -192,5 +195,24 @@ describe("event scheduler database boundary", () => {
       [eventId],
     );
     expect(await scalar("select count(*) from event_schedule_blocked_slots")).toBe(0);
+  });
+
+  it("allows only HTTPS confirmation destinations and exposes the configured link with the public event", async () => {
+    await as(admin);
+    await expect(
+      db.query(
+        "update event_schedule_events set confirmation_redirect_url = 'http://unsafe.example' where id = $1",
+        [eventId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await db.query(
+      "update event_schedule_events set confirmation_redirect_url = 'https://lvbranding.com/thank-you' where id = $1",
+      [eventId],
+    );
+
+    await as("", "anon");
+    expect(
+      await scalar("select confirmation_redirect_url from event_schedule_events where id = $1", [eventId]),
+    ).toBe("https://lvbranding.com/thank-you");
   });
 });

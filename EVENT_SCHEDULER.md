@@ -40,6 +40,11 @@ public availability RPC merges bookings and administrative blocks into the same
 date/time-only response, and row locking prevents a block and guest booking from
 claiming the same time concurrently.
 
+Migration `supabase/migrations/20260917151500_event_scheduler_confirmation_redirect.sql`
+adds an optional HTTPS confirmation destination per event. The confirmation
+card never offers another booking; its Continue button opens the configured
+destination or `https://www.lvbranding.com` when no destination is set.
+
 ## One-time legacy import
 
 Apply the event scheduler migration through the repository's reconciled production migration
