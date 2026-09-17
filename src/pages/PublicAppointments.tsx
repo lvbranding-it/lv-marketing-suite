@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, ExternalLink, Loader2, UserRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, ExternalLink, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,7 +185,7 @@ export default function PublicAppointments() {
             <div className="mt-7 grid gap-2.5 sm:grid-cols-3 lg:mt-10 lg:grid-cols-1">
               <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><Clock3 size={17} style={{ color: page.brand_color }} /> {page.duration_minutes} minutes</p>
               <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><CalendarDays size={17} style={{ color: page.brand_color }} /> Central Time</p>
-              {selectedHost && <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><UserRound size={17} style={{ color: page.brand_color }} /> With {selectedHost.display_name}</p>}
+              <p className="flex items-center rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm font-semibold tracking-wide text-white/80">Strategy First. Always.</p>
             </div>
           </aside>
 
