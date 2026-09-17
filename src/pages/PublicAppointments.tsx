@@ -132,6 +132,9 @@ export default function PublicAppointments() {
   const visibleSlots = grouped.find((group) => group.key === selectedDate)?.slots || [];
   const selectedSlot = slots.find((slot) => slot.starts_at === selectedStart);
   const selectedHost = page?.hosts.find((host) => host.id === hostId);
+  const publicDescription = page?.description === "Choose a team member and a time that works for you."
+    ? "Choose a date and time that works for you."
+    : page?.description;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -177,7 +180,7 @@ export default function PublicAppointments() {
             <div className="mt-7 max-w-sm lg:mt-0">
               <p className="mb-3 hidden text-[11px] font-semibold uppercase tracking-[0.22em] lg:block" style={{ color: page.brand_color }}>Project consultation</p>
               <h1 className="text-3xl font-bold leading-[1.05] tracking-[-0.035em] sm:text-4xl lg:text-[42px]">{page.title}</h1>
-              <p className="mt-4 max-w-xs text-[15px] leading-7 text-white/70">{page.description}</p>
+              <p className="mt-4 max-w-xs text-[15px] leading-7 text-white/70">{publicDescription}</p>
             </div>
             <div className="mt-7 grid gap-2.5 sm:grid-cols-3 lg:mt-10 lg:grid-cols-1">
               <p className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-sm text-white/80"><Clock3 size={17} style={{ color: page.brand_color }} /> {page.duration_minutes} minutes</p>
@@ -207,23 +210,6 @@ export default function PublicAppointments() {
             ) : (
               <form onSubmit={submit} className="min-w-0 space-y-8">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>1</span><div><Label className="text-base font-semibold text-[#231F20]">Choose a team member</Label><p className="mt-0.5 text-xs text-[#82797B]">Admin is recommended for website inquiries.</p></div></div>
-                  <div className={`mt-4 grid min-w-0 gap-3 ${page.hosts.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
-                    {page.hosts.map((host) => (
-                      <button key={host.id} type="button" onClick={() => setHostId(host.id)}
-                        style={hostId === host.id ? { borderColor: page.brand_color, backgroundColor: `${page.brand_color}0D` } : undefined}
-                        className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3.5 text-left transition focus:outline-none focus:ring-2 focus:ring-[#CB2039]/25 ${hostId === host.id ? "text-[#231F20] shadow-sm" : "border-[#E8E1DE] hover:border-[#CB2039]/45 hover:bg-[#FBFAF8]"}`}>
-                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${hostId === host.id ? "text-white" : "bg-[#F2EEEE] text-[#6C6466]"}`} style={hostId === host.id ? { backgroundColor: page.brand_color } : undefined}>
-                          {host.avatar_url ? <img src={host.avatar_url} className="h-11 w-11 rounded-full object-cover" alt="" /> : <UserRound size={18} />}
-                        </span>
-                        <span className="min-w-0"><span className="block truncate font-semibold">{host.display_name}</span>{host.is_default && <span className="text-xs font-medium" style={{ color: page.brand_color }}>Recommended</span>}</span>
-                        {hostId === host.id && <CheckCircle2 size={18} className="ml-auto shrink-0" style={{ color: page.brand_color }} />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="min-w-0 border-t border-[#EEE9E6] pt-7">
                   <div className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: page.brand_color }}>2</span><div><Label className="text-base font-semibold text-[#231F20]">Choose a date</Label><p className="mt-0.5 text-xs text-[#82797B]">Available dates in Central Time.</p></div></div>
                   {slotsLoading ? <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500"><Loader2 size={16} className="animate-spin" /> Checking calendars…</div> :
                     grouped.length ? <><div className="mt-4 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">{grouped.slice(0, visibleDateCount).map((group) => {
