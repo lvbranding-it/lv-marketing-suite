@@ -1,16 +1,22 @@
 // @ts-nocheck
 // Ported from the lvbranding-events scheduler. The source app is JavaScript;
 // this directive keeps the migration behavior-preserving while it is typed incrementally.
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { format, parse } from 'date-fns';
 import { 
   Calendar, Clock, User, Mail, CheckCircle2, ArrowLeft, 
   XCircle, Shield, Table, Check, Users, History, Settings, 
-  PlusCircle, Trash2, Edit, LogOut, Share2, Star, ChevronDown, 
-  MapPin, Palette, Download 
+  PlusCircle, Trash2, Edit, Share2, Star, ChevronDown,
+  MapPin, Palette, Download, ExternalLink, UploadCloud, ImageIcon, Copy
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useOrg } from '@/hooks/useOrg';
+import AppShell from '@/components/layout/AppShell';
+import Header from '@/components/layout/Header';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // --- Helper Functions ---
 const convertTo24Hour = (time12h) => {
@@ -61,6 +67,7 @@ const mapBookingRow = (row) => ({
 // --- Main Application Component ---
 export default function EventScheduler({ adminMode = false }) {
   const { org, loading: orgLoading } = useOrg();
+  const { eventId: publicEventId } = useParams();
   const [view, setView] = useState(adminMode ? 'admin' : 'booking');
   const [lastBooking, setLastBooking] = useState(null);
   const [selectedDate, setSelectedDate] = useState(undefined);
@@ -79,12 +86,15 @@ export default function EventScheduler({ adminMode = false }) {
   const [bookingPending, setBookingPending] = useState(false);
   const [availabilityVersion, setAvailabilityVersion] = useState(0);
   const [adminRefreshVersion, setAdminRefreshVersion] = useState(0);
+  const [eventFilter, setEventFilter] = useState('all');
+  const [shareMessage, setShareMessage] = useState('');
 
   // Default theme color if not set
   const themeColor = activeEvent?.themeColor || '#f97316'; 
 
   // --- Scoped font lifecycle ---
   useEffect(() => {
+    if (adminMode) return undefined;
     const link = document.createElement('link');
     link.href = 'https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&display=swap';
     link.rel = 'stylesheet';
@@ -96,7 +106,7 @@ export default function EventScheduler({ adminMode = false }) {
       link.remove();
       document.body.style.fontFamily = previousFontFamily;
     };
-  }, []);
+  }, [adminMode]);
 
   // --- Supabase events and authenticated admin data ---
   useEffect(() => {
@@ -105,7 +115,7 @@ export default function EventScheduler({ adminMode = false }) {
     let channel;
 
     const selectActiveEvent = (eventRows) => {
-      const eventIdFromUrl = new URLSearchParams(window.location.search).get('event');
+      const eventIdFromUrl = publicEventId || new URLSearchParams(window.location.search).get('event');
       setActiveEvent((previous) => {
         const requested = eventIdFromUrl && eventRows.find(event => event.id === eventIdFromUrl);
         const retained = previous && eventRows.find(event => event.id === previous.id);
@@ -134,6 +144,7 @@ export default function EventScheduler({ adminMode = false }) {
       eventsQuery = adminMode
         ? eventsQuery.eq('org_id', org.id)
         : eventsQuery.eq('is_active', true);
+      if (!adminMode && publicEventId) eventsQuery = eventsQuery.eq('id', publicEventId);
 
       const eventsResult = await eventsQuery;
       if (eventsResult.error) {
@@ -181,7 +192,7 @@ export default function EventScheduler({ adminMode = false }) {
       cancelled = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [adminMode, org?.id, orgLoading, adminRefreshVersion]);
+  }, [adminMode, org?.id, orgLoading, adminRefreshVersion, publicEventId]);
 
   // Public callers receive occupied slots only—never guest names or emails.
   useEffect(() => {
@@ -379,10 +390,11 @@ export default function EventScheduler({ adminMode = false }) {
       dates: eventData.dates,
       time_slots: eventData.timeSlots,
       logo_url: eventData.logoUrl || null,
+      is_active: eventData.isActive !== false,
     };
     const result = editingEvent?.id
       ? await supabase.from('event_schedule_events').update(row).eq('id', editingEvent.id)
-      : await supabase.from('event_schedule_events').insert({ ...row, org_id: org.id, is_featured: false, is_active: true });
+      : await supabase.from('event_schedule_events').insert({ ...row, org_id: org.id, is_featured: false });
     if (result.error) {
       console.error('Unable to save event:', result.error);
       setDataError('The event could not be saved.');
@@ -453,25 +465,25 @@ export default function EventScheduler({ adminMode = false }) {
     document.body.removeChild(link);
   };
 
-  const handleLogout = () => {
-    window.location.assign('/events');
-  };
+  const publicEventUrl = (eventId) => `${window.location.origin}/events/${eventId}`;
 
-  const handleShareEvent = (eventId) => {
-    const url = `${window.location.origin}/events?event=${eventId}`;
-    const textarea = document.createElement('textarea');
-    textarea.value = url;
-    document.body.appendChild(textarea);
-    textarea.select();
+  const handleShareEvent = async (eventId) => {
+    const url = publicEventUrl(eventId);
     try {
-        document.execCommand('copy');
-        // Simple visual feedback since alert() is discouraged
-        setBookingError("Link copied to clipboard!");
-        setTimeout(() => setBookingError(""), 3000);
-    } catch (err) {
-        console.error("Failed to copy link.");
+      await navigator.clipboard.writeText(url);
+      setShareMessage('Public event link copied to clipboard.');
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      setShareMessage('Public event link copied to clipboard.');
     }
-    document.body.removeChild(textarea);
+    window.setTimeout(() => setShareMessage(''), 3000);
   };
 
   const toggleList = (date) => {
@@ -508,65 +520,125 @@ export default function EventScheduler({ adminMode = false }) {
     );
   } else if (view === 'admin' && adminMode) {
     const checkedInCount = allBookings.filter(b => b.checkedIn).length;
+    const filteredEvents = eventFilter === 'all'
+      ? events
+      : events.filter(event => eventFilter === 'active' ? event.isActive : !event.isActive);
     currentView = (
-        <div className="w-full max-w-6xl bg-white rounded-2xl shadow-xl p-4 sm:p-8 animate-fade-in my-10">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-0">Admin Dashboard</h1>
-                <div className="flex flex-wrap gap-2">
-                    <button onClick={handleDownloadCsv} className="bg-green-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-green-700 transition-all duration-300 flex items-center shadow-sm">
-                        <Download className="w-5 h-5 mr-2" /> Download Data
-                    </button>
-                    <button onClick={() => setEditingEvent({ themeColor: '#f97316' })} className="bg-blue-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-600 transition-all duration-300 flex items-center shadow-sm">
-                        <PlusCircle className="w-5 h-5 mr-2" /> Create Event
-                    </button>
-                    <button onClick={handleLogout} className="bg-gray-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-gray-600 transition-all duration-300 flex items-center shadow-sm">
-                        <LogOut className="w-5 h-5 mr-2" /> Back to booking
-                    </button>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="bg-gray-100 p-5 rounded-2xl text-center">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Total Bookings</h3>
-                    <p className="text-3xl font-black text-gray-800">{allBookings.length}</p>
-                </div>
-                <div className="bg-green-50 p-5 rounded-2xl text-center">
-                    <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest mb-1">Checked In</h3>
-                    <p className="text-3xl font-black text-green-600">{checkedInCount}</p>
-                </div>
-            </div>
+        <div className="w-full max-w-6xl mx-auto animate-fade-in space-y-6">
+            {shareMessage && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700" role="status">
+                {shareMessage}
+              </div>
+            )}
 
             {editingEvent ? (
-                <EventForm event={editingEvent} onSave={handleSaveEvent} onCancel={() => setEditingEvent(null)} />
+                <EventForm event={editingEvent} orgId={org?.id} onSave={handleSaveEvent} onCancel={() => setEditingEvent(null)} />
             ) : editingBooking ? (
                 <BookingEditForm booking={editingBooking} onSave={handleUpdateBooking} onCancel={() => setEditingBooking(null)} />
             ) : (
                 <div className="space-y-10">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center"><Settings className="w-5 h-5 mr-2 text-blue-500"/> Manage Events</h2>
-                        <div className="grid gap-4">
-                            {events.map(event => (
-                                <div key={event.id} className="bg-white p-4 rounded-2xl border-2 border-gray-50 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center group hover:border-blue-100 transition-all">
-                                    <div className="mb-4 sm:mb-0">
-                                        <p className="font-bold text-lg flex items-center text-gray-800">
-                                            {event.isFeatured && <Star className="w-5 h-5 text-yellow-500 mr-2 fill-current" />}
-                                            {event.name}
-                                            <span className="ml-3 w-3 h-3 rounded-full" style={{ backgroundColor: event.themeColor || '#f97316' }}></span>
-                                        </p>
-                                        <p className="text-xs text-gray-400 flex items-center mt-1 uppercase tracking-tighter font-semibold">
-                                            <MapPin className="w-3 h-3 mr-1" /> {event.location} {event.placement ? `• ${event.placement}` : ''}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center flex-wrap gap-2">
-                                        <button onClick={() => handleSetFeatured(event.id)} disabled={event.isFeatured} className="disabled:opacity-50 disabled:cursor-not-allowed text-yellow-600 hover:text-yellow-800 font-bold flex items-center text-xs px-3 py-1.5 bg-yellow-50 rounded-lg"><Star className="w-3.5 h-3.5 mr-1"/> {event.isFeatured ? 'Featured' : 'Feature'}</button>
-                                        <button onClick={() => handleShareEvent(event.id)} className="text-green-600 hover:text-green-800 font-bold flex items-center text-xs px-3 py-1.5 bg-green-50 rounded-lg"><Share2 className="w-3.5 h-3.5 mr-1"/> Share</button>
-                                        <button onClick={() => setEditingEvent(event)} className="text-blue-600 hover:text-blue-800 font-bold text-xs px-3 py-1.5 bg-blue-50 rounded-lg">Edit</button>
-                                        <button onClick={() => handleDeleteEvent(event.id)} className="text-red-600 hover:text-red-800 font-bold p-1.5 bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="rounded-xl border border-border bg-card p-5">
+                        <p className="text-xs font-medium text-muted-foreground">Events</p>
+                        <p className="mt-1 text-3xl font-semibold text-foreground">{events.length}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-card p-5">
+                        <p className="text-xs font-medium text-muted-foreground">Total bookings</p>
+                        <p className="mt-1 text-3xl font-semibold text-foreground">{allBookings.length}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-card p-5">
+                        <p className="text-xs font-medium text-muted-foreground">Checked in</p>
+                        <p className="mt-1 text-3xl font-semibold text-emerald-600">{checkedInCount}</p>
+                      </div>
                     </div>
+
+                    <section className="space-y-4">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          {['all', 'active', 'inactive'].map(filter => (
+                            <button
+                              key={filter}
+                              onClick={() => setEventFilter(filter)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${eventFilter === filter ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                            >
+                              {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {eventsLoading ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {[1, 2, 3].map(item => <Skeleton key={item} className="h-64 rounded-xl" />)}
+                        </div>
+                      ) : filteredEvents.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border py-16 text-center">
+                          <Calendar className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                          <p className="font-semibold text-foreground">No {eventFilter === 'all' ? '' : `${eventFilter} `}events yet</p>
+                          <p className="text-sm text-muted-foreground mt-1">Create an event to start accepting appointment bookings.</p>
+                          <Button className="mt-4 gap-1.5" onClick={() => setEditingEvent({ themeColor: '#f97316', isActive: true })}>
+                            <PlusCircle size={14} /> Create Event
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {filteredEvents.map(event => {
+                            const eventBookings = allBookings.filter(booking => booking.eventId === event.id);
+                            const eventCheckedIn = eventBookings.filter(booking => booking.checkedIn).length;
+                            return (
+                              <article key={event.id} className="bg-card border border-border rounded-xl p-5 space-y-4 hover:shadow-md hover:border-primary/20 transition-all">
+                                <button type="button" className="w-full text-left" onClick={() => setEditingEvent(event)}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      {event.logoUrl ? (
+                                        <img src={event.logoUrl} alt="" className="w-12 h-12 rounded-lg object-contain border border-border bg-white shrink-0" />
+                                      ) : (
+                                        <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: event.themeColor || '#f97316' }}>
+                                          <Calendar size={20} className="text-white" />
+                                        </div>
+                                      )}
+                                      <div className="min-w-0">
+                                        <h3 className="text-sm font-semibold text-foreground truncate flex items-center gap-1.5">
+                                          {event.isFeatured && <Star size={13} className="text-amber-500 fill-amber-500" />}
+                                          {event.name}
+                                        </h3>
+                                        <p className="text-xs text-muted-foreground truncate mt-1">{event.location}{event.placement ? ` · ${event.placement}` : ''}</p>
+                                      </div>
+                                    </div>
+                                    <Badge variant="outline" className={event.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}>
+                                      {event.isActive ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                  </div>
+                                </button>
+
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <p>{event.dates.length ? event.dates.map(date => format(new Date(`${date}T00:00:00`), 'MMM d, yyyy')).join(' · ') : 'No dates configured'}</p>
+                                  <p>{eventBookings.length} bookings · {eventCheckedIn} checked in</p>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 pt-3 border-t border-border/60">
+                                  <Button size="sm" variant="outline" className="h-8 flex-1 gap-1" onClick={() => setEditingEvent(event)}>
+                                    <Edit size={12} /> Edit
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-8 flex-1 gap-1" disabled={!event.isActive} onClick={() => handleShareEvent(event.id)}>
+                                    <Copy size={12} /> Share
+                                  </Button>
+                                  <Button size="icon" variant="outline" className="h-8 w-8" disabled={!event.isActive} asChild={event.isActive}>
+                                    {event.isActive ? <a href={publicEventUrl(event.id)} target="_blank" rel="noopener noreferrer" aria-label={`Open ${event.name} public booking page`}><ExternalLink size={13} /></a> : <span><ExternalLink size={13} /></span>}
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600" disabled={event.isFeatured || !event.isActive} onClick={() => handleSetFeatured(event.id)} aria-label={`Feature ${event.name}`}>
+                                    <Star size={14} />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteEvent(event.id)} aria-label={`Delete ${event.name}`}>
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
 
                     <div>
                         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center"><Users className="w-5 h-5 mr-2 text-green-500"/> Guest Check-in</h2>
@@ -587,6 +659,7 @@ export default function EventScheduler({ adminMode = false }) {
                                                 <tr className="bg-gray-50/50">
                                                     <th className="py-3 px-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Time</th>
                                                     <th className="py-3 px-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Guest</th>
+                                                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">Event</th>
                                                     <th className="py-3 px-4 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Attendance</th>
                                                     <th className="py-3 px-4 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Status</th>
                                                     <th className="py-3 px-4 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Actions</th>
@@ -600,6 +673,7 @@ export default function EventScheduler({ adminMode = false }) {
                                                             <div className="font-bold text-gray-900">{booking.name}</div>
                                                             <div className="text-[10px] text-gray-400 font-medium tracking-tight truncate max-w-[150px]">{booking.email}</div>
                                                         </td>
+                                                        <td className="py-3 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{booking.eventName}</td>
                                                         <td className="py-3 px-4 text-center">
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black bg-blue-50 text-blue-600">
                                                                 <History className="w-3 h-3 mr-1"/> {guestAttendance[booking.email?.toLowerCase()] || 0}
@@ -614,7 +688,7 @@ export default function EventScheduler({ adminMode = false }) {
                                                             </button>
                                                         </td>
                                                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                                                            <div className="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <div className="flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                                                 <button onClick={() => setEditingBooking(booking)} className="text-gray-400 hover:text-blue-600 mr-3"><Edit className="w-4 h-4"/></button>
                                                                 <button onClick={() => handleDeleteBooking(booking.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
                                                             </div>
@@ -786,9 +860,57 @@ export default function EventScheduler({ adminMode = false }) {
     );
   }
 
+  if (adminMode) {
+    const adminTitle = editingEvent
+      ? (editingEvent.id ? `Edit ${editingEvent.name}` : 'New Scheduled Event')
+      : editingBooking
+        ? 'Edit Booking'
+        : 'Event Scheduling';
+
+    return (
+      <AppShell>
+        <Header
+          title={adminTitle}
+          subtitle={editingEvent ? 'Event details, branding, availability, and publishing' : 'Create events, share booking links, and manage guest check-ins'}
+          actions={
+            <div className="flex items-center gap-2 flex-wrap">
+              {(editingEvent || editingBooking) && (
+                <Button variant="outline" size="sm" onClick={() => { setEditingEvent(null); setEditingBooking(null); }} className="gap-1.5">
+                  <ArrowLeft size={14} /> All Events
+                </Button>
+              )}
+              {!editingEvent && !editingBooking && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleDownloadCsv} className="gap-1.5">
+                    <Download size={14} /> Export
+                  </Button>
+                  <Button size="sm" onClick={() => setEditingEvent({ themeColor: '#f97316', isActive: true })} className="gap-1.5">
+                    <PlusCircle size={14} /> New Event
+                  </Button>
+                </>
+              )}
+            </div>
+          }
+        />
+        <div className="p-3 sm:p-6">
+          {dataError && (
+            <div className="max-w-6xl mx-auto mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700" role="alert">
+              {dataError}
+            </div>
+          )}
+          {currentView}
+        </div>
+        <style dangerouslySetInnerHTML={{ __html: `
+          .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+          @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        `}} />
+      </AppShell>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-[#fafafa] text-gray-900 font-fira overflow-x-hidden selection:bg-blue-100 selection:text-blue-900">
-        {!adminMode && <header className="fixed top-8 right-8 z-[100]">
+        <header className="fixed top-8 right-8 z-[100]">
             <a
                 href="/events/admin"
                 aria-label="Open event scheduling administration"
@@ -796,7 +918,7 @@ export default function EventScheduler({ adminMode = false }) {
             >
                 <Shield className="h-6 w-6 text-gray-300 group-hover:text-blue-500 transition-colors" />
             </a>
-        </header>}
+        </header>
         {dataError && activeEvent && (
             <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[110] max-w-lg rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-lg" role="alert">
                 {dataError}
@@ -821,13 +943,17 @@ export default function EventScheduler({ adminMode = false }) {
 }
 
 // --- Event Form Component ---
-const EventForm = ({ event, onSave, onCancel }) => {
+const EventForm = ({ event, orgId, onSave, onCancel }) => {
     const [name, setName] = useState(event.name || '');
     const [location, setLocation] = useState(event.location || '');
     const [placement, setPlacement] = useState(event.placement || '');
     const [themeColor, setThemeColor] = useState(event.themeColor || '#f97316');
     const [dates, setDates] = useState(event.dates ? event.dates.join(', ') : '');
     const [logoUrl, setLogoUrl] = useState(event.logoUrl || '');
+    const [isActive, setIsActive] = useState(event.isActive !== false);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [assetId] = useState(() => event.id || crypto.randomUUID());
+    const logoInputRef = useRef(null);
     
     const formatTimeSlotsForDisplay = (slots) => {
         if (!slots) return '';
@@ -843,6 +969,45 @@ const EventForm = ({ event, onSave, onCancel }) => {
 
     const [timeSlots, setTimeSlots] = useState(formatTimeSlotsForDisplay(event.timeSlots));
     const [formError, setFormError] = useState('');
+
+    const handleLogoUpload = async (file) => {
+        setFormError('');
+        if (!orgId) {
+            setFormError('Your organization could not be identified. Refresh and try again.');
+            return;
+        }
+        const allowedTypes = {
+            'image/png': 'png',
+            'image/jpeg': 'jpg',
+            'image/webp': 'webp',
+        };
+        const extension = allowedTypes[file.type];
+        if (!extension) {
+            setFormError('Upload a PNG, JPG, or WebP image.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setFormError('Logo files must be 5 MB or smaller.');
+            return;
+        }
+
+        setUploadingLogo(true);
+        try {
+            const path = `${orgId}/${assetId}/logo-${Date.now()}.${extension}`;
+            const { error } = await supabase.storage
+                .from('event-schedule-assets')
+                .upload(path, file, { contentType: file.type, upsert: false });
+            if (error) throw error;
+            const { data } = supabase.storage.from('event-schedule-assets').getPublicUrl(path);
+            setLogoUrl(data.publicUrl);
+        } catch (error) {
+            console.error('Unable to upload event logo:', error);
+            setFormError('The logo could not be uploaded. Please try again.');
+        } finally {
+            setUploadingLogo(false);
+            if (logoInputRef.current) logoInputRef.current.value = '';
+        }
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -881,7 +1046,8 @@ const EventForm = ({ event, onSave, onCancel }) => {
                 themeColor,
                 dates: dates.split(',').map(d => d.trim()),
                 timeSlots: formattedTimeSlots,
-                logoUrl
+                logoUrl,
+                isActive,
             });
         } catch (error) {
             setFormError(error.message);
@@ -890,11 +1056,11 @@ const EventForm = ({ event, onSave, onCancel }) => {
 
     return (
         <div className="bg-gray-50/50 p-8 rounded-[2rem] border-2 border-gray-100 animate-fade-in shadow-inner">
-            <h2 className="text-2xl font-black mb-8 tracking-tighter uppercase text-gray-800">{event.id ? 'Refine Event Profile' : 'Initialize New Campaign'}</h2>
+            <h2 className="text-2xl font-black mb-8 tracking-tighter uppercase text-gray-800">{event.id ? 'Edit Event' : 'Create Event'}</h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                     <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Campaign Name</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Event Name</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all" required />
                     </div>
                     <div>
@@ -915,8 +1081,35 @@ const EventForm = ({ event, onSave, onCancel }) => {
                 </div>
                 <div className="space-y-6">
                     <div>
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Logo Asset URL</label>
-                        <input type="text" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all" placeholder="https://..." />
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Event Logo</label>
+                        <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="sr-only"
+                            onChange={event => event.target.files?.[0] && void handleLogoUpload(event.target.files[0])}
+                        />
+                        <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-white p-4">
+                            {logoUrl ? (
+                                <div className="flex items-center gap-4">
+                                    <img src={logoUrl} alt="Event logo preview" className="h-20 w-28 rounded-xl border border-gray-100 bg-white object-contain p-2" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-gray-800">Logo ready</p>
+                                        <p className="text-xs text-gray-400 mt-1">PNG, JPG, or WebP · up to 5 MB</p>
+                                        <div className="flex gap-2 mt-3">
+                                            <button type="button" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo} className="text-xs font-bold text-blue-600 hover:text-blue-800 disabled:opacity-50">Replace</button>
+                                            <button type="button" onClick={() => setLogoUrl('')} disabled={uploadingLogo} className="text-xs font-bold text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button type="button" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo} className="w-full py-4 flex flex-col items-center justify-center text-center disabled:opacity-50">
+                                    {uploadingLogo ? <UploadCloud className="w-8 h-8 text-blue-500 animate-pulse" /> : <ImageIcon className="w-8 h-8 text-gray-300" />}
+                                    <span className="mt-2 text-sm font-bold text-gray-700">{uploadingLogo ? 'Uploading logo…' : 'Choose logo file'}</span>
+                                    <span className="mt-1 text-xs text-gray-400">PNG, JPG, or WebP · up to 5 MB</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div>
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Activation Dates (YYYY-MM-DD)</label>
@@ -926,10 +1119,17 @@ const EventForm = ({ event, onSave, onCancel }) => {
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Availability Cycles (12h Ranges)</label>
                         <input type="text" value={timeSlots} onChange={e => setTimeSlots(e.target.value)} className="w-full p-4 bg-white border-2 border-gray-50 rounded-2xl font-bold focus:ring-4 focus:border-blue-500 transition-all" placeholder="10AM-2PM, 5PM-8PM" required />
                     </div>
+                    <label className="flex items-center justify-between gap-4 rounded-2xl border-2 border-gray-100 bg-white p-4 cursor-pointer">
+                        <span>
+                            <span className="block text-sm font-bold text-gray-800">Public booking page</span>
+                            <span className="block text-xs text-gray-400 mt-1">Only active events can be opened or shared publicly.</span>
+                        </span>
+                        <input type="checkbox" checked={isActive} onChange={event => setIsActive(event.target.checked)} className="h-5 w-5 accent-blue-600" />
+                    </label>
                     {formError && <div className="text-xs text-red-600 font-black bg-red-50 p-4 rounded-2xl border border-red-100">{formError}</div>}
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="button" onClick={onCancel} className="px-8 py-4 bg-white text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-gray-100 transition-all">Discard</button>
-                        <button type="submit" className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-gray-900 transition-all shadow-xl shadow-black/10">Commit Settings</button>
+                        <button type="submit" disabled={uploadingLogo} className="px-8 py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-gray-900 transition-all shadow-xl shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed">{uploadingLogo ? 'Uploading…' : 'Save Event'}</button>
                     </div>
                 </div>
             </form>

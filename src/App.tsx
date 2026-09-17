@@ -362,6 +362,7 @@ function AppRoutes() {
       <Route path="/event/:eventSlug/live-screen" element={<Suspense fallback={null}><EventLiveScreen /></Suspense>} />
       {/* Event Scheduler — public booking with authenticated administration */}
       <Route path="/events" element={<Suspense fallback={null}><EventScheduler /></Suspense>} />
+      <Route path="/events/:eventId" element={<Suspense fallback={null}><EventScheduler /></Suspense>} />
       <Route path="/events/admin" element={<ProtectedRoute><Suspense fallback={null}><EventScheduler adminMode /></Suspense></ProtectedRoute>} />
       {/* Contests — admin (protected) */}
       <Route

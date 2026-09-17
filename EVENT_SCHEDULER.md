@@ -6,7 +6,7 @@ runtime data path.
 
 - Public booking: `/events`
 - Authenticated administration: `/events/admin`
-- Shared event links: `/events?event=<event-id>`
+- Shared event links: `/events/<event-id>`
 
 ## Supabase architecture
 
@@ -25,6 +25,13 @@ The public UI polls availability and the authenticated admin UI also subscribes
 to Supabase Realtime. `event-schedule-confirmation` sends the guest email with
 the existing `SENDGRID_API_KEY` Supabase secret and records successful delivery
 in the booking row.
+
+Migration `supabase/migrations/20260917120000_event_scheduler_assets.sql`
+creates the public-read `event-schedule-assets` logo bucket. Uploads, updates,
+and deletes are limited to authenticated members of the organization in the
+asset path. The browser accepts PNG, JPG, and WebP logos up to 5 MB. Public
+event links can read only active event settings and occupied slot times; guest
+names, email addresses, and administrative actions remain protected by RLS.
 
 ## One-time legacy import
 
