@@ -78,6 +78,13 @@ serve(async (req) => {
   auth.searchParams.set("response_type", "code");
   auth.searchParams.set("state", rawState);
   auth.searchParams.set("scope", provider === "google" ? "openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy" : "openid email offline_access User.Read Calendars.ReadWrite");
-  if (provider === "google") { auth.searchParams.set("access_type", "offline"); auth.searchParams.set("prompt", "consent"); auth.searchParams.set("include_granted_scopes", "true"); auth.searchParams.set("login_hint", host.email); }
+  if (provider === "google") {
+    auth.searchParams.set("access_type", "offline");
+    // A booking host and the Google account that owns their calendar can use
+    // different email addresses. Always let the administrator choose the
+    // Google account instead of biasing OAuth toward the host's email.
+    auth.searchParams.set("prompt", "select_account consent");
+    auth.searchParams.set("include_granted_scopes", "true");
+  }
   return json({ url: auth.toString() });
 });
