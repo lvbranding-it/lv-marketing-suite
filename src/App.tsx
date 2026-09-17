@@ -46,6 +46,8 @@ const EventPhotoModeration   = lazy(() => import("@/pages/EventPhotoModeration")
 const EventUploadPage        = lazy(() => import("@/pages/EventUploadPage"));
 const EventLiveScreen        = lazy(() => import("@/pages/EventLiveScreen"));
 const EventScheduler         = lazy(() => import("@/pages/EventScheduler"));
+const AppointmentSchedulerAdmin = lazy(() => import("@/pages/AppointmentSchedulerAdmin"));
+const PublicAppointments     = lazy(() => import("@/pages/PublicAppointments"));
 const ImageStudio            = lazy(() => import("@/pages/ImageStudio"));
 const MotionPalette          = lazy(() => import("@/pages/MotionPalette"));
 const QrGenerator            = lazy(() => import("@/pages/QrGenerator"));
@@ -364,6 +366,10 @@ function AppRoutes() {
       <Route path="/events" element={<Suspense fallback={null}><EventScheduler /></Suspense>} />
       <Route path="/events/:eventId" element={<Suspense fallback={null}><EventScheduler /></Suspense>} />
       <Route path="/events/admin" element={<ProtectedRoute><Suspense fallback={null}><EventScheduler adminMode /></Suspense></ProtectedRoute>} />
+      {/* Prospect appointment scheduler — public/embeddable booking and protected administration */}
+      <Route path="/book" element={<Suspense fallback={null}><PublicAppointments /></Suspense>} />
+      <Route path="/book/:slug" element={<Suspense fallback={null}><PublicAppointments /></Suspense>} />
+      <Route path="/appointments" element={<ProtectedRoute><Suspense fallback={null}><AppointmentSchedulerAdmin /></Suspense></ProtectedRoute>} />
       {/* Contests — admin (protected) */}
       <Route
         path="/contests"

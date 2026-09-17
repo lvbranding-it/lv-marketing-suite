@@ -404,6 +404,17 @@ verify_jwt = true
 [functions.advisor-speak]
 verify_jwt = true
 
+[functions.appointment-calendar-oauth]
+# The provider callback does not carry a Supabase JWT. The function manually
+# authenticates the start action and validates one-time callback state.
+verify_jwt = false
+
+[functions.appointment-availability]
+verify_jwt = false
+
+[functions.appointment-booking]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
