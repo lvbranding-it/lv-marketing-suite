@@ -10,6 +10,11 @@ Microsoft 365 connections are optional per host and are managed from
 - Public: `https://marketing.lvbranding.com/book/lv-branding-consultation`
 - Embed: add `?embed=1` to the public URL, or copy the iframe from the admin page.
 
+Public submissions are saved as pending requests. The guest receives a request
+receipt and can download a tentative calendar hold. An owner or administrator
+can approve, edit, cancel, or delete the request from `/appointments`; approval
+creates the connected provider event and sends the final confirmation email.
+
 ## Provider OAuth setup
 
 Use this exact redirect URI for both provider applications:
@@ -35,3 +40,10 @@ screen. For Microsoft Entra, add delegated `User.Read` and
 OAuth access and refresh tokens are encrypted by the Edge Function before they
 are stored. The token table grants no browser role access; authenticated admins
 can read only redacted connection status through a database function.
+
+Deploy the scheduler functions after applying its migrations:
+
+```sh
+npx supabase functions deploy appointment-availability appointment-booking appointment-management appointment-calendar-oauth \
+  --project-ref kgdeqwjuspiqraxrlcew
+```
