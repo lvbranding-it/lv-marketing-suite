@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, Clock3, Copy, ExternalLink, Link2, Loader2, Plus, RefreshCw, Settings2, Trash2, Unplug, UserRound } from "lucide-react";
+import { CalendarDays, CalendarPlus, Check, Clock3, Copy, ExternalLink, Link2, Loader2, Pencil, Plus, RefreshCw, Settings2, Trash2, Unplug, UserRound, X } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
-import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { downloadAppointmentCalendar, localDateTime, zonedDateTimeToIso } from "@/lib/appointments";
 
 type PageRow = {
   id: string; org_id: string; slug: string; title: string; description: string; timezone: string;
@@ -22,7 +23,7 @@ type PageRow = {
 };
 type HostRow = { id: string; page_id: string; org_id: string; user_id: string | null; display_name: string; email: string; avatar_url: string | null; is_enabled: boolean; is_default: boolean };
 type AvailabilityRow = { id: string; host_id: string; weekday: number; start_time: string; end_time: string };
-type BookingRow = { id: string; host_id: string; guest_name: string; guest_email: string; company: string | null; project_notes: string | null; starts_at: string; ends_at: string; status: string; meeting_url: string | null; provider: string | null };
+type BookingRow = { id: string; host_id: string; guest_name: string; guest_email: string; guest_phone: string | null; company: string | null; project_notes: string | null; starts_at: string; ends_at: string; status: string; meeting_url: string | null; provider: string | null };
 type ConnectionRow = { host_id: string; provider: "google" | "microsoft"; account_email: string | null; connected_at: string };
 
 const DAYS = [
@@ -36,7 +37,6 @@ const formatBooking = (iso: string, timezone: string) => new Intl.DateTimeFormat
 
 export default function AppointmentSchedulerAdmin() {
   const { org, loading: orgLoading } = useOrg();
-  const { user } = useAuth();
   const { toast } = useToast();
   const [page, setPage] = useState<PageRow | null>(null);
   const [hosts, setHosts] = useState<HostRow[]>([]);
@@ -49,6 +49,9 @@ export default function AppointmentSchedulerAdmin() {
   const [hostDraft, setHostDraft] = useState({ display_name: "", email: "" });
   const [blockDraft, setBlockDraft] = useState({ host_id: "", date: "", start: "09:00", end: "09:30", reason: "" });
   const [availabilityDraft, setAvailabilityDraft] = useState({ host_id: "", weekdays: [1, 2, 3, 4, 5], start: "09:00", end: "17:00" });
+  const [editing, setEditing] = useState<BookingRow | null>(null);
+  const [editDraft, setEditDraft] = useState({ host_id: "", guest_name: "", guest_email: "", guest_phone: "", company: "", project_notes: "", date: "", time: "" });
+  const [managingId, setManagingId] = useState("");
 
   const load = useCallback(async () => {
     if (!org?.id) return;
@@ -142,7 +145,7 @@ export default function AppointmentSchedulerAdmin() {
   };
 
   const removeHost = async (host: HostRow) => {
-    if (host.is_default) return toast({ variant: "destructive", title: "Choose a different default before removing Admin." });
+    if (host.is_default) return toast({ variant: "destructive", title: "Choose a different default host before removing this team member." });
     const { error } = await (supabase as any).from("appointment_hosts").delete().eq("id", host.id);
     if (error) toast({ variant: "destructive", title: "Team member was not removed", description: "Hosts with appointments are retained for booking history. Disable this host instead." });
     else void load();
@@ -183,8 +186,90 @@ export default function AppointmentSchedulerAdmin() {
     if (!error) void load();
   };
 
+  const manageBooking = async (booking: BookingRow, action: "approve" | "update" | "cancel" | "delete", updates: Record<string, unknown> = {}) => {
+    if ((action === "cancel" || action === "delete") && !window.confirm(`${action === "delete" ? "Permanently delete" : "Cancel"} ${booking.guest_name}'s appointment?`)) return false;
+    setManagingId(booking.id);
+    const { data, error } = await supabase.functions.invoke("appointment-management", {
+      body: { booking_id: booking.id, action, ...updates },
+    });
+    setManagingId("");
+    let message = data?.error || error?.message;
+    const errorResponse = (error as { context?: Response } | null)?.context;
+    if (errorResponse) {
+      try { message = (await errorResponse.clone().json())?.error || message; } catch { /* keep the transport error */ }
+    }
+    if (message) {
+      toast({ variant: "destructive", title: "Appointment was not updated", description: message });
+      return false;
+    }
+    const labels = { approve: "Appointment approved", update: "Appointment updated", cancel: "Appointment cancelled", delete: "Appointment deleted" };
+    toast({ title: labels[action], description: data?.warning ? `Saved, but external delivery needs attention: ${data.warning}` : undefined });
+    await load();
+    return true;
+  };
+
+  const openEditor = (booking: BookingRow) => {
+    if (!page) return;
+    const local = localDateTime(booking.starts_at, page.timezone);
+    setEditing(booking);
+    setEditDraft({
+      host_id: booking.host_id,
+      guest_name: booking.guest_name,
+      guest_email: booking.guest_email,
+      guest_phone: booking.guest_phone || "",
+      company: booking.company || "",
+      project_notes: booking.project_notes || "",
+      date: local.date,
+      time: local.time,
+    });
+  };
+
+  const saveBooking = async () => {
+    if (!page || !editing || !editDraft.date || !editDraft.time) return;
+    const saved = await manageBooking(editing, "update", {
+      ...editDraft,
+      starts_at: zonedDateTimeToIso(editDraft.date, editDraft.time, page.timezone),
+    });
+    if (saved) setEditing(null);
+  };
+
+  const addBookingToCalendar = (booking: BookingRow) => {
+    const host = hosts.find((item) => item.id === booking.host_id);
+    downloadAppointmentCalendar({
+      id: booking.id,
+      startsAt: booking.starts_at,
+      endsAt: booking.ends_at,
+      hostName: host?.display_name || "LV Branding’s Team",
+      meetingUrl: booking.meeting_url,
+      status: booking.status === "cancelled" ? "CANCELLED" : booking.status === "pending" ? "TENTATIVE" : "CONFIRMED",
+    });
+  };
+
+  const pending = useMemo(() => bookings.filter((booking) => booking.status === "pending"), [bookings]);
   const upcoming = useMemo(() => bookings.filter((booking) => booking.status === "confirmed" && new Date(booking.ends_at) >= new Date()), [bookings]);
-  const past = useMemo(() => bookings.filter((booking) => booking.status !== "confirmed" || new Date(booking.ends_at) < new Date()), [bookings]);
+  const past = useMemo(() => bookings.filter((booking) => booking.status !== "pending" && (booking.status !== "confirmed" || new Date(booking.ends_at) < new Date())), [bookings]);
+
+  const bookingCard = (booking: BookingRow) => {
+    const host = hosts.find((item) => item.id === booking.host_id);
+    const busy = managingId === booking.id;
+    return <article key={booking.id} className="rounded-2xl border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{booking.guest_name}</h3><Badge variant={booking.status === "pending" ? "secondary" : booking.status === "confirmed" ? "default" : "outline"}>{booking.status}</Badge></div>
+          <p className="mt-1 text-sm text-muted-foreground">{booking.guest_email}{booking.guest_phone ? ` · ${booking.guest_phone}` : ""}{booking.company ? ` · ${booking.company}` : ""}</p>
+          {booking.project_notes && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm">{booking.project_notes}</p>}
+        </div>
+        <div className="text-left sm:text-right"><p className="font-medium">{formatBooking(booking.starts_at, page?.timezone || "America/Chicago")}</p><p className="text-sm text-muted-foreground">with {host?.display_name || "Team member"}</p>{booking.meeting_url && <a href={booking.meeting_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-primary">Join meeting <ExternalLink size={13} /></a>}</div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+        {booking.status === "pending" && <Button size="sm" disabled={busy} onClick={() => manageBooking(booking, "approve")} className="gap-1.5">{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve</Button>}
+        {["pending", "confirmed"].includes(booking.status) && <Button size="sm" variant="outline" disabled={busy} onClick={() => openEditor(booking)} className="gap-1.5"><Pencil size={14} /> Edit</Button>}
+        {booking.status === "confirmed" && <Button size="sm" variant="outline" onClick={() => addBookingToCalendar(booking)} className="gap-1.5"><CalendarPlus size={14} /> Add to calendar</Button>}
+        {["pending", "confirmed"].includes(booking.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => manageBooking(booking, "cancel")} className="gap-1.5 text-destructive"><X size={14} /> Cancel</Button>}
+        {!["pending", "confirmed"].includes(booking.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={() => manageBooking(booking, "delete")} className="gap-1.5 text-destructive"><Trash2 size={14} /> Delete</Button>}
+      </div>
+    </article>;
+  };
 
   if (loading || orgLoading) return <AppShell><div className="grid min-h-[60vh] place-items-center"><Loader2 className="animate-spin text-muted-foreground" /></div></AppShell>;
   if (!page) return <AppShell><Header title="Appointment Calendar" subtitle="The scheduler could not be initialized." /></AppShell>;
@@ -221,16 +306,10 @@ export default function AppointmentSchedulerAdmin() {
           </TabsList>
 
           <TabsContent value="appointments" className="mt-5 space-y-4">
-            {upcoming.length === 0 ? <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground"><CalendarDays className="mx-auto mb-3" /><p>No upcoming appointments yet.</p></div> : upcoming.map((booking) => {
-              const host = hosts.find((item) => item.id === booking.host_id);
-              return <article key={booking.id} className="rounded-2xl border bg-card p-5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div><h3 className="font-semibold">{booking.guest_name}</h3><p className="text-sm text-muted-foreground">{booking.guest_email}{booking.company ? ` · ${booking.company}` : ""}</p>{booking.project_notes && <p className="mt-3 max-w-2xl text-sm">{booking.project_notes}</p>}</div>
-                  <div className="text-right"><p className="font-medium">{formatBooking(booking.starts_at, page.timezone)}</p><p className="text-sm text-muted-foreground">with {host?.display_name || "Team member"}</p>{booking.meeting_url && <a href={booking.meeting_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-primary">Join meeting <ExternalLink size={13} /></a>}</div>
-                </div>
-              </article>;
-            })}
-            {past.length > 0 && <details className="rounded-2xl border bg-card"><summary className="cursor-pointer p-5 font-medium">Past and cancelled ({past.length})</summary><div className="border-t p-5 text-sm text-muted-foreground">{past.map((booking) => <p key={booking.id} className="py-1">{booking.guest_name} · {formatBooking(booking.starts_at, page.timezone)} · {booking.status}</p>)}</div></details>}
+            {pending.length > 0 && <section className="space-y-3"><div className="flex items-center gap-2"><h2 className="font-semibold">Awaiting approval</h2><Badge variant="secondary">{pending.length}</Badge></div>{pending.map(bookingCard)}</section>}
+            {upcoming.length > 0 && <section className="space-y-3"><h2 className="font-semibold">Confirmed</h2>{upcoming.map(bookingCard)}</section>}
+            {pending.length === 0 && upcoming.length === 0 && <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground"><CalendarDays className="mx-auto mb-3" /><p>No active appointments yet.</p></div>}
+            {past.length > 0 && <details className="rounded-2xl border bg-card"><summary className="cursor-pointer p-5 font-medium">Past and cancelled ({past.length})</summary><div className="space-y-3 border-t p-5">{past.map(bookingCard)}</div></details>}
           </TabsContent>
 
           <TabsContent value="team" className="mt-5 space-y-5">
@@ -247,7 +326,7 @@ export default function AppointmentSchedulerAdmin() {
                 </article>;
               })}
             </div>
-            <div className="rounded-2xl border bg-card p-5"><h3 className="font-semibold">Add a team member</h3><p className="mt-1 text-sm text-muted-foreground">Only enabled people appear on the public booking page. Admin remains the default until you change it.</p><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"><Input placeholder="Display name" value={hostDraft.display_name} onChange={(e) => setHostDraft({ ...hostDraft, display_name: e.target.value })} /><Input type="email" placeholder="team@lvbranding.com" value={hostDraft.email} onChange={(e) => setHostDraft({ ...hostDraft, email: e.target.value })} /><Button onClick={addHost} className="gap-2"><Plus size={16} /> Add</Button></div></div>
+            <div className="rounded-2xl border bg-card p-5"><h3 className="font-semibold">Add a team member</h3><p className="mt-1 text-sm text-muted-foreground">Only enabled people appear on the public booking page. The current default stays selected until you change it.</p><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"><Input placeholder="Display name" value={hostDraft.display_name} onChange={(e) => setHostDraft({ ...hostDraft, display_name: e.target.value })} /><Input type="email" placeholder="team@lvbranding.com" value={hostDraft.email} onChange={(e) => setHostDraft({ ...hostDraft, email: e.target.value })} /><Button onClick={addHost} className="gap-2"><Plus size={16} /> Add</Button></div></div>
           </TabsContent>
 
           <TabsContent value="availability" className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -271,6 +350,28 @@ export default function AppointmentSchedulerAdmin() {
           </TabsContent>
         </Tabs>
       </div>
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open && !managingId) setEditing(null); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit appointment</DialogTitle>
+            <DialogDescription>Update the guest, host, or time. The guest will receive an email with the change.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <div className="sm:col-span-2"><Label htmlFor="edit-appointment-host">Team member</Label><Select value={editDraft.host_id} onValueChange={(value) => setEditDraft({ ...editDraft, host_id: value })}><SelectTrigger id="edit-appointment-host" className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent>{hosts.filter((host) => host.is_enabled || host.id === editing?.host_id).map((host) => <SelectItem key={host.id} value={host.id}>{host.display_name}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label htmlFor="edit-appointment-date">Date</Label><Input id="edit-appointment-date" type="date" value={editDraft.date} onChange={(event) => setEditDraft({ ...editDraft, date: event.target.value })} className="mt-1.5" /></div>
+            <div><Label htmlFor="edit-appointment-time">Time</Label><Input id="edit-appointment-time" type="time" value={editDraft.time} onChange={(event) => setEditDraft({ ...editDraft, time: event.target.value })} className="mt-1.5" /></div>
+            <div><Label htmlFor="edit-appointment-name">Guest name</Label><Input id="edit-appointment-name" value={editDraft.guest_name} maxLength={160} onChange={(event) => setEditDraft({ ...editDraft, guest_name: event.target.value })} className="mt-1.5" /></div>
+            <div><Label htmlFor="edit-appointment-email">Guest email</Label><Input id="edit-appointment-email" type="email" value={editDraft.guest_email} maxLength={320} onChange={(event) => setEditDraft({ ...editDraft, guest_email: event.target.value })} className="mt-1.5" /></div>
+            <div><Label htmlFor="edit-appointment-phone">Phone</Label><Input id="edit-appointment-phone" value={editDraft.guest_phone} maxLength={60} onChange={(event) => setEditDraft({ ...editDraft, guest_phone: event.target.value })} className="mt-1.5" /></div>
+            <div><Label htmlFor="edit-appointment-company">Company</Label><Input id="edit-appointment-company" value={editDraft.company} maxLength={200} onChange={(event) => setEditDraft({ ...editDraft, company: event.target.value })} className="mt-1.5" /></div>
+            <div className="sm:col-span-2"><Label htmlFor="edit-appointment-notes">Project details</Label><Textarea id="edit-appointment-notes" rows={4} value={editDraft.project_notes} maxLength={3000} onChange={(event) => setEditDraft({ ...editDraft, project_notes: event.target.value })} className="mt-1.5" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={Boolean(managingId)}>Cancel</Button>
+            <Button onClick={saveBooking} disabled={Boolean(managingId) || !editDraft.guest_name.trim() || !editDraft.guest_email.trim() || !editDraft.date || !editDraft.time}>{managingId ? <Loader2 size={16} className="mr-2 animate-spin" /> : null}Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

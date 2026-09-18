@@ -415,6 +415,9 @@ verify_jwt = false
 [functions.appointment-booking]
 verify_jwt = false
 
+[functions.appointment-management]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

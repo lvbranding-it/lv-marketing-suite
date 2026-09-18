@@ -170,7 +170,60 @@ export async function createCalendarEvent(db: any, connection: Connection, booki
   return { provider: "microsoft", eventId: event.id, meetingUrl: event.onlineMeeting?.joinUrl || event.webLink || null };
 }
 
+export async function updateCalendarEvent(db: any, connection: Connection, booking: any, page: any, host: any) {
+  if (!booking.provider_event_id) return createCalendarEvent(db, connection, booking, page, host);
+  const token = await refreshCalendarAccess(db, connection);
+  const description = [
+    `Website prospect appointment with ${booking.guest_name}.`,
+    booking.company ? `Company: ${booking.company}` : "",
+    booking.guest_phone ? `Phone: ${booking.guest_phone}` : "",
+    booking.project_notes ? `Project: ${booking.project_notes}` : "",
+  ].filter(Boolean).join("\n");
+  if (connection.provider === "google") {
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendar_id || "primary")}/events/${encodeURIComponent(booking.provider_event_id)}?sendUpdates=all`,
+      {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: `Project consultation — ${booking.guest_name}`,
+          description,
+          start: { dateTime: booking.starts_at, timeZone: page.timezone },
+          end: { dateTime: booking.ends_at, timeZone: page.timezone },
+          attendees: [{ email: booking.guest_email, displayName: booking.guest_name }],
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(`Google event update failed (${response.status})`);
+    const event = await response.json();
+    return { provider: "google", eventId: event.id, meetingUrl: event.hangoutLink || event.htmlLink || booking.meeting_url || null };
+  }
+  const response = await fetch(`https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(booking.provider_event_id)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: 'outlook.timezone="UTC"' },
+    body: JSON.stringify({
+      subject: `Project consultation — ${booking.guest_name}`,
+      body: { contentType: "text", content: description },
+      start: { dateTime: booking.starts_at.replace(/Z$/, ""), timeZone: "UTC" },
+      end: { dateTime: booking.ends_at.replace(/Z$/, ""), timeZone: "UTC" },
+      attendees: [{ emailAddress: { address: booking.guest_email, name: booking.guest_name }, type: "required" }],
+    }),
+  });
+  if (!response.ok) throw new Error(`Microsoft event update failed (${response.status})`);
+  return { provider: "microsoft", eventId: booking.provider_event_id, meetingUrl: booking.meeting_url || null };
+}
+
+export async function deleteCalendarEvent(db: any, connection: Connection, eventId: string) {
+  const token = await refreshCalendarAccess(db, connection);
+  const url = connection.provider === "google"
+    ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(connection.calendar_id || "primary")}/events/${encodeURIComponent(eventId)}?sendUpdates=all`
+    : `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(eventId)}`;
+  const response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok && response.status !== 404 && response.status !== 410) {
+    throw new Error(`${connection.provider === "google" ? "Google" : "Microsoft"} event deletion failed (${response.status})`);
+  }
+}
+
 export function overlaps(startA: string, endA: string, startB: string, endB: string) {
   return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
 }
-

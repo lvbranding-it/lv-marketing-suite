@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, ExternalLink, Loader2 } from "lucide-react";
+import { CalendarDays, CalendarPlus, CheckCircle2, Clock3, ExternalLink, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LVLogo from "@/components/LVLogo";
+import { downloadAppointmentCalendar } from "@/lib/appointments";
 
 type PublicHost = { id: string; display_name: string; avatar_url?: string | null; is_default: boolean };
 type PublicPage = {
@@ -21,6 +22,7 @@ type PublicPage = {
   hosts: PublicHost[];
 };
 type Slot = { starts_at: string; ends_at: string };
+type SubmittedBooking = { id: string; starts_at: string; ends_at: string; status: string; host_name: string; meeting_url: string | null };
 
 const dateKey = (iso: string, timezone: string) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
@@ -60,6 +62,7 @@ export default function PublicAppointments() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [submittedBooking, setSubmittedBooking] = useState<SubmittedBooking | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", notes: "" });
 
   useEffect(() => {
@@ -152,12 +155,17 @@ export default function PublicAppointments() {
       starts_at: selectedStart,
     };
     const edge = await supabase.functions.invoke("appointment-booking", { body: payload });
-    const bookingError: unknown = edge.error || edge.data?.error;
+    let bookingError: unknown = edge.data?.error || edge.error;
+    const errorResponse = (edge.error as { context?: Response } | null)?.context;
+    if (errorResponse) {
+      try { bookingError = (await errorResponse.clone().json())?.error || bookingError; } catch { /* keep the transport error */ }
+    }
     setSubmitting(false);
     if (bookingError) {
       setError(cleanError(bookingError));
       return;
     }
+    setSubmittedBooking(edge.data?.booking || null);
     setConfirmed(true);
   };
 
@@ -193,15 +201,23 @@ export default function PublicAppointments() {
             {confirmed ? (
               <div className="flex min-h-[600px] flex-col items-center justify-center text-center">
                 <span className="grid h-20 w-20 place-items-center rounded-full bg-[#CB2039]/10"><CheckCircle2 size={52} style={{ color: page.brand_color }} /></span>
-                <p className="mt-7 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: page.brand_color }}>You are all set</p>
-                <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#231F20]">Appointment confirmed</h2>
+                <p className="mt-7 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: page.brand_color }}>Request received</p>
+                <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#231F20]">Pending approval</h2>
                 <p className="mt-3 max-w-md leading-7 text-[#6C6466]">{page.confirmation_message}</p>
                 {selectedSlot && (
                   <div className="mt-7 rounded-2xl border border-[#E8E1DE] bg-[#FBFAF8] px-6 py-4 text-sm text-[#514A4C]">
                     <strong>{dateLabel(selectedSlot.starts_at, page.timezone)}</strong> at {timeLabel(selectedSlot.starts_at, page.timezone)} with {selectedHost?.display_name}
                   </div>
                 )}
-                <Button className="mt-8 h-12 gap-2 rounded-xl px-6 hover:opacity-90" style={{ backgroundColor: page.brand_color }} asChild>
+                {submittedBooking && <Button type="button" variant="outline" className="mt-8 h-12 gap-2 rounded-xl px-6" onClick={() => downloadAppointmentCalendar({
+                  id: submittedBooking.id,
+                  startsAt: submittedBooking.starts_at,
+                  endsAt: submittedBooking.ends_at,
+                  hostName: submittedBooking.host_name,
+                  meetingUrl: submittedBooking.meeting_url,
+                  status: "TENTATIVE",
+                })}><CalendarPlus size={17} /> Add tentative hold to calendar</Button>}
+                <Button className={`${submittedBooking ? "mt-3" : "mt-8"} h-12 gap-2 rounded-xl px-6 hover:opacity-90`} style={{ backgroundColor: page.brand_color }} asChild>
                   <a href={page.confirmation_url || "https://www.lvbranding.com"} target="_top" rel="noopener noreferrer">
                     Visit LV Branding <ExternalLink size={16} />
                   </a>

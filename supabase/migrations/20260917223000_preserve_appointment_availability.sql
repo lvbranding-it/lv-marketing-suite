@@ -39,7 +39,7 @@ begin
   if v_host_id is null then
     insert into public.appointment_hosts(page_id, org_id, user_id, display_name, email, is_default)
     values (v_page_id, p_org_id, case when lower(coalesce((select email from auth.users where id = auth.uid()), '')) = lower(p_admin_email) then auth.uid() else null end,
-            'Admin', lower(p_admin_email), true)
+            'LV Branding’s Team', lower(p_admin_email), true)
     returning id into v_host_id;
 
     insert into public.appointment_host_availability(host_id, org_id, weekday, start_time, end_time)

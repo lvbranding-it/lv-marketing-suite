@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { calendarBusyRanges, createCalendarEvent, overlaps } from "../_shared/appointment-calendar.ts";
+import { calendarBusyRanges, overlaps } from "../_shared/appointment-calendar.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -34,25 +34,20 @@ serve(async (req) => {
   });
   if (bookingError) return json({ error: bookingError.message }, bookingError.message.includes("SLOT") || bookingError.message.includes("EMAIL") ? 409 : 400);
   const { data: booking } = await db.from("appointment_bookings").select("*").eq("id", bookingId).single();
-  if (connection && booking) {
-    try {
-      const event = await createCalendarEvent(db, connection, booking, page, host);
-      await db.from("appointment_bookings").update({ provider: event.provider, provider_event_id: event.eventId, meeting_url: event.meetingUrl, provider_sync_error: null }).eq("id", bookingId);
-      booking.meeting_url = event.meetingUrl;
-    } catch (error) {
-      console.error("Calendar event creation failed", error);
-      await db.from("appointment_bookings").update({ provider_sync_error: (error as Error).message.slice(0, 500) }).eq("id", bookingId);
-    }
-  }
   const sendgrid = Deno.env.get("SENDGRID_API_KEY");
   if (sendgrid && booking) {
     const when = new Intl.DateTimeFormat("en-US", { timeZone: page.timezone, dateStyle: "full", timeStyle: "short" }).format(new Date(booking.starts_at));
-    const meeting = booking.meeting_url ? `<p><a href="${escapeHtml(booking.meeting_url)}">Join your online meeting</a></p>` : "";
     const response = await fetch("https://api.sendgrid.com/v3/mail/send", { method: "POST", headers: { Authorization: `Bearer ${sendgrid}`, "Content-Type": "application/json" }, body: JSON.stringify({
       personalizations: [{ to: [{ email: booking.guest_email, name: booking.guest_name }] }], from: { email: "admin@lvbranding.com", name: "LV Branding" },
-      subject: "Your LV Branding project consultation is confirmed", content: [{ type: "text/html", value: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px"><h1>Appointment confirmed</h1><p>Hi ${escapeHtml(booking.guest_name)},</p><p>Your project consultation with ${escapeHtml(host.display_name)} is scheduled for <strong>${escapeHtml(when)}</strong>.</p>${meeting}<p>We look forward to learning about your project.</p></div>` }],
+      subject: "We received your LV Branding appointment request", content: [{ type: "text/html", value: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:32px"><h1>Appointment request received</h1><p>Hi ${escapeHtml(booking.guest_name)},</p><p>We received your request for <strong>${escapeHtml(when)}</strong> with ${escapeHtml(host.display_name)}.</p><p>Our team will review it and email you when it is approved.</p></div>` }],
     }) });
-    if (response.status === 202) await db.from("appointment_bookings").update({ confirmation_sent_at: new Date().toISOString() }).eq("id", bookingId);
+    if (!response.ok) console.error("Appointment request email failed", response.status, await response.text());
   }
-  return json({ ok: true, booking_id: bookingId });
+  return json({
+    ok: true,
+    booking: booking ? {
+      id: booking.id, starts_at: booking.starts_at, ends_at: booking.ends_at,
+      status: booking.status, host_name: host.display_name, meeting_url: booking.meeting_url,
+    } : null,
+  });
 });

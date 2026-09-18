@@ -62,6 +62,8 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon, authenticated, service_role;
   `);
   await db.exec(readFileSync(new URL("../migrations/20260917170000_appointment_scheduler.sql", import.meta.url), "utf8"));
+  await db.exec(readFileSync(new URL("../migrations/20260917223000_preserve_appointment_availability.sql", import.meta.url), "utf8"));
+  await db.exec(readFileSync(new URL("../migrations/20260918120000_appointment_management.sql", import.meta.url), "utf8"));
 }, 30000);
 
 afterAll(async () => db?.close());
@@ -106,7 +108,7 @@ describe("prospect appointment scheduler database boundary", () => {
     await expect(db.query("select * from appointment_bookings")).rejects.toMatchObject({ code: "42501" });
   });
 
-  it("books an exact open time, creates a CRM lead and blocks duplicate attendees", async () => {
+  it("books an exact open time as pending, creates a CRM lead and blocks duplicate attendees", async () => {
     await as(admin);
     await db.query("update appointment_booking_pages set minimum_notice_hours=0, booking_window_days=365 where id=$1", [pageId]);
     const slot = await scalar(
@@ -120,6 +122,7 @@ describe("prospect appointment scheduler database boundary", () => {
     );
     expect(booking).toEqual(expect.any(String));
     await as(admin);
+    expect(await scalar("select status from appointment_bookings where id=$1", [booking])).toBe("pending");
     expect(await scalar("select count(*) from contacts where email='prospect@example.test'" )).toBe(1);
     expect(await scalar("select count(*) from contact_activities where type='meeting'" )).toBe(1);
     await as("", "service_role");
@@ -127,6 +130,45 @@ describe("prospect appointment scheduler database boundary", () => {
       "select book_public_appointment($1,$2,'Prospect Person','prospect@example.test','',null,null,$3)",
       ["lv-branding-consultation", hostId, new Date(slot.getTime() + 45 * 60_000)],
     )).rejects.toThrow(/EMAIL_ALREADY_BOOKED|SLOT_UNAVAILABLE/);
+  });
+
+  it("lets an administrator approve, update, cancel, and delete a request", async () => {
+    await as(admin);
+    await db.query("update appointment_booking_pages set minimum_notice_hours=0, booking_window_days=365 where id=$1", [pageId]);
+    const slot = await scalar(
+      "select starts_at from get_appointment_available_slots($1,$2,current_date,current_date+30) limit 1",
+      ["lv-branding-consultation", hostId],
+    ) as Date;
+    await as("", "service_role");
+    const booking = await scalar(
+      "select book_public_appointment($1,$2,'Pending Guest','pending@example.test','',null,null,$3)",
+      ["lv-branding-consultation", hostId, slot],
+    ) as string;
+    await as(admin);
+    const approved = await scalar("select manage_appointment_booking($1,'approve')", [booking]) as Record<string, unknown>;
+    expect(approved.status).toBe("confirmed");
+    const updated = await scalar("select manage_appointment_booking($1,'update',$2,'Updated Guest','updated@example.test','','Acme','Updated notes',$3)", [booking, hostId, slot]) as Record<string, unknown>;
+    expect(updated).toMatchObject({ guest_name: "Updated Guest", guest_email: "updated@example.test" });
+    const cancelled = await scalar("select manage_appointment_booking($1,'cancel')", [booking]) as Record<string, unknown>;
+    expect(cancelled.status).toBe("cancelled");
+    await scalar("select manage_appointment_booking($1,'delete')", [booking]);
+    expect(await scalar("select count(*) from appointment_bookings where id=$1", [booking])).toBe(0);
+  });
+
+  it("rejects appointment management by an administrator from another organization", async () => {
+    await as(admin);
+    await db.query("update appointment_booking_pages set minimum_notice_hours=0, booking_window_days=365 where id=$1", [pageId]);
+    const slot = await scalar(
+      "select starts_at from get_appointment_available_slots($1,$2,current_date,current_date+30) limit 1",
+      ["lv-branding-consultation", hostId],
+    ) as Date;
+    await as("", "service_role");
+    const booking = await scalar(
+      "select book_public_appointment($1,$2,'Pending Guest','pending@example.test','',null,null,$3)",
+      ["lv-branding-consultation", hostId, slot],
+    );
+    await as(outsider);
+    await expect(db.query("select manage_appointment_booking($1,'approve')", [booking])).rejects.toMatchObject({ code: "42501" });
   });
 
   it("removes manual busy time from public availability", async () => {
