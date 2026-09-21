@@ -5,20 +5,22 @@ type CalendarDownload = {
   hostName: string;
   meetingUrl?: string | null;
   status?: "TENTATIVE" | "CONFIRMED" | "CANCELLED";
+  language?: "en" | "es";
 };
 
 const icsDate = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const icsText = (value: string) => value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 
 export function appointmentCalendarFile(appointment: CalendarDownload) {
+  const spanish = appointment.language === "es";
   const description = [
-    `Project consultation with ${appointment.hostName}.`,
-    appointment.meetingUrl ? `Join: ${appointment.meetingUrl}` : "",
+    spanish ? `Consulta de proyecto con ${appointment.hostName}.` : `Project consultation with ${appointment.hostName}.`,
+    appointment.meetingUrl ? `${spanish ? "Enlace" : "Join"}: ${appointment.meetingUrl}` : "",
   ].filter(Boolean).join("\n");
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//LV Branding//Appointment Calendar//EN",
+    `PRODID:-//LV Branding//Appointment Calendar//${spanish ? "ES" : "EN"}`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -26,7 +28,7 @@ export function appointmentCalendarFile(appointment: CalendarDownload) {
     `DTSTAMP:${icsDate(new Date().toISOString())}`,
     `DTSTART:${icsDate(appointment.startsAt)}`,
     `DTEND:${icsDate(appointment.endsAt)}`,
-    `SUMMARY:${icsText("LV Branding project consultation")}`,
+    `SUMMARY:${icsText(spanish ? "Consulta de proyecto con LV Branding" : "LV Branding project consultation")}`,
     `DESCRIPTION:${icsText(description)}`,
     `STATUS:${appointment.status || "CONFIRMED"}`,
     "END:VEVENT",

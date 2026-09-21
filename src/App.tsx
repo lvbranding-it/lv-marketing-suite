@@ -369,6 +369,8 @@ function AppRoutes() {
       {/* Prospect appointment scheduler — public/embeddable booking and protected administration */}
       <Route path="/book" element={<Suspense fallback={null}><PublicAppointments /></Suspense>} />
       <Route path="/book/:slug" element={<Suspense fallback={null}><PublicAppointments /></Suspense>} />
+      <Route path="/es/book" element={<Suspense fallback={null}><PublicAppointments language="es" /></Suspense>} />
+      <Route path="/es/book/:slug" element={<Suspense fallback={null}><PublicAppointments language="es" /></Suspense>} />
       <Route path="/appointments" element={<ProtectedRoute><Suspense fallback={null}><AppointmentSchedulerAdmin /></Suspense></ProtectedRoute>} />
       {/* Contests — admin (protected) */}
       <Route

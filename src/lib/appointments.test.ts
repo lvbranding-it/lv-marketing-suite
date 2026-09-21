@@ -16,6 +16,19 @@ describe("appointment calendar helpers", () => {
     expect(file).toContain("UID:booking-1@lvbranding.com");
   });
 
+  it("localizes a Spanish calendar download", () => {
+    const file = appointmentCalendarFile({
+      id: "booking-2",
+      startsAt: "2026-10-05T15:00:00Z",
+      endsAt: "2026-10-05T15:30:00Z",
+      hostName: "Equipo de LV Branding",
+      language: "es",
+    });
+    expect(file).toContain("PRODID:-//LV Branding//Appointment Calendar//ES");
+    expect(file).toContain("SUMMARY:Consulta de proyecto con LV Branding");
+    expect(file).toContain("DESCRIPTION:Consulta de proyecto con Equipo de LV Branding.");
+  });
+
   it("converts Central wall time across daylight-saving offsets", () => {
     expect(zonedDateTimeToIso("2026-07-06", "09:00", "America/Chicago")).toBe("2026-07-06T14:00:00.000Z");
     expect(zonedDateTimeToIso("2026-12-07", "09:00", "America/Chicago")).toBe("2026-12-07T15:00:00.000Z");
