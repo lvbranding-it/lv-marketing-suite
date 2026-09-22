@@ -418,6 +418,16 @@ verify_jwt = false
 [functions.appointment-management]
 verify_jwt = true
 
+[functions.social-meta-oauth]
+# Meta redirects do not include the user's Supabase JWT. Start/sync/disconnect
+# authenticate manually; callbacks consume a hashed one-time state value.
+verify_jwt = false
+
+[functions.social-publish]
+# Accepts either a verified user JWT for a scoped manual retry or the scheduler
+# secret for recurring queue processing. Both paths are authenticated in code.
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

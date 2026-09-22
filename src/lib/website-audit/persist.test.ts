@@ -48,8 +48,11 @@ describe("website audit persistence", () => {
   });
 
   it("round-trips an audit observation", () => {
-    saveAuditObservation(SAMPLE_OBSERVATION);
-    expect(loadAuditObservation(SAMPLE_OBSERVATION.auditId)).toEqual(SAMPLE_OBSERVATION);
+    // The representative fixture has a fixed production-like date. Keep this
+    // persistence assertion independent from the real 30-day retention clock.
+    const current = { ...SAMPLE_OBSERVATION, createdAt: new Date().toISOString() };
+    saveAuditObservation(current);
+    expect(loadAuditObservation(current.auditId)).toEqual(current);
   });
 
   it("rejects and removes results older than the published retention window", () => {

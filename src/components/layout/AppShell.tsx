@@ -34,6 +34,7 @@ import {
   Handshake,
   PenTool,
   CalendarDays,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -70,6 +71,7 @@ const NAV_ITEMS = [
   { to: "/ccs", labelKey: "nav.collaboration", icon: ShieldCheck },
   { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
+  { to: "/social-publisher", labelKey: "nav.socialPublisher", icon: Share2 },
   { to: "/contests",          labelKey: "nav.contests",          icon: Trophy },
   { to: "/event-experiences", labelKey: "nav.eventExperiences",  icon: Sparkles },
   { to: "/events/admin",      labelKey: "nav.eventScheduling",   icon: CalendarDays },
@@ -126,6 +128,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
         {(() => {
           const visibleNavItems = NAV_ITEMS.filter(({ to }) => {
             if (to === "/campaigns")    return perms.canAccessCampaigns;
+            if (to === "/social-publisher") return perms.canAccessSocialPublisher;
             if (to === "/contacts")     return perms.canAccessContacts;
             if (to === "/projects")     return perms.canAccessProjects;
             if (to === "/workspace")    return perms.canAccessWorkspace;
