@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
 import type { BrandContext, CreativeAspect, CreativeAsset, CreativeCanvasRecord, CreativeDecision, CreativeGeneration, CreativeOperation, CreativeProvider, ProviderStatus } from "@/lib/creative-canvas/types";
 import { sanitizeCreativeFilename, validateCreativeUpload } from "@/lib/creative-canvas/types";
+import { creativeFunctionError } from "@/lib/creative-canvas/function-error";
 
 const db = supabase as any;
 export const CREATIVE_ASSET_BUCKET = "creative-canvas-assets";
@@ -139,14 +140,14 @@ export function useCreativeGenerations(canvasId?: string) {
 export function useCreativeProviderStatus() {
   return useQuery({ queryKey: ["creative-provider-status"], staleTime: 60_000, retry: false, queryFn: async () => {
     const { data, error } = await supabase.functions.invoke("creative-canvas-generate", { body: { action: "provider_status" } });
-    if (error) throw error; return (data?.providers ?? []) as ProviderStatus[];
+    if (error) throw await creativeFunctionError(error); return (data?.providers ?? []) as ProviderStatus[];
   }});
 }
 
 export function useGenerateCreative() {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: async (request: { projectId: string; canvasId: string; orgId: string; operation: CreativeOperation; instruction: string; provider: CreativeProvider; idempotencyKey: string; selectedNodes: unknown[]; brandContext?: BrandContext; referenceAssetIds?: string[]; language?: "en" | "es"; placement?: { x: number; y: number }; aspect?: CreativeAspect; series?: { id: string; label?: string; index?: number; total?: number }; command?: { commandId: string; trigger: string; values: Record<string, unknown> } }) => {
-    const { data, error } = await supabase.functions.invoke("creative-canvas-generate", { body: request }); if (error) throw error; if (data?.error) throw new Error(data.error); return data as { generation: CreativeGeneration; asset?: CreativeAsset; budget?: { monthTotalUsd: number; softLimitUsd: number; warning: boolean } };
+    const { data, error } = await supabase.functions.invoke("creative-canvas-generate", { body: request }); if (error) throw await creativeFunctionError(error); if (data?.error) throw new Error(data.error); return data as { generation: CreativeGeneration; asset?: CreativeAsset; budget?: { monthTotalUsd: number; softLimitUsd: number; warning: boolean } };
   }, onSettled: (_data, _error, variables) => { queryClient.invalidateQueries({ queryKey: ["creative-generations", variables.canvasId] }); queryClient.invalidateQueries({ queryKey: ["creative-assets", variables.projectId] }); } });
 }
 
