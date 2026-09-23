@@ -8,12 +8,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { AiAccessError, requireAiUser, requireAiOrganization, requireAiProject } from "../_shared/ai-authorization.ts";
+import { LV_BRAND_IDENTITY_GUARDRAIL } from "../_shared/lv-brand-identity.ts";
 
 const CLAUDE_API_KEY  = Deno.env.get("CLAUDE_API_KEY")!;
 const SUPABASE_URL    = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MODEL           = "claude-sonnet-4-6";
-const AGENT_PACK_VER  = "1.1";
+const AGENT_PACK_VER  = "1.2";
 
 const cors = {
   "Access-Control-Allow-Origin":  "*",
@@ -256,6 +257,7 @@ serve(async (req) => {
     : "";
 
   const systemPrompt = [
+    LV_BRAND_IDENTITY_GUARDRAIL,
     agent.systemPrompt,
     AGENT_OS_RULES,
     `LANGUAGE CONTROL: ${lang}`,

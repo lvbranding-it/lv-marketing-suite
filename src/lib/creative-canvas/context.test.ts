@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCreativeContext } from "../../../supabase/functions/_shared/creative-canvas/context.ts";
 import type { CreativeRequest } from "../../../supabase/functions/_shared/creative-canvas/types.ts";
+import { LV_BRAND_IDENTITY_GUARDRAIL, LV_BRAND_VISUAL_IDENTITY_GUARDRAIL } from "../../../supabase/functions/_shared/lv-brand-identity.ts";
 
 function request(overrides: Partial<CreativeRequest> = {}): CreativeRequest {
   return {
@@ -11,6 +12,12 @@ function request(overrides: Partial<CreativeRequest> = {}): CreativeRequest {
 }
 
 describe("LV Intelligence context selection", () => {
+  it("keeps LV Branding distinct from Louis Vuitton in every text request", () => {
+    const result = buildCreativeContext(request());
+    expect(result.systemInstructions).toContain(LV_BRAND_IDENTITY_GUARDRAIL);
+    expect(result.systemInstructions).toContain("LV Branding is NOT Louis Vuitton");
+  });
+
   it("includes only selected objects allowed in AI context", () => {
     const result = buildCreativeContext(request({ selectedNodes: [
       { id: "included", type: "text", text: "Approved positioning", includeInAiContext: true },
@@ -61,11 +68,16 @@ describe("the prompt an image model receives", () => {
     expect(imagePrompt.startsWith("Keep the person and face from the first image")).toBe(true);
   });
 
-  it("stays short enough for the model to weigh it", () => {
-    // The text prompt for the same request is tens of thousands of characters.
+  it("never interprets LV Branding visual assets as Louis Vuitton", () => {
+    const { imagePrompt } = buildCreativeContext(outfitTransfer());
+    expect(imagePrompt).toContain(LV_BRAND_VISUAL_IDENTITY_GUARDRAIL);
+    expect(imagePrompt).toContain("not Louis Vuitton or LVMH");
+  });
+
+  it("stays within the image model prompt budget", () => {
     const prepared = buildCreativeContext(outfitTransfer());
-    expect(prepared.imagePrompt.length).toBeLessThan(2_500);
-    expect(prepared.imagePrompt.length).toBeLessThan(prepared.enhancedPrompt.length);
+    expect(prepared.imagePrompt.length).toBeLessThanOrEqual(2_400);
+    expect(prepared.imagePrompt).not.toContain("Project context:");
   });
 
   it("names the attached images in the order they are sent", () => {

@@ -3,6 +3,7 @@ import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as portalAdvisor from "./portal-advisor";
 import * as authorization from "./ai-authorization";
+import * as brandIdentity from "./lv-brand-identity";
 
 // Execute the real endpoint handlers with only network/database boundaries mocked.
 function endpoint(
@@ -67,6 +68,7 @@ function endpoint(
     if (id.includes("supabase-js")) return { createClient: () => db };
     if (id.includes("portal-advisor")) return portalAdvisor;
     if (id.includes("ai-authorization")) return authorization;
+    if (id.includes("lv-brand-identity")) return brandIdentity;
     throw new Error(`Unexpected import ${id}`);
   };
   new Function("require", "exports", "Deno", "fetch", compiled)(
@@ -98,6 +100,12 @@ function request(payload: object = body) {
     body: JSON.stringify(payload),
   });
 }
+
+it("injects the shared LV Branding identity distinction into the primary agent endpoint", () => {
+  const source = readFileSync(new URL("../agent-run/index.ts", import.meta.url), "utf8");
+  expect(source).toContain('import { LV_BRAND_IDENTITY_GUARDRAIL }');
+  expect(source).toMatch(/const systemPrompt = \[\s*LV_BRAND_IDENTITY_GUARDRAIL,/);
+});
 
 describe.each(["agent-run", "skill-run"])("%s request boundary", (name) => {
   it("rejects an unverified session before any database or provider access", async () => {
@@ -176,6 +184,7 @@ it("grounds advisor requests in reviewed website content without internal delive
  await response.text();
  const payload = JSON.parse(app.provider.mock.calls[0][1].body as string);
  expect(payload.system).toContain(portalAdvisor.ADVISOR_BRAND_CONTEXT);
+ expect(payload.system).toContain(brandIdentity.LV_BRAND_IDENTITY_GUARDRAIL);
  expect(payload.system).toContain(portalAdvisor.AMBASSADOR_TRAINING_CONTEXT);
  expect(payload.system).toContain(portalAdvisor.AMBASSADOR_COMMISSION_CONTEXT);
  expect(payload.system).toContain("Respond in Spanish");

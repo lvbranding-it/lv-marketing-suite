@@ -1,4 +1,5 @@
 import type { CreativeRequest, PreparedContext, ProjectContext } from "./types.ts";
+import { LV_BRAND_IDENTITY_GUARDRAIL, LV_BRAND_VISUAL_IDENTITY_GUARDRAIL } from "../lv-brand-identity.ts";
 
 const MAX_CONTEXT_CHARS = 36_000;
 /**
@@ -29,7 +30,9 @@ const VISUAL_BRAND_FIELDS = [
   "visualPrinciples", "approvedColors", "requiredElements", "prohibitedElements", "typography", "brandName",
 ] as const;
 
-export const LV_CANVAS_SYSTEM = `You are the LV Creative Canvas intelligence layer for LV Branding.
+export const LV_CANVAS_SYSTEM = `${LV_BRAND_IDENTITY_GUARDRAIL}
+
+You are the LV Creative Canvas intelligence layer for LV Branding.
 Strategy first. Every recommendation and artifact must connect audience, positioning, objective, and execution.
 Use only the supplied project context. Do not invent performance claims or confidential facts.
 Objects listed as selectedObjects are what the request is about. Objects listed as inheritedDirection were connected to them on the canvas and govern how the work should be executed: honour them as direction, not as subject matter.
@@ -174,6 +177,7 @@ function buildImagePrompt(
   if (direction.length) parts.push(`Creative direction — ${direction.join("; ")}`);
 
   // Last, and never trimmed away: the cap applies to everything before it.
-  const body = parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS - SINGLE_OUTPUT.length - 2);
-  return `${body}\n\n${SINGLE_OUTPUT}`;
+  const permanentRules = `${LV_BRAND_VISUAL_IDENTITY_GUARDRAIL}\n\n${SINGLE_OUTPUT}`;
+  const body = parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS - permanentRules.length - 2);
+  return `${body}\n\n${permanentRules}`;
 }
