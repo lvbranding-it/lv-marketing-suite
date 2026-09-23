@@ -30,6 +30,8 @@ import { runPaced, runSeries, type SeriesPlan } from "@/lib/creative-canvas/seri
 import { buildCommandRequest, parseSlash, type CommandSelectionItem } from "@/lib/creative-canvas/commands/registry";
 import type { CommandDefinition, CommandValues } from "@/lib/creative-canvas/commands/types";
 import { exportFileName, isArtworkNode, planExport } from "@/lib/creative-canvas/export-batch";
+import { assetCardSize } from "@/lib/creative-canvas/asset-layout";
+import { embedPngMetadata, exportProvenance, LV_EXPORT_PROVENANCE } from "@/lib/creative-canvas/png-metadata";
 import type { BrandContext, CreativeDecision, CreativeNodeType, CreativeOperation, CreativeProvider } from "@/lib/creative-canvas/types";
 
 const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Type; title: string; body: string; accent?: string; size?: [number, number]; group?: "ugc" }> = [
@@ -72,8 +74,9 @@ const NODE_TOOLS: Array<{ type: CreativeNodeType; label: string; icon: typeof Ty
  * Artwork is fitted inside the frame rather than cropped to it — silently
  * trimming a client's composition is worse than a margin.
  */
-const EXPORT_PRESETS: Array<{ value: string; label: string; group: string; size?: [number, number] }> = [
+const EXPORT_PRESETS: Array<{ value: string; label: string; group: string; size?: [number, number]; scale?: number }> = [
   { value: "actual", label: "Actual size", group: "Canvas" },
+  { value: "source-2x", label: "Source 2× · resampled", group: "Canvas", scale: 2 },
   { value: "ig-square", label: "Instagram post · 1080 × 1080", group: "Social", size: [1080, 1080] },
   { value: "ig-portrait", label: "Instagram portrait · 1080 × 1350", group: "Social", size: [1080, 1350] },
   { value: "story", label: "Story / Reel · 1080 × 1920", group: "Social", size: [1080, 1920] },
@@ -102,9 +105,9 @@ async function loadBitmap(url: string): Promise<ImageBitmap> {
  * Shared by the single and batch paths so a post exported on its own is byte
  * identical to the same post exported as part of its series.
  */
-async function renderArtwork(signedUrl: string, size?: [number, number]) {
+async function renderArtwork(signedUrl: string, size?: [number, number], sourceScale = 1) {
   const bitmap = await loadBitmap(signedUrl);
-  const [width, height] = size ?? [bitmap.width, bitmap.height];
+  const [width, height] = size ?? [Math.round(bitmap.width * sourceScale), Math.round(bitmap.height * sourceScale)];
   const surface = document.createElement("canvas");
   surface.width = width; surface.height = height;
   const context = surface.getContext("2d");
@@ -200,6 +203,18 @@ export default function CreativeCanvasWorkspace() {
   const undo = useCallback(() => { const previous = history.current.past.pop(); if (!previous) return; history.current.future.push(cloneSnapshot(nodesRef.current, edgesRef.current)); restoreSnapshot(previous); }, [restoreSnapshot]);
   const redo = useCallback(() => { const next = history.current.future.pop(); if (!next) return; history.current.past.push(cloneSnapshot(nodesRef.current, edgesRef.current)); restoreSnapshot(next); }, [restoreSnapshot]);
   const updateNodeData = useCallback((id: string, values: Partial<CreativeNodeData>) => { recordHistory(); setNodes((current) => current.map((node) => node.id === id ? { ...node, data: { ...node.data, ...values } } : node)); }, [recordHistory, setNodes]);
+  const fitNodeToAsset = useCallback((id: string, naturalWidth: number, naturalHeight: number) => {
+    if (!naturalWidth || !naturalHeight) return;
+    const aspectRatio = naturalWidth / naturalHeight;
+    setNodes((current) => current.map((node) => {
+      // Once the intrinsic ratio is stored, ordinary manual resizing belongs to
+      // the person using the canvas and must not be reset by another image load.
+      if (node.id !== id || typeof node.data.assetAspectRatio === "number") return node;
+      const currentWidth = Number(node.width ?? node.measured?.width ?? node.style?.width ?? 360);
+      const size = assetCardSize(aspectRatio, currentWidth);
+      return { ...node, style: { ...node.style, ...size }, data: { ...node.data, assetAspectRatio: aspectRatio } };
+    }));
+  }, [setNodes]);
   useEffect(() => {
     if (ugcOpen) ugcToggle.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [ugcOpen]);
@@ -514,14 +529,27 @@ export default function CreativeCanvasWorkspace() {
   const exportSelection = async (format: "png" | "pdf") => {
     if (!selection.length) { toast({ description: "Select one or more objects to export." }); return; }
     const preset = EXPORT_PRESETS.find((item) => item.value === exportPreset);
-    const sizeSuffix = preset?.size ? ` ${preset.size[0]}x${preset.size[1]}` : "";
+    const sizeSuffix = preset?.size ? ` ${preset.size[0]}x${preset.size[1]}` : preset?.scale ? ` ${preset.scale}x` : "";
     const baseName = canvas?.projects.name ?? "creative-direction";
     setExporting(format);
 
-    const deliverImage = (dataUrl: string, width: number, height: number) => {
-      const name = `${baseName}${preset?.size ? ` ${width}x${height}` : ""}`;
-      if (format === "png") { void fetch(dataUrl).then((response) => response.blob()).then((blob) => downloadBlob(blob, `${name}.png`)); return; }
+    const setPdfProvenance = (pdf: jsPDF, title: string) => pdf.setProperties({
+      title,
+      author: LV_EXPORT_PROVENANCE.author,
+      creator: `${LV_EXPORT_PROVENANCE.creator}; Developer: ${LV_EXPORT_PROVENANCE.developer}`,
+      subject: exportProvenance(title).Provenance,
+      keywords: "LV Branding, Creative Canvas, Luis Velasquez, provenance",
+    });
+
+    const deliverImage = async (dataUrl: string, width: number, height: number) => {
+      const name = `${baseName}${preset && preset.value !== "actual" ? ` ${width}x${height}` : ""}`;
+      if (format === "png") {
+        const blob = await fetch(dataUrl).then((response) => response.blob());
+        downloadBlob(await embedPngMetadata(blob, exportProvenance(name)), `${name}.png`);
+        return;
+      }
       const pdf = new jsPDF({ orientation: width >= height ? "landscape" : "portrait", unit: "px", format: [width, height] });
+      setPdfProvenance(pdf, name);
       pdf.addImage(dataUrl, "PNG", 0, 0, width, height);
       pdf.save(`${name}.pdf`);
     };
@@ -535,8 +563,8 @@ export default function CreativeCanvasWorkspace() {
       const ready = sources.every((source) => Boolean(source.url));
 
       if (plan.mode === "single" && ready) {
-        const { dataUrl, width, height } = await renderArtwork(sources[0].url!, preset?.size);
-        deliverImage(dataUrl, width, height);
+        const { dataUrl, width, height } = await renderArtwork(sources[0].url!, preset?.size, preset?.scale);
+        await deliverImage(dataUrl, width, height);
         return;
       }
 
@@ -546,22 +574,24 @@ export default function CreativeCanvasWorkspace() {
         // Sequential on purpose: a 4K preset holds a full bitmap per render, and
         // a dozen at once is how a browser tab runs out of memory mid-export.
         for (const [index, source] of sources.entries()) {
-          const rendered = await renderArtwork(source.url!, preset?.size);
+          const rendered = await renderArtwork(source.url!, preset?.size, preset?.scale);
           renders.push({ title: source.item.title, ...rendered });
           setExportProgress({ done: index + 1, total: sources.length });
         }
 
         if (format === "png") {
           const zip = new JSZip();
-          renders.forEach((render, index) => {
-            zip.file(exportFileName(index, render.title, "png"), render.dataUrl.split(",")[1], { base64: true });
-          });
+          for (const [index, render] of renders.entries()) {
+            const blob = await fetch(render.dataUrl).then((response) => response.blob());
+            zip.file(exportFileName(index, render.title, "png"), await embedPngMetadata(blob, exportProvenance(render.title)));
+          }
           downloadBlob(await zip.generateAsync({ type: "blob" }), `${baseName} series${sizeSuffix}.zip`);
         } else {
           // One page per piece, each page the size of its own artwork, so a
           // client review deck never letterboxes a portrait post.
           const first = renders[0];
           const pdf = new jsPDF({ orientation: first.width >= first.height ? "landscape" : "portrait", unit: "px", format: [first.width, first.height] });
+          setPdfProvenance(pdf, `${baseName} series`);
           renders.forEach((render, index) => {
             if (index > 0) pdf.addPage([render.width, render.height], render.width >= render.height ? "landscape" : "portrait");
             pdf.addImage(render.dataUrl, "PNG", 0, 0, render.width, render.height);
@@ -585,9 +615,10 @@ export default function CreativeCanvasWorkspace() {
         nodes.forEach((node) => { if (node.parentId && ids.has(node.parentId) && !ids.has(node.id)) { ids.add(node.id); expanded = true; } });
       }
       const bounds = getNodesBounds(nodes.filter((node) => ids.has(node.id)));
+      const scale = preset?.scale ?? 1;
       const [width, height] = preset?.size ?? [
-        Math.min(2400, Math.max(640, Math.ceil(bounds.width))),
-        Math.min(2400, Math.max(480, Math.ceil(bounds.height))),
+        Math.round(Math.min(2400, Math.max(640, Math.ceil(bounds.width))) * scale),
+        Math.round(Math.min(2400, Math.max(480, Math.ceil(bounds.height))) * scale),
       ];
       // No padding for a delivery size: the frame is the deliverable edge.
       const transform = getViewportForBounds(bounds, width, height, .1, 4, preset?.size ? 0 : .04);
@@ -599,9 +630,9 @@ export default function CreativeCanvasWorkspace() {
         const dataUrl = await toPng(viewportElement, {
           cacheBust: true,
           backgroundColor: format === "pdf" ? "#ffffff" : undefined,
-          // A delivery preset means exact pixels; only a free-size capture of
-          // canvas cards benefits from the extra resolution.
-          width, height, pixelRatio: preset?.size ? 1 : 2,
+          // A delivery or proportional scale preset means exact output pixels;
+          // only an ordinary free-size capture gets an implicit retina pass.
+          width, height, pixelRatio: preset?.size || preset?.scale ? 1 : 2,
           style: { width: `${width}px`, height: `${height}px`, transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})` },
           filter: (element) => {
             const html = element as HTMLElement;
@@ -610,7 +641,7 @@ export default function CreativeCanvasWorkspace() {
             return true;
           },
         });
-        deliverImage(dataUrl, width, height);
+        await deliverImage(dataUrl, width, height);
       } finally {
         stage.classList.remove("creative-exporting");
       }
@@ -627,7 +658,7 @@ export default function CreativeCanvasWorkspace() {
     <div className="creative-canvas-stage">
       <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button><div className="space-y-1 p-2">{leftOpen && <p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>}{NODE_TOOLS.filter((tool) => !tool.group).map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" title={label} onClick={() => addNode(type)}><Icon size={16} />{leftOpen && <span>{label}</span>}</button>)}<div className="my-2 h-px bg-white/10" /><button ref={ugcToggle} className="creative-tool-button" title="UGC blocks" onClick={() => setUgcOpen(!ugcOpen)} aria-expanded={ugcOpen}><Video size={16} />{leftOpen && <><span>UGC</span>{ugcOpen ? <ChevronLeft size={13} className="ml-auto rotate-90 opacity-50" /> : <ChevronRight size={13} className="ml-auto opacity-50" />}</>}</button>{ugcOpen && NODE_TOOLS.filter((tool) => tool.group === "ugc").map(({ type, label, icon: Icon }) => <button key={type} className={`creative-tool-button ${leftOpen ? "pl-5" : ""}`} title={label} onClick={() => addNode(type)}><Icon size={15} />{leftOpen && <span>{label}</span>}</button>)}<button className="creative-tool-button" title="Upload references" onClick={() => fileInput.current?.click()}><Upload size={16} />{leftOpen && <span>Upload</span>}</button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => { setPaletteQuery(""); setPaletteOpen(true); }} title="Search the LV Creative Command System"><Slash size={16} />{leftOpen && <span>Commands</span>}</button><button className="creative-tool-button" onClick={() => setSeriesOpen(true)} title="Combine selected objects into a grid of posts"><Grid3x3 size={16} />{leftOpen && <span>Series</span>}</button><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" title="Fit selection" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} />{leftOpen && <span>Fit selection</span>}</button><button className="creative-tool-button" title="Fit canvas" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} />{leftOpen && <span>Fit canvas</span>}</button></div></aside>
       {selection.length > 0 && <div className="creative-selection-actions"><span className="max-w-40 truncate text-xs text-white/55">{selection.length === 1 ? selection[0].data.title : `${selection.length} selected`}</span><Button size="icon" variant="ghost" className="h-8 w-8" title="Group" disabled={selection.length < 2} onClick={groupSelection}><Group size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Ungroup" onClick={ungroupSelection}><Ungroup size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Bring forward" onClick={() => changeOrder(1)}><ArrowUpToLine size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Send backward" onClick={() => changeOrder(-1)}><ArrowDownToLine size={14} /></Button>{selection.length === 1 && <Select value={["favorite","shortlisted","rejected","needs_revision","client_selected","approved_final"].includes(selection[0].data.status) ? selection[0].data.status : undefined} onValueChange={(value) => void applyDecision(value as CreativeDecision)}><SelectTrigger className="h-8 w-36 border-white/10 bg-white/5 text-xs text-white"><SelectValue placeholder="Set decision" /></SelectTrigger><SelectContent><SelectItem value="favorite">Favorite</SelectItem><SelectItem value="shortlisted">Shortlisted</SelectItem><SelectItem value="needs_revision">Needs revision</SelectItem><SelectItem value="rejected">Rejected</SelectItem><SelectItem value="client_selected">Client selected</SelectItem><SelectItem value="approved_final">Approved final</SelectItem></SelectContent></Select>}{selectedAsset?.signedUrl && <Button size="sm" variant="ghost" className="h-8 text-white/65" onClick={async () => { try { const response = await fetch(selectedAsset.signedUrl!); downloadBlob(await response.blob(), selectedAsset.original_filename); } catch { toast({ title: "Download failed", variant: "destructive" }); } }}><Download size={13} className="mr-1.5" />Original</Button>}</div>}
-      <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (hydrated.current) { setPendingScene(flowToScene(nodesRef.current, edgesRef.current, viewport)); setSaveState(navigator.onLine ? "unsaved" : "offline"); } }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
+      <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData} fitNodeToAsset={fitNodeToAsset}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (hydrated.current) { setPendingScene(flowToScene(nodesRef.current, edgesRef.current, viewport)); setSaveState(navigator.onLine ? "unsaved" : "offline"); } }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
       <aside className={`creative-inspector ${rightOpen ? "creative-inspector--open" : ""}`}><button className="creative-panel-toggle creative-panel-toggle--right" onClick={() => setRightOpen(!rightOpen)} aria-label={rightOpen ? "Collapse inspector" : "Open inspector"}>{rightOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>{rightOpen && <Tabs defaultValue="properties" className="flex h-full flex-col"><TabsList className="m-2 grid grid-cols-4 bg-white/5"><TabsTrigger value="properties">Object</TabsTrigger><TabsTrigger value="brand">Brand</TabsTrigger><TabsTrigger value="assets">Assets</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList><ScrollArea className="flex-1"><TabsContent value="properties" className="m-0 p-4">{selection.length === 1 ? <div className="space-y-4"><div><p className="creative-inspector-label">Selected object</p><p className="mt-1 text-sm font-medium capitalize text-white">{selection[0].data.nodeType.replaceAll("_", " ")}</p></div><div className="space-y-1.5"><Label className="text-white/70">Title</Label><Input value={selection[0].data.title} onChange={(event) => updateNodeData(selection[0].id, { title: event.target.value })} /></div><div className="space-y-1.5"><Label className="text-white/70">Content</Label><Textarea className="min-h-32" value={selection[0].data.body} onChange={(event) => updateNodeData(selection[0].id, { body: event.target.value })} /></div></div> : !selection.length && edgeSelection.length === 1 ? <ConnectionInspector kind={edgeKindOf(edgeSelection[0])} sourceTitle={nodes.find((node) => node.id === edgeSelection[0].source)?.data.title ?? ""} targetTitle={nodes.find((node) => node.id === edgeSelection[0].target)?.data.title ?? ""} onChange={(kind) => setEdgeKind(edgeSelection[0].id, kind)} /> : <div className="py-10 text-center text-sm text-white/45">{selection.length ? `${selection.length} objects selected` : edgeSelection.length ? `${edgeSelection.length} connections selected` : "Select an object or a connection to edit it."}</div>}</TabsContent>
         <TabsContent value="brand" className="m-0 space-y-4 p-4"><div><p className="text-sm font-semibold text-white">Project source of truth</p><p className="mt-1 text-xs leading-5 text-white/45">Only relevant fields and selected objects are sent to AI providers.</p></div>{BRAND_FIELDS.map((field) => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-white/65">{field.label}</Label><Textarea value={brandDraft[field.key] ?? ""} placeholder={field.placeholder} className="min-h-16 bg-white/5 text-xs text-white" onChange={(event) => setBrandDraft((current) => ({ ...current, [field.key]: event.target.value }))} /></div>)}<Button className="w-full bg-[#CB2039]" disabled={saveBrand.isPending} onClick={async () => { try { await saveBrand.mutateAsync(brandDraft); toast({ description: "Brand context saved." }); } catch (error) { toast({ title: "Brand context was not saved", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } }}>{saveBrand.isPending && <Loader2 size={14} className="mr-2 animate-spin" />}Save brand context</Button></TabsContent>
         <TabsContent value="assets" className="m-0 space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Asset library</p><p className="text-xs text-white/45">Private · {assets.length} assets</p></div><Button size="icon" variant="outline" onClick={() => fileInput.current?.click()} aria-label="Upload asset"><Plus size={14} /></Button></div>{assets.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No uploaded or generated assets.</p> : <div className="grid grid-cols-2 gap-2">{assets.map((asset) => <button key={asset.id} className="overflow-hidden rounded-lg border border-white/10 bg-white/5 text-left" onClick={() => addNode(asset.source_type === "reference" ? "reference" : "image", { title: asset.original_filename, body: `${asset.source_type} asset`, assetId: asset.id, assetUrl: asset.signedUrl ?? "", width: 360, height: 340 })}>{asset.signedUrl ? <img src={asset.signedUrl} alt="" className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-white/5" />}<p className="truncate p-2 text-[10px] text-white/60">{asset.original_filename}</p></button>)}</div>}</TabsContent>

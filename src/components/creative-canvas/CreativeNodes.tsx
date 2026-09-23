@@ -13,14 +13,17 @@ const TYPE_LABELS: Record<CreativeNodeType, string> = {
   performance_result: "Performance", usage_rights: "Usage rights",
 };
 
-const NodeActions = createContext<{ updateNodeData: (id: string, values: Partial<CreativeNodeData>) => void }>({ updateNodeData: () => undefined });
+const NodeActions = createContext<{
+  updateNodeData: (id: string, values: Partial<CreativeNodeData>) => void;
+  fitNodeToAsset: (id: string, width: number, height: number) => void;
+}>({ updateNodeData: () => undefined, fitNodeToAsset: () => undefined });
 
-export function CreativeNodeActionsProvider({ children, updateNodeData }: { children: ReactNode; updateNodeData: (id: string, values: Partial<CreativeNodeData>) => void }) {
-  return <NodeActions.Provider value={{ updateNodeData }}>{children}</NodeActions.Provider>;
+export function CreativeNodeActionsProvider({ children, updateNodeData, fitNodeToAsset = () => undefined }: { children: ReactNode; updateNodeData: (id: string, values: Partial<CreativeNodeData>) => void; fitNodeToAsset?: (id: string, width: number, height: number) => void }) {
+  return <NodeActions.Provider value={{ updateNodeData, fitNodeToAsset }}>{children}</NodeActions.Provider>;
 }
 
 function CreativeNodeCard({ id, data, selected }: NodeProps<CreativeFlowNode>) {
-  const { updateNodeData } = useContext(NodeActions);
+  const { updateNodeData, fitNodeToAsset } = useContext(NodeActions);
   const label = TYPE_LABELS[data.nodeType];
   return (
     <>
@@ -31,7 +34,7 @@ function CreativeNodeCard({ id, data, selected }: NodeProps<CreativeFlowNode>) {
           <span className="creative-shape__kind">{label}</span>
           {data.status !== "draft" && <span className="creative-shape__status">{data.status.replace(/_/g, " ")}</span>}
         </header>
-        {data.assetUrl && <img src={data.assetUrl} alt={data.title} className="creative-shape__image" draggable={false} />}
+        {data.assetUrl && <img src={data.assetUrl} alt={data.title} className="creative-shape__image" draggable={false} onLoad={(event) => fitNodeToAsset(id, event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)} />}
         {data.nodeType === "palette" && <div className="creative-shape__swatch" style={{ background: data.accent }}><button type="button" className="nodrag" aria-label={`Copy ${data.accent}`} onClick={() => void navigator.clipboard.writeText(data.accent)}>{data.accent}</button></div>}
         <input aria-label={`${label} title`} className="creative-shape__title nodrag nowheel" value={data.title} onChange={(event) => updateNodeData(id, { title: event.target.value })} />
         <textarea aria-label={`${label} content`} className="creative-shape__body nodrag nowheel" value={data.body} placeholder={data.nodeType === "reference" ? "Reference notes…" : "Add strategic context…"} onChange={(event) => updateNodeData(id, { body: event.target.value })} />

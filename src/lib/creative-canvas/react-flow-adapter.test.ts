@@ -5,11 +5,13 @@ import { serializeScene } from "./scene";
 
 describe("React Flow scene adapter", () => {
   it("hydrates runtime asset URLs without persisting them", () => {
-    const scene = serializeScene({ schemaVersion: 1, viewport: { x: 12, y: 18, zoom: .8 }, edges: [], nodes: [{ id: "image-1", type: "image", position: { x: 20, y: 30 }, size: { width: 400, height: 300 }, title: "Reference", body: "Lighting", accent: "#CB2039", assetId: "asset-1", includeInContext: true, status: "draft" }] });
+    const scene = serializeScene({ schemaVersion: 1, viewport: { x: 12, y: 18, zoom: .8 }, edges: [], nodes: [{ id: "image-1", type: "image", position: { x: 20, y: 30 }, size: { width: 400, height: 300 }, title: "Reference", body: "Lighting", accent: "#CB2039", assetId: "asset-1", includeInContext: true, status: "draft", metadata: { assetAspectRatio: 1.5 } }] });
     const flow = sceneToFlow(scene, new Map([["asset-1", "https://signed.example/image"]]));
     expect(flow.nodes[0].data.assetUrl).toContain("signed.example");
+    expect(flow.nodes[0].data.assetAspectRatio).toBe(1.5);
     const restored = flowToScene(flow.nodes, flow.edges, flow.viewport);
     expect(restored.nodes[0].assetId).toBe("asset-1");
+    expect(restored.nodes[0].metadata?.assetAspectRatio).toBe(1.5);
     expect(JSON.stringify(restored)).not.toContain("signed.example");
   });
 

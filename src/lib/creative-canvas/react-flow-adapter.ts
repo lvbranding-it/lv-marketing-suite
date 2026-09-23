@@ -10,6 +10,7 @@ export interface CreativeNodeData extends Record<string, unknown> {
   accent: string;
   assetId: string;
   assetUrl: string;
+  assetAspectRatio?: number;
   includeInContext: boolean;
   status: string;
 }
@@ -70,6 +71,7 @@ export function sceneToFlow(scene: CreativeSceneDocument, assetUrls: ReadonlyMap
       accent: node.accent,
       assetId: node.assetId ?? "",
       assetUrl: node.assetId ? assetUrls.get(node.assetId) ?? "" : "",
+      assetAspectRatio: typeof node.metadata?.assetAspectRatio === "number" ? node.metadata.assetAspectRatio : undefined,
       includeInContext: node.includeInContext,
       status: node.status,
     },
@@ -109,6 +111,7 @@ export function flowToScene(nodes: CreativeFlowNode[], edges: CreativeFlowEdge[]
       status: node.data.status,
       parentId: node.parentId,
       zIndex: node.zIndex,
+      metadata: typeof node.data.assetAspectRatio === "number" ? { assetAspectRatio: node.data.assetAspectRatio } : undefined,
     })),
     edges: edges.map((edge): CreativeSceneEdge => ({
       id: edge.id,
