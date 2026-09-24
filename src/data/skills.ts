@@ -58,6 +58,37 @@ export const CATEGORY_BORDER_COLORS: Record<SkillCategory, string> = {
   sales: 'border-t-slate-400',
 };
 
+/**
+ * The category as a solid fill, for the rail down a card and the dot beside a
+ * section heading. A background rather than a border so one value serves both.
+ */
+export const CATEGORY_RAIL_COLORS: Record<SkillCategory, string> = {
+  foundation: 'bg-amber-400',
+  conversion: 'bg-blue-400',
+  content: 'bg-purple-400',
+  seo: 'bg-green-400',
+  paid: 'bg-orange-400',
+  measurement: 'bg-cyan-400',
+  retention: 'bg-rose-400',
+  growth: 'bg-indigo-400',
+  strategy: 'bg-teal-400',
+  sales: 'bg-slate-400',
+};
+
+/** The order categories are presented in, foundation first as the prerequisite. */
+export const CATEGORY_ORDER: SkillCategory[] = [
+  'foundation',
+  'conversion',
+  'content',
+  'seo',
+  'paid',
+  'measurement',
+  'retention',
+  'growth',
+  'strategy',
+  'sales',
+];
+
 const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
   // ── Foundation ──────────────────────────────────────────────────────────────
   {
