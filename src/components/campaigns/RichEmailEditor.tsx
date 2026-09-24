@@ -146,14 +146,24 @@ const RichEmailEditor = forwardRef<RichEmailEditorHandle, Props>(function RichEm
   // Expose insertHtml via ref
   useImperativeHandle(ref, () => ({
     insertHtml: (html: string) => {
-      if (!editor) return;
+      if (!editor || editor.isDestroyed) return;
       editor.chain().focus().insertContent(html).run();
     },
   }), [editor]);
 
-  // Sync external value changes (e.g. AI generation)
+  /**
+   * Sync external value changes (e.g. AI generation).
+   *
+   * The destroyed check is what keeps a hard load of this route alive. React
+   * replays passive effects when it remounts a tree — StrictMode in
+   * development, and Suspense reconnecting a lazy route in production — and the
+   * replay runs against the editor this closure captured, which TipTap has
+   * already destroyed. A destroyed editor is still a truthy object, but its
+   * schema is null, so `getHTML()` throws inside ProseMirror and takes the
+   * whole page down with it.
+   */
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const current = editor.getHTML();
     if (value !== current && value !== undefined) {
       editor.commands.setContent(value || "", { emitUpdate: false });

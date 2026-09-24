@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { suppressionSkip } from "../_shared/email/bounce.ts";
 
 const SENDGRID_API_KEY     = Deno.env.get("SENDGRID_API_KEY")!;
 const SENDGRID_FROM_EMAIL  = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "admin@lvbranding.com";
@@ -117,8 +118,13 @@ serve(async (req) => {
 
   // Load suppression list
   const { data: suppressions } = await db
-    .from("email_suppressions").select("email").eq("org_id", campaign.org_id);
-  const suppressed = new Set((suppressions ?? []).map((s: { email: string }) => s.email.toLowerCase()));
+    .from("email_suppressions").select("email, reason").eq("org_id", campaign.org_id);
+  // The reason travels with the address, so a skip can be recorded for what it
+  // actually was rather than filed under "unsubscribed".
+  const suppressed = new Map(
+    (suppressions ?? []).map((s: { email: string; reason: string | null }) =>
+      [s.email.toLowerCase(), s.reason]),
+  );
 
   // Mark as sending
   await db.from("email_campaigns").update({ status: "sending" }).eq("id", campaign_id);
@@ -128,8 +134,9 @@ serve(async (req) => {
   for (const r of recipients) {
     // Skip suppressed
     if (suppressed.has(r.email.toLowerCase())) {
+      const skip = suppressionSkip(suppressed.get(r.email.toLowerCase()));
       await db.from("email_campaign_recipients")
-        .update({ status: "unsubscribed" }).eq("id", r.id);
+        .update({ status: skip.status, error_message: skip.note }).eq("id", r.id);
       continue;
     }
 
