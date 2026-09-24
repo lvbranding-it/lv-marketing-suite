@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyFullBleed, EMAIL_CONTENT_WIDTH, EMAIL_MAX_WIDTH, EMAIL_SIDE_PADDING,
   FULL_BLEED_ATTR, FULL_BLEED_FALLBACK_WIDTH, FULL_BLEED_STYLE,
-  IMAGE_STYLE, imageStyleFor, isFullBleed,
+  IMAGE_STYLE, imageStyleFor, isFullBleed, countUnsetLinks, LINK_PLACEHOLDER,
 } from "./email-layout";
 
 /** Minimal stand-in for the element both editors hand in. */
@@ -71,5 +71,27 @@ describe("applyFullBleed", () => {
   it("matches imageStyleFor", () => {
     expect(imageStyleFor(true)).toBe(FULL_BLEED_STYLE);
     expect(imageStyleFor(false)).toBe(IMAGE_STYLE);
+  });
+});
+
+describe("countUnsetLinks", () => {
+  it("counts the buttons nobody pointed anywhere", () => {
+    const body = `<a href="${LINK_PLACEHOLDER}">Learn More</a><p>copy</p><a href="${LINK_PLACEHOLDER}">Get Started</a>`;
+    expect(countUnsetLinks(body)).toBe(2);
+  });
+
+  it("passes a body whose links are all set", () => {
+    const body = '<a href="https://www.lvbranding.com/perspectives/how-to-get-better-results-from-ai">Read the guide</a>';
+    expect(countUnsetLinks(body)).toBe(0);
+  });
+
+  it("does not mistake a real homepage link for an unset one", () => {
+    // The mistake that started this was a CTA silently defaulting to the
+    // homepage; a link that genuinely points there is fine and must not warn.
+    expect(countUnsetLinks('<a href="https://lvbranding.com">lvbranding.com</a>')).toBe(0);
+  });
+
+  it("handles an empty body", () => {
+    expect(countUnsetLinks("")).toBe(0);
   });
 });

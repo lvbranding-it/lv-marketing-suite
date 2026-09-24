@@ -18,6 +18,7 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useToast } from "@/hooks/use-toast";
+import { countUnsetLinks } from "@/lib/campaigns/email-layout";
 import BranchSelect from "@/components/branches/BranchSelect";
 import type { BranchFilterValue } from "@/hooks/useBranches";
 
@@ -154,6 +155,17 @@ export default function CampaignComposer() {
   }, [campaignName, subject, previewText, bodyHtml, recipients, branchId, initialized]);
 
   const handleSend = async () => {
+    // A call-to-action nobody pointed anywhere is the one mistake that cannot be
+    // taken back once the mail is out, so it stops the send rather than warning.
+    const unset = countUnsetLinks(bodyHtml);
+    if (unset > 0) {
+      toast({
+        title: unset === 1 ? "One button has no destination" : `${unset} buttons have no destination`,
+        description: "Click the button in the editor and set where it should go. This cannot be fixed after the campaign is sent.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSending(true);
     try {
       let campaignToSend: EmailCampaign;

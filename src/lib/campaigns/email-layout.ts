@@ -78,3 +78,16 @@ export function applyFullBleed(
 
 /** The CSS both shells use so the preview matches what is sent. */
 export const EMAIL_BODY_PADDING = `${EMAIL_TOP_PADDING}px ${EMAIL_SIDE_PADDING}px`;
+
+/**
+ * Where a call-to-action points before anyone sets it.
+ *
+ * Kept here rather than in the composer so the send guard and the block
+ * templates cannot disagree about what "unset" looks like.
+ */
+export const LINK_PLACEHOLDER = "#set-the-destination-url";
+
+/** How many links in a body still point nowhere. */
+export function countUnsetLinks(html: string): number {
+  return (html.match(new RegExp(`href="${LINK_PLACEHOLDER}"`, "g")) ?? []).length;
+}

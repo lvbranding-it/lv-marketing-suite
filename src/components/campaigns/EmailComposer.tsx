@@ -12,7 +12,7 @@ import { useEmailBlocks, useSaveEmailBlock, useDeleteEmailBlock } from "@/hooks/
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import {
-  applyFullBleed, EMAIL_BODY_PADDING, EMAIL_SIDE_PADDING, isFullBleed,
+  applyFullBleed, EMAIL_BODY_PADDING, EMAIL_SIDE_PADDING, isFullBleed, LINK_PLACEHOLDER,
 } from "@/lib/campaigns/email-layout";
 
 const SYSTEM_PROMPT = `You are an expert B2B email marketing copywriter for LV Branding, a Houston-based full-service marketing agency.
@@ -40,15 +40,15 @@ const BUILTIN_BLOCKS: BuiltinBlock[] = [
   },
   {
     name: "CTA Button",
-    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:24px 0;"><tr><td style="text-align:center;"><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;font-size:14px;letter-spacing:0.5px;">Schedule a Free Call →</a></td></tr></table>`,
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:24px 0;"><tr><td style="text-align:center;"><a href="${LINK_PLACEHOLDER}" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:600;font-size:14px;letter-spacing:0.5px;">Schedule a Free Call →</a></td></tr></table>`,
   },
   {
     name: "Image + Text",
-    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td width="42%" style="padding:0 20px 0 0;vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td><td style="vertical-align:middle;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your value proposition here. Be direct and focus on how you help the reader achieve their goal.</p><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Learn More →</a></td></tr></table>`,
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td width="42%" style="padding:0 20px 0 0;vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td><td style="vertical-align:middle;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your value proposition here. Be direct and focus on how you help the reader achieve their goal.</p><a href="${LINK_PLACEHOLDER}" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Learn More →</a></td></tr></table>`,
   },
   {
     name: "Text + Image",
-    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="vertical-align:middle;padding:0 20px 0 0;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your service or offer. Keep it concise — 2-3 sentences is ideal for email.</p><a href="https://lvbranding.com" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Get Started →</a></td><td width="42%" style="vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td></tr></table>`,
+    html: `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:20px 0;"><tr><td style="vertical-align:middle;padding:0 20px 0 0;"><h2 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#111827;">Your Headline Here</h2><p style="margin:0 0 14px;color:#4b5563;font-size:14px;line-height:1.65;">Describe your service or offer. Keep it concise — 2-3 sentences is ideal for email.</p><a href="${LINK_PLACEHOLDER}" style="display:inline-block;background:#CB2039;color:#ffffff;text-decoration:none;padding:9px 22px;border-radius:6px;font-weight:600;font-size:13px;">Get Started →</a></td><td width="42%" style="vertical-align:middle;"><img src="${IMG_PLACEHOLDER}" width="100%" style="border-radius:8px;display:block;max-width:240px;" alt=""/></td></tr></table>`,
   },
   {
     name: "3-Feature Columns",
