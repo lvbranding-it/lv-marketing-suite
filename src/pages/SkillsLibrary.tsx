@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, LayoutGrid, Rows3, ArrowRight, History } from "lucide-react";
+import { Search, X, LayoutGrid, Rows3, ArrowRight, History, Check, Compass } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -212,11 +212,18 @@ export default function SkillsLibrary() {
                   : "border-amber-200 bg-amber-50/60 hover:border-amber-300",
               )}
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background text-2xl">
-                {foundation.icon}
+              {/* An icon rather than the emoji: the cards no longer carry one,
+                  and a single emoji left on the page reads as a leftover. */}
+              <span
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                  hasContext ? "bg-muted text-muted-foreground" : "bg-amber-100 text-amber-700",
+                )}
+              >
+                {hasContext ? <Check size={18} /> : <Compass size={18} />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">
+                <span className="block text-[15px] font-semibold tracking-tight">
                   {hasContext ? t("skills.contextReady") : t("skills.contextMissing")}
                 </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">

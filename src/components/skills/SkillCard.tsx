@@ -60,34 +60,34 @@ export default function SkillCard({
     />
   );
 
-  const meta = [
-    skill.isFoundation ? t("skills.setupFirst") : null,
-    !skill.isFoundation && inputs > 0 ? inputLabel : null,
-    lastUsed
-      ? t("skills.lastRun", {
-          when: formatDistanceToNow(new Date(lastUsed), { addSuffix: true }),
-        })
-      : null,
-  ].filter(Boolean) as string[];
+  const ran = lastUsed
+    ? t("skills.lastRun", {
+        when: formatDistanceToNow(new Date(lastUsed), { addSuffix: true }),
+      })
+    : null;
+
+  // The footer carries the status that used to sit beside the title. With the
+  // emoji gone the title is the card's anchor, and nothing shares its line.
+  const footerLeft = skill.isFoundation ? t("skills.setupFirst") : inputs > 0 ? inputLabel : null;
+  const footerRight = ran ?? (!skill.isFoundation && !hasContext ? t("skills.noContext") : null);
 
   if (layout === "list") {
     return (
       <button onClick={open} className={cn(shell, "flex items-center gap-3 rounded-lg py-2.5 pl-5 pr-3")}>
         {rail}
-        <span className="text-xl leading-none shrink-0">{skill.icon}</span>
         {/* Stacked on a phone, side by side once there is room. Hiding the
             description below sm left a list of bare names, which is the one
             thing a denser view must not cost. */}
-        <span className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-2">
-          <span className="block truncate text-sm font-semibold leading-tight transition-colors group-hover:text-[#CB2039] sm:shrink-0">
+        <span className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-2.5">
+          <span className="block truncate text-[15px] font-semibold leading-tight tracking-tight transition-colors group-hover:text-[#CB2039] sm:shrink-0">
             {localized.name}
           </span>
           <span className="block truncate text-xs text-muted-foreground">
             {localized.description}
           </span>
         </span>
-        {meta.length > 0 && (
-          <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">{meta[0]}</span>
+        {footerLeft && (
+          <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">{footerLeft}</span>
         )}
         <ChevronRight
           size={16}
@@ -100,41 +100,26 @@ export default function SkillCard({
   return (
     <button onClick={open} className={cn(shell, "flex h-full flex-col rounded-xl p-4 pl-5")}>
       {rail}
-      <span className="mb-2.5 flex items-start justify-between gap-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-xl leading-none">
-          {skill.icon}
-        </span>
-        {skill.isFoundation ? (
-          <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-            {t("skills.setupFirst")}
-          </span>
-        ) : (
-          !hasContext && (
-            <span className="text-[10px] font-medium text-muted-foreground/60">
-              {t("skills.noContext")}
-            </span>
-          )
-        )}
-      </span>
-
-      <h3 className="mb-1 text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-[#CB2039]">
+      <h3 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-[#CB2039]">
         {localized.name}
       </h3>
-      <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+      <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
         {localized.description}
       </p>
 
       {/* Pushed to the bottom so cards of differing description length still
           line their footers up, which is what makes a grid scannable. */}
-      <span className="mt-auto flex items-center gap-2 pt-3 text-[11px] text-muted-foreground">
-        {!skill.isFoundation && inputs > 0 && <span>{inputLabel}</span>}
-        {lastUsed && (
-          <span className="ml-auto truncate text-muted-foreground/70">
-            {t("skills.lastRun", {
-              when: formatDistanceToNow(new Date(lastUsed), { addSuffix: true }),
-            })}
-          </span>
-        )}
+      <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-[11px] text-muted-foreground">
+        <span className="truncate">
+          {skill.isFoundation && footerLeft ? (
+            <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+              {footerLeft}
+            </span>
+          ) : (
+            footerLeft
+          )}
+        </span>
+        <span className="shrink-0 truncate text-muted-foreground/70">{footerRight}</span>
       </span>
     </button>
   );
