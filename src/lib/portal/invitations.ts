@@ -1,4 +1,40 @@
 const storageKey = "lv-portal-invitation";
+
+/**
+ * Where a pending invitation waits while the invited person signs in.
+ *
+ * It used to wait in sessionStorage, which is scoped to a single tab. But the
+ * sign-in link arrives by email, and a mail client opens it in a *new* tab — so
+ * the tab that ended up holding a signed-in session was never the tab holding
+ * the token. A genuinely new ambassador was therefore told to "return to the tab
+ * with your invitation" instead of being let in, and the only people who ever
+ * got through were the ones already signed in when they clicked, who never made
+ * the round trip at all.
+ *
+ * localStorage is shared across the tabs of one browser, which is exactly the
+ * span that round trip needs. Keeping the token there is sound because it is not
+ * a credential on its own: accepting also requires being signed in as the
+ * invited address with a confirmed email, so possession of the token without the
+ * mailbox gets nobody in. It is single-use, expires with the invitation, and is
+ * cleared the moment it is redeemed.
+ *
+ * sessionStorage stays alongside it for a browser that refuses localStorage —
+ * Safari with website data blocked throws on the write — where a single-tab
+ * accept is still better than none.
+ */
+function invitationStores(): Storage[] {
+  const found: Storage[] = [];
+  for (const open of [() => localStorage, () => sessionStorage]) {
+    try {
+      const store = open();
+      store.getItem(storageKey);
+      found.push(store);
+    } catch {
+      /* This browser refuses that store; try the other one. */
+    }
+  }
+  return found;
+}
 export function validInviteToken(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }
@@ -28,13 +64,16 @@ export function readPortalInvitation(): string {
   const fragment = new URLSearchParams(window.location.hash.slice(1));
   const incoming = fragment.get("invite");
   if (validInviteToken(incoming)) {
-    try {
-      sessionStorage.setItem(
-        storageKey,
-        JSON.stringify({ token: incoming, expires: Date.now() + 7 * 86400000 }),
-      );
-    } catch {
-      /* This tab can still accept without persistence. */
+    const record = JSON.stringify({
+      token: incoming,
+      expires: Date.now() + 7 * 86400000,
+    });
+    for (const store of invitationStores()) {
+      try {
+        store.setItem(storageKey, record);
+      } catch {
+        /* This tab can still accept without persistence. */
+      }
     }
     window.history.replaceState(
       window.history.state,
@@ -43,19 +82,23 @@ export function readPortalInvitation(): string {
     );
     return incoming;
   }
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
-    if (saved?.expires > Date.now() && validInviteToken(saved.token))
-      return saved.token;
-  } catch {
-    /* Invalid or unavailable tab storage. */
+  for (const store of invitationStores()) {
+    try {
+      const saved = JSON.parse(store.getItem(storageKey) ?? "null");
+      if (saved?.expires > Date.now() && validInviteToken(saved.token))
+        return saved.token;
+    } catch {
+      /* Invalid or unavailable storage; try the other one. */
+    }
   }
   return "";
 }
 export function clearPortalInvitation() {
-  try {
-    sessionStorage.removeItem(storageKey);
-  } catch {
-    /* Tab storage may be disabled. */
+  for (const store of invitationStores()) {
+    try {
+      store.removeItem(storageKey);
+    } catch {
+      /* Storage may be disabled. */
+    }
   }
 }
