@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchBrandSpeech } from "@/lib/portal/speech";
-import { pickVoice, speechText, voiceList } from "@/lib/portal/voice";
+import { pickVoice, readDictation, speechText, voiceList } from "@/lib/portal/voice";
 
 interface Recognition {
  lang:string; continuous:boolean; interimResults:boolean;
@@ -11,6 +11,9 @@ interface Recognition {
  start():void; abort():void;
 }
 type VoiceWindow=Window & {SpeechRecognition?:new()=>Recognition;webkitSpeechRecognition?:new()=>Recognition};
+
+/** How long an open microphone may hear nothing before it closes itself. */
+const SILENCE_LIMIT_MS=45_000;
 
 /**
  * @param org Workspace the speaker belongs to. Without it the branded voice is
@@ -24,14 +27,27 @@ export function useAdvisorVoice(language:string,active:boolean,onTranscript:(tex
  // slow request that lands after stop cannot start talking over the silence.
  const speechGeneration=useRef(0);
  const transcript=useRef(onTranscript);transcript.current=onTranscript;
+ // How many result segments have already been handed over. Under continuous
+ // recognition the browser resends every settled segment on each event, so
+ // without this the message would gain the same sentence again and again.
+ const delivered=useRef(0);
+ // Closing at the first pause used to mean a microphone could never be left
+ // open by accident. Holding it open until it is switched off gives that back
+ // as a deliberate limit: prolonged silence closes it. Long enough that a pause
+ // for thought is safe, short enough that a forgotten microphone is not.
+ const silence=useRef<number|undefined>(undefined);
  const [listening,setListening]=useState(false),[speaking,setSpeaking]=useState(false),[error,setError]=useState("");
+ /** Words heard but not yet settled, shown live so dictation looks alive. */
+ const [interim,setInterim]=useState("");
  const supported=typeof window!=="undefined";
  const Constructor=supported?((window as VoiceWindow).SpeechRecognition??(window as VoiceWindow).webkitSpeechRecognition):undefined;
  const canSpeak=supported&&"speechSynthesis" in window&&"SpeechSynthesisUtterance" in window;
  const stopListening=useCallback(()=>{
+  window.clearTimeout(silence.current);silence.current=undefined;
   const r=recognition.current;recognition.current=null;
   if(r){r.onresult=null;r.onerror=null;r.onend=null;r.abort();}
   setListening(false);
+  setInterim("");
  },[]);
  const stopSpeaking=useCallback(()=>{
   speechGeneration.current++;
@@ -59,16 +75,31 @@ export function useAdvisorVoice(language:string,active:boolean,onTranscript:(tex
  const listen=()=>{
   if(!Constructor||!active)return;
   stop();setError("");
+  delivered.current=0;setInterim("");
   const r=new Constructor();recognition.current=r;
-  r.lang=language==="es"?"es-US":"en-US";r.continuous=false;r.interimResults=false;
+  r.lang=language==="es"?"es-US":"en-US";
+  // The microphone stays open until it is switched off. Ending at the first
+  // pause meant a thought longer than one sentence was cut in half and the
+  // button had to be pressed again, which is the opposite of dictating.
+  r.continuous=true;
+  // Unsettled words are reported as they are heard, so the message fills in
+  // while someone talks instead of appearing all at once at the end.
+  r.interimResults=true;
+  const waitForSpeech=()=>{
+   window.clearTimeout(silence.current);
+   silence.current=window.setTimeout(()=>{if(recognition.current===r)stopListening();},SILENCE_LIMIT_MS);
+  };
   r.onresult=event=>{
    if(recognition.current!==r)return;
-   const text=Array.from(event.results).filter(v=>v.isFinal).map(v=>v[0].transcript).join(" ");
-   if(text)transcript.current(text);
+   waitForSpeech();
+   const heard=readDictation(event.results,delivered.current);
+   delivered.current=heard.delivered;
+   setInterim(heard.pending);
+   if(heard.settled)transcript.current(heard.settled);
   };
   r.onerror=event=>{if(recognition.current===r)setError(event.error==="not-allowed"||event.error==="service-not-allowed"?"voicePermission":"voiceError");};
-  r.onend=()=>{if(recognition.current===r){recognition.current=null;setListening(false);}};
-  try{r.start();setListening(true);}catch{stopListening();setError("voiceError");}
+  r.onend=()=>{if(recognition.current===r){recognition.current=null;setListening(false);setInterim("");}};
+  try{r.start();setListening(true);waitForSpeech();}catch{stopListening();setError("voiceError");}
  };
  /** The browser's own engine: always available, and the floor under everything. */
  const speakWithSystemVoice=(clean:string)=>{
@@ -111,5 +142,5 @@ export function useAdvisorVoice(language:string,active:boolean,onTranscript:(tex
    element.play().catch(()=>{if(audio.current===element){release();speakWithSystemVoice(clean);}});
   });
  };
- return {canListen:!!Constructor,canSpeak,listening,speaking,error,listen,speak,stop,stopListening,stopSpeaking};
+ return {canListen:!!Constructor,canSpeak,listening,interim,speaking,error,listen,speak,stop,stopListening,stopSpeaking};
 }

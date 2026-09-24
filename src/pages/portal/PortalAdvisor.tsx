@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { loadAdvisorChats, saveAdvisorChat, type AdvisorSession } from "@/hooks/usePortal";
+import { appendDictation } from "@/lib/portal/voice";
 import { runSkillStream, type Message } from "@/lib/claude";
 import ChatMessageText from "@/components/agents/ChatMessageText";
 import { Button } from "@/components/ui/button";
@@ -68,8 +69,19 @@ export default function PortalAdvisor({
   const [autoRead,setAutoRead]=useState(false);
   const autoReadRef=useRef(false);
   // The preview has no workspace to bill against, so it keeps the system voice.
-  const voice=useAdvisorVoice(language,active,text=>setInput(v=>(v+(v.trim()?" ":"")+text).slice(0,8000)),preview?undefined:org);
+  const voice=useAdvisorVoice(language,active,text=>setInput(v=>appendDictation(v,text).slice(0,8000)),preview?undefined:org);
   const voiceRef=useRef(voice);voiceRef.current=voice;
+  // What the composer shows: the message so far plus the words still being
+  // heard. Speech lands in the box it will be sent from rather than arriving in
+  // a lump when the microphone closes, and because the box is the whole message,
+  // sending mid-sentence sends what the person can actually see.
+  const dictated = voice.listening ? appendDictation(input, voice.interim) : input;
+  /** Keeps the unsettled words rather than discarding them with the microphone. */
+  const finishDictation = () => {
+    const words = voice.interim.trim();
+    voice.stopListening();
+    if (words) setInput((v) => appendDictation(v, words).slice(0, 8000));
+  };
   const controller = useRef<AbortController | null>(null),
     generation = useRef(0),
     end = useRef<HTMLDivElement>(null);
@@ -130,9 +142,12 @@ export default function PortalAdvisor({
   }, [messages, input, sessionId, org, preview]);
   const send = async (e: FormEvent) => {
     e.preventDefault();
-    if (preview || busy || voice.listening || !input.trim()) return;
+    // Sending while the microphone is open is not a mistake to block; it is
+    // someone who has finished talking. Close the microphone and send what they
+    // are looking at, unsettled last words included.
+    if (preview || busy || !dictated.trim()) return;
     voice.stop();
-    const message: Message = { role: "user", content: input.trim() };
+    const message: Message = { role: "user", content: dictated.trim() };
     const history = messages.slice(-12);
     while (JSON.stringify(history).length > 32000) history.shift();
     const sequence = ++generation.current;
@@ -292,20 +307,13 @@ export default function PortalAdvisor({
               {error}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="outline" disabled={!voice.canListen||busy} onClick={()=>voice.listening?voice.stopListening():voice.listen()} className="gap-2"><Mic size={15}/>{p(voice.listening?"stopListening":"speakMessage")}</Button>
-            {voice.canSpeak&&<label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={autoRead} onChange={e=>{setAutoRead(e.target.checked);autoReadRef.current=e.target.checked;if(!e.target.checked)voice.stopSpeaking();}}/>{p("autoRead")}</label>}
-            {voice.speaking&&<Button type="button" variant="outline" onClick={voice.stopSpeaking}>{p("stopReading")}</Button>}
-          </div>
-          <p className="text-xs text-muted-foreground">{p(voice.canListen?"voiceHelp":"voiceUnavailable")}</p>
-          {voice.listening&&<p role="status">{p("listening")}</p>}
           {voice.error&&<p role="alert" className="text-sm text-destructive">{p(voice.error)}</p>}
           <Textarea
-            className="border-0 shadow-none resize-none focus-visible:ring-0 text-base p-1"
+            className={`border-0 shadow-none resize-none focus-visible:ring-0 text-base p-1 ${voice.listening?"text-muted-foreground":""}`}
             readOnly={voice.listening}
             aria-label={p("advisorMessage")}
-            placeholder={p("advisorPlaceholder")}
-            value={input}
+            placeholder={p(voice.listening?"listening":"advisorPlaceholder")}
+            value={dictated}
             onChange={(e) => setInput(e.target.value)}
             maxLength={8000}
             rows={2}
@@ -317,9 +325,50 @@ export default function PortalAdvisor({
             }}
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground max-w-xl">
-              {p(preview ? "advisorPreview" : "advisorRetention")}
-            </p>
+            <div className="flex items-center gap-2">
+              {/* The ring is the recording light: it says the microphone is
+                  genuinely open, which a label alone never managed to. */}
+              <span className="relative inline-flex">
+                {voice.listening && (
+                  <span aria-hidden className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-[#CB2039]/40" />
+                )}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={voice.listening ? "default" : "outline"}
+                  disabled={!voice.canListen || busy}
+                  aria-pressed={voice.listening}
+                  aria-label={p(voice.listening ? "stopListening" : "speakMessage")}
+                  title={p(voice.listening ? "stopListening" : "speakMessage")}
+                  onClick={() => (voice.listening ? finishDictation() : voice.listen())}
+                  className={`relative h-11 w-11 rounded-full ${voice.listening ? "bg-[#CB2039] text-white hover:bg-[#CB2039]/90" : ""}`}
+                >
+                  {voice.listening ? <Square size={15} className="fill-current" /> : <Mic size={18} />}
+                </Button>
+              </span>
+              {voice.listening ? (
+                <span role="status" className="flex items-center gap-1.5 text-xs font-medium text-[#CB2039]">
+                  <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#CB2039]" />
+                  {p("listening")}
+                </span>
+              ) : (
+                voice.canSpeak && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={autoRead ? "secondary" : "ghost"}
+                    aria-pressed={autoRead}
+                    aria-label={p("autoRead")}
+                    title={p("autoRead")}
+                    onClick={()=>{const next=!autoRead;setAutoRead(next);autoReadRef.current=next;if(!next)voice.stopSpeaking();}}
+                    className="gap-2 rounded-full text-muted-foreground aria-pressed:text-foreground"
+                  >
+                    <Volume2 size={15}/><span className="hidden sm:inline">{p("autoRead")}</span>
+                  </Button>
+                )
+              )}
+              {voice.speaking&&<Button type="button" size="sm" variant="ghost" className="gap-2 rounded-full" onClick={voice.stopSpeaking}><Square size={13}/>{p("stopReading")}</Button>}
+            </div>
             {busy ? (
               <Button
                 variant="outline"
@@ -333,7 +382,7 @@ export default function PortalAdvisor({
             ) : (
               <Button
                 type="submit"
-                disabled={preview || voice.listening || !input.trim()}
+                disabled={preview || !dictated.trim()}
                 className="gap-2"
               >
                 <Send size={15} />
@@ -341,6 +390,11 @@ export default function PortalAdvisor({
               </Button>
             )}
           </div>
+          <p className="text-xs text-muted-foreground max-w-xl">
+            {voice.listening
+              ? p("listeningHelp")
+              : `${p(preview ? "advisorPreview" : "advisorRetention")} ${p(voice.canListen ? "voiceHelp" : "voiceUnavailable")}`}
+          </p>
         </form>
       </div>
       </div>

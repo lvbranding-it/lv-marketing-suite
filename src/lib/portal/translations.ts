@@ -24,13 +24,15 @@ export const portalTranslations = {
     "portal.chatQuestion": "What do you want to build today?",
 
     "portal.readAloud": "Read aloud",
-    "portal.speakMessage": "Speak message",
-    "portal.stopListening": "Stop microphone",
-    "portal.autoRead": "Read replies automatically",
+    "portal.speakMessage": "Speak your message",
+    "portal.stopListening": "Stop the microphone",
+    "portal.autoRead": "Read replies aloud",
     "portal.stopReading": "Stop reading",
     "portal.listening": "Listening…",
+    "portal.listeningHelp":
+      "Your words appear as you speak. Press stop when you finish, then review before sending.",
     "portal.voiceHelp":
-      "Speak, then review the text and press Send. Your browser may process audio through its speech provider.",
+      "You can speak your message instead of typing. Your browser may process audio through its speech provider.",
     "portal.voiceUnavailable":
       "Speech input is unavailable in this browser. You can still type your message.",
     "portal.voicePermission":
@@ -41,14 +43,17 @@ export const portalTranslations = {
       "Audio could not play. Try Read aloud again or read the response on screen.",
 
     "portal.commissions": "Commissions",
-    "portal.advisor": "LV Branding Advisor",
-    "portal.openAdvisor": "Open advisor",
+    // BOSS is the name ambassadors and business developers use for the LV
+    // Branding advisor. It is a name, not a claim of authority or a person, and
+    // the same word in both languages.
+    "portal.advisor": "BOSS",
+    "portal.openAdvisor": "Open BOSS",
     "portal.advisorSubtitle":
-      "Your strategy partner, before the next conversation.",
+      "Your LV Branding strategy partner, before the next conversation.",
     "portal.newConversation": "New conversation",
     "portal.generalAdvisor": "General advice",
     "portal.noLeadContext": "No lead connected",
-    "portal.advisorConversation": "Advisor conversation",
+    "portal.advisorConversation": "Conversation with BOSS",
     "portal.advisorWelcome": "How can I help you prepare?",
     "portal.advisorWelcomeBody":
       "Explore branding, prepare discovery questions, practice conversations, or draft outreach. You can start here without a lead.",
@@ -57,10 +62,10 @@ export const portalTranslations = {
     "portal.advisorPractice":
       "Practice handling a prospect’s objection with me.",
     "portal.advisorOutreach": "Help me draft a warm introduction.",
-    "portal.advisorError": "The advisor could not respond. Please try again.",
+    "portal.advisorError": "BOSS could not respond. Please try again.",
     "portal.advisorThinking": "Preparing your response…",
     "portal.advisorMessage": "Your message",
-    "portal.advisorPlaceholder": "Ask your LV Branding advisor…",
+    "portal.advisorPlaceholder": "Ask BOSS…",
     "portal.advisorPreview": "Design preview. Live AI responses are disabled.",
     "portal.advisorRetention":
       "This conversation is saved to your account and visible only to you. Review drafts before using them.",
@@ -306,13 +311,15 @@ export const portalTranslations = {
     "portal.chatQuestion": "¿Qué quieres construir hoy?",
 
     "portal.readAloud": "Leer en voz alta",
-    "portal.speakMessage": "Dictar mensaje",
-    "portal.stopListening": "Detener micrófono",
-    "portal.autoRead": "Leer respuestas automáticamente",
+    "portal.speakMessage": "Dicta tu mensaje",
+    "portal.stopListening": "Detener el micrófono",
+    "portal.autoRead": "Leer respuestas en voz alta",
     "portal.stopReading": "Detener lectura",
     "portal.listening": "Escuchando…",
+    "portal.listeningHelp":
+      "Tus palabras aparecen mientras hablas. Pulsa detener cuando termines y revisa antes de enviar.",
     "portal.voiceHelp":
-      "Habla, revisa el texto y pulsa Enviar. Tu navegador puede procesar el audio mediante su proveedor de voz.",
+      "Puedes dictar tu mensaje en lugar de escribirlo. Tu navegador puede procesar el audio mediante su proveedor de voz.",
     "portal.voiceUnavailable":
       "La entrada de voz no está disponible en este navegador. Puedes escribir tu mensaje.",
     "portal.voicePermission":
@@ -323,14 +330,15 @@ export const portalTranslations = {
       "No se pudo reproducir el audio. Intenta Leer en voz alta o lee la respuesta en pantalla.",
 
     "portal.commissions": "Comisiones",
-    "portal.advisor": "Asesor de LV Branding",
-    "portal.openAdvisor": "Abrir asesor",
+    // BOSS se queda igual en español: es un nombre propio, no una traducción.
+    "portal.advisor": "BOSS",
+    "portal.openAdvisor": "Abrir BOSS",
     "portal.advisorSubtitle":
-      "Tu compañero de estrategia antes de la próxima conversación.",
+      "Tu compañero de estrategia de LV Branding, antes de la próxima conversación.",
     "portal.newConversation": "Nueva conversación",
     "portal.generalAdvisor": "Asesoría general",
     "portal.noLeadContext": "Sin lead conectado",
-    "portal.advisorConversation": "Conversación con el asesor",
+    "portal.advisorConversation": "Conversación con BOSS",
     "portal.advisorWelcome": "¿Cómo puedo ayudarte a prepararte?",
     "portal.advisorWelcomeBody":
       "Explora branding, prepara preguntas, practica conversaciones o redacta mensajes. Puedes empezar sin un lead.",
@@ -339,10 +347,10 @@ export const portalTranslations = {
       "Ayúdame a preparar preguntas de descubrimiento.",
     "portal.advisorPractice": "Practica conmigo cómo responder a una objeción.",
     "portal.advisorOutreach": "Ayúdame a redactar una presentación cordial.",
-    "portal.advisorError": "El asesor no pudo responder. Inténtalo de nuevo.",
+    "portal.advisorError": "BOSS no pudo responder. Inténtalo de nuevo.",
     "portal.advisorThinking": "Preparando tu respuesta…",
     "portal.advisorMessage": "Tu mensaje",
-    "portal.advisorPlaceholder": "Pregunta a tu asesor de LV Branding…",
+    "portal.advisorPlaceholder": "Pregúntale a BOSS…",
     "portal.advisorPreview":
       "Vista de diseño. Las respuestas de IA están deshabilitadas.",
     "portal.advisorRetention":

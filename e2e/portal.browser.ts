@@ -151,9 +151,9 @@ test("invitation entry removes the bearer token from the URL and reuses sign-in"
 test("advisor opens without a lead and preserves the draft between tabs", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Open advisor", exact: true }).click();
+  await page.getByRole("button", { name: "Open BOSS", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "LV Branding Advisor", exact: true }),
+    page.getByRole("heading", { name: "BOSS", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText(/No lead connected/),
@@ -171,7 +171,7 @@ test("advisor opens without a lead and preserves the draft between tabs", async 
     page.getByRole("button", { name: "Send message", exact: true }),
   ).toBeDisabled();
   await page.getByRole("button", {name:"Dashboard", exact:true}).click();
-  await page.getByRole("button", {name:"LV Branding Advisor", exact:true}).click();
+  await page.getByRole("button", {name:"BOSS", exact:true}).click();
   await expect(page.getByRole("textbox", {name:"Your message", exact:true})).toHaveValue("Help me prepare discovery questions.");
   await page.screenshot({
     path: "/private/tmp/lv-portal-advisor.png",
@@ -200,8 +200,8 @@ test("voice dictation fills an editable draft and stops when leaving advisor",as
   (window as any).SpeechRecognition=Recognition;
  });
  await page.reload();
- await page.getByRole("button",{name:"Open advisor",exact:true}).click();
- await page.getByRole("button",{name:"Speak message",exact:true}).click();
+ await page.getByRole("button",{name:"Open BOSS",exact:true}).click();
+ await page.getByRole("button",{name:"Speak your message",exact:true}).click();
  await expect(page.getByText("Listening…",{exact:true})).toBeVisible();
  await page.evaluate(()=>{
   const r=(window as any).testRecognition;
@@ -210,7 +210,7 @@ test("voice dictation fills an editable draft and stops when leaving advisor",as
  });
  await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toHaveValue("Help me introduce LV Branding");
  await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toBeEditable();
- await page.getByRole("button",{name:"Speak message",exact:true}).click();
+ await page.getByRole("button",{name:"Speak your message",exact:true}).click();
  await page.getByRole("button",{name:"Dashboard",exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>(window as any).voiceAborted)).toBe(true);
 });
@@ -221,14 +221,14 @@ test("unsupported voice input keeps text chat available",async({page})=>{
   Object.defineProperty(window,"webkitSpeechRecognition",{value:undefined,configurable:true});
  });
  await page.reload();
- await page.getByRole("button",{name:"Open advisor",exact:true}).click();
- await expect(page.getByRole("button",{name:"Speak message",exact:true})).toBeDisabled();
+ await page.getByRole("button",{name:"Open BOSS",exact:true}).click();
+ await expect(page.getByRole("button",{name:"Speak your message",exact:true})).toBeDisabled();
  await expect(page.getByRole("textbox",{name:"Your message",exact:true})).toBeEditable();
 });
 
 test("redesigned chat switches session drafts and fits mobile",async({page})=>{
  await page.setViewportSize({width:390,height:844});
- await page.getByRole("button",{name:"Open advisor",exact:true}).click();
+ await page.getByRole("button",{name:"Open BOSS",exact:true}).click();
  await page.getByRole("textbox",{name:"Your message",exact:true}).fill("First conversation");
  await page.getByRole("button",{name:"Chat history",exact:true}).click();
  await page.getByRole("button",{name:"New conversation",exact:true}).click();
@@ -252,8 +252,8 @@ test("portal menu folds to an icon rail and expands without losing navigation",a
  await page.getByRole("button",{name:"Collapse menu",exact:true}).click();
  const expand=page.getByRole("button",{name:"Expand menu",exact:true});
  await expect(expand).toHaveAttribute("aria-expanded","false");
- await page.getByRole("button",{name:"LV Branding Advisor",exact:true}).click();
- await expect(page.getByRole("heading",{name:"LV Branding Advisor",exact:true})).toBeVisible();
+ await page.getByRole("button",{name:"BOSS",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"BOSS",exact:true})).toBeVisible();
  expect((await page.locator("main").boundingBox())!.x).toBe(64);
  await expand.click();
  expect((await page.locator("main").boundingBox())!.x).toBe(256);

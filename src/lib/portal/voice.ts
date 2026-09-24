@@ -27,6 +27,68 @@ export function speechText(text: string, language = "en"): string {
     .trim();
 }
 
+/** One segment of speech as a recognition engine reports it. */
+export interface SpeechResult {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+/** What a recognition event adds to the message, and what is still being heard. */
+export interface Dictation {
+  /** Settled words to append to the message, empty when nothing new settled. */
+  settled: string;
+  /** Words still being heard, shown live and replaced by the next event. */
+  pending: string;
+  /** How many segments have now been handed over; feeds the next call. */
+  delivered: number;
+}
+
+/**
+ * Reads one recognition event.
+ *
+ * A continuous session reports every segment it has ever settled on, every time
+ * anything changes. Appending whatever the event carried therefore repeated the
+ * same sentence on each update, so `delivered` records how far the message has
+ * already consumed and only later segments are handed over.
+ *
+ * Segments that are not yet final are returned separately: they are a preview
+ * that the next event will revise, so they belong on screen but never in the
+ * message itself.
+ */
+export function readDictation(
+  results: ArrayLike<SpeechResult>,
+  delivered: number,
+): Dictation {
+  const settled: string[] = [];
+  let pending = "";
+  let seen = delivered;
+  Array.from(results).forEach((result, index) => {
+    const text = result[0].transcript.trim();
+    if (!result.isFinal) {
+      if (text) pending += (pending ? " " : "") + text;
+      return;
+    }
+    if (index < delivered) return;
+    seen = Math.max(seen, index + 1);
+    if (text) settled.push(text);
+  });
+  return { settled: settled.join(" "), pending, delivered: seen };
+}
+
+/**
+ * Joins dictated words onto a message without doubling or losing the space.
+ *
+ * The end of the message is trimmed before the join because each append leaves
+ * the previous one's spacing behind; without it a long dictation accumulates a
+ * wider and wider gap between every phrase.
+ */
+export function appendDictation(message: string, addition: string): string {
+  const words = addition.trim();
+  if (!words) return message;
+  const kept = message.replace(/\s+$/, "");
+  return kept ? `${kept} ${words}` : words;
+}
+
 /**
  * Voices that exist for comic effect. macOS lists them alongside the real ones,
  * and picking the first match for a language meant one platform reordering

@@ -1,5 +1,71 @@
 import { describe, expect, it } from "vitest";
-import { pickVoice, speechText } from "./voice";
+import {
+  appendDictation,
+  pickVoice,
+  readDictation,
+  speechText,
+  type SpeechResult,
+} from "./voice";
+
+const said = (transcript: string, isFinal: boolean): SpeechResult => ({
+  isFinal,
+  0: { transcript },
+});
+
+describe("reading speech as it arrives", () => {
+  it("shows unsettled words without putting them in the message", () => {
+    const heard = readDictation([said("help me intro", false)], 0);
+    expect(heard).toEqual({ settled: "", pending: "help me intro", delivered: 0 });
+  });
+
+  /**
+   * A continuous session re-reports every settled segment on each event, so a
+   * reader that trusts the event alone repeats whole sentences into the message.
+   */
+  it("hands over each settled segment exactly once", () => {
+    const first = readDictation([said("Help me introduce LV Branding", true)], 0);
+    expect(first.settled).toBe("Help me introduce LV Branding");
+
+    const second = readDictation(
+      [said("Help me introduce LV Branding", true), said("to a restaurant owner", true)],
+      first.delivered,
+    );
+    expect(second.settled).toBe("to a restaurant owner");
+
+    const quiet = readDictation(
+      [said("Help me introduce LV Branding", true), said("to a restaurant owner", true)],
+      second.delivered,
+    );
+    expect(quiet.settled).toBe("");
+  });
+
+  it("separates what settled from what is still being heard", () => {
+    const heard = readDictation([said("Draft an introduction", true), said("for a clinic", false)], 0);
+    expect(heard.settled).toBe("Draft an introduction");
+    expect(heard.pending).toBe("for a clinic");
+    expect(heard.delivered).toBe(1);
+  });
+
+  it("ignores segments that carried no words", () => {
+    expect(readDictation([said("   ", true)], 0)).toEqual({
+      settled: "",
+      pending: "",
+      delivered: 1,
+    });
+  });
+});
+
+describe("adding dictated words to a message", () => {
+  it.each([
+    ["", "Hello there", "Hello there"],
+    ["Hello", "there", "Hello there"],
+    ["Hello ", "there", "Hello there"],
+    ["Hello", "   ", "Hello"],
+    ["", "", ""],
+  ])("joins %o and %o", (message, addition, expected) =>
+    expect(appendDictation(message, addition)).toBe(expected),
+  );
+});
 
 const voice = (name: string, lang: string) =>
   ({ name, lang, localService: true, default: false, voiceURI: name }) as SpeechSynthesisVoice;
