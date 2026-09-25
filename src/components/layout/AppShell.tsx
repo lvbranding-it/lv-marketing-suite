@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
+  Compass,
   LayoutDashboard,
   Zap,
   FolderOpen,
@@ -79,6 +80,7 @@ const NAV_ITEMS = [
   { to: "/photo-sessions",    labelKey: "nav.photoSessions",     icon: Camera },
   { to: "/files", labelKey: "nav.fileDrop", icon: FolderDown },
   { to: "/history", labelKey: "nav.history", icon: History },
+  { to: "/about", labelKey: "nav.about", icon: Compass },
 ];
 
 interface SidebarContentProps {

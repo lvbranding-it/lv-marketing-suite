@@ -14,6 +14,7 @@ const AmbassadorPortal = lazy(() => import("@/pages/portal/Portal"));
 const Auth                 = lazy(() => import("@/pages/Auth"));
 const Dashboard            = lazy(() => import("@/pages/Dashboard"));
 const SkillsLibrary        = lazy(() => import("@/pages/SkillsLibrary"));
+const About                = lazy(() => import("@/pages/About"));
 const SkillRunnerPage      = lazy(() => import("@/pages/SkillRunnerPage"));
 const Projects             = lazy(() => import("@/pages/Projects"));
 const ProjectDetail        = lazy(() => import("@/pages/ProjectDetail"));
@@ -430,6 +431,8 @@ function AppRoutes() {
         }
       />
       {/* Event Experiences — admin (protected) */}
+      <Route path="/about" element={<ProtectedRoute><Suspense fallback={null}><About /></Suspense></ProtectedRoute>} />
+
       <Route path="/event-experiences" element={<ProtectedRoute><Suspense fallback={null}><EventExperiences /></Suspense></ProtectedRoute>} />
       <Route path="/event-experiences/:eventId" element={<ProtectedRoute><Suspense fallback={null}><EventExperienceEditor /></Suspense></ProtectedRoute>} />
       <Route path="/event-experiences/:eventId/photos" element={<ProtectedRoute><Suspense fallback={null}><EventPhotoModeration /></Suspense></ProtectedRoute>} />
