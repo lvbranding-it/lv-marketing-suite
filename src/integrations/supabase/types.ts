@@ -968,6 +968,8 @@ export type Database = {
           position: number;
           is_archived: boolean;
           metadata: Json;
+          document_html: string | null;
+          document_text: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -982,6 +984,8 @@ export type Database = {
           position?: number;
           is_archived?: boolean;
           metadata?: Json;
+          document_html?: string | null;
+          document_text?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -996,6 +1000,8 @@ export type Database = {
           position?: number;
           is_archived?: boolean;
           metadata?: Json;
+          document_html?: string | null;
+          document_text?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1043,7 +1049,7 @@ export type Database = {
           id: string;
           org_id: string;
           page_id: string;
-          category: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          category: "logo" | "photo" | "video" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
           file_name: string;
           file_size: number;
           mime_type: string | null;
@@ -1057,7 +1063,7 @@ export type Database = {
           id?: string;
           org_id: string;
           page_id: string;
-          category?: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          category?: "logo" | "photo" | "video" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
           file_name: string;
           file_size?: number;
           mime_type?: string | null;
@@ -1071,7 +1077,7 @@ export type Database = {
           id?: string;
           org_id?: string;
           page_id?: string;
-          category?: "logo" | "photo" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
+          category?: "logo" | "photo" | "video" | "pdf" | "palette" | "design_system" | "calendar" | "reference";
           file_name?: string;
           file_size?: number;
           mime_type?: string | null;

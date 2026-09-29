@@ -1,35 +1,32 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   BookOpen,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
   Download,
+  Eye,
   FileText,
   FileImage,
   FileUp,
+  FileVideo,
   FolderTree,
-  GripVertical,
-  Heading1,
-  Heading2,
   Info,
   Layers3,
-  List,
   Loader2,
   MoreHorizontal,
   MoveRight,
   Palette,
   Paperclip,
+  Play,
   Plus,
-  Quote,
+  RotateCw,
   Search,
   Trash2,
-  Type,
   X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -62,60 +59,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { Json, WorkspaceAsset, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
+import type { Json, WorkspaceAsset } from "@/integrations/supabase/types";
 import {
-  blockText,
-  getBlockContent,
-  useDeleteWorkspaceAsset,
-  useCreateWorkspaceBlock,
+  isVideoFile,
+  maxBytesFor,
   useCreateWorkspacePage,
-  useDeleteWorkspaceBlock,
+  useDeleteWorkspaceAsset,
   useDeleteWorkspacePage,
-  useReorderWorkspaceBlocks,
-  useUpdateWorkspaceBlock,
   useUpdateWorkspacePage,
   useUploadWorkspaceAsset,
   useWorkspaceAssetSignedUrl,
   useWorkspaceAssets,
-  useWorkspaceBlockSearch,
-  useWorkspaceBlocks,
+  useWorkspaceDocument,
   useWorkspacePages,
+  useWorkspaceSearch,
   WORKSPACE_ASSET_ACCEPT,
-  WORKSPACE_ASSET_MAX_BYTES,
-  type WorkspaceBlockContent,
-  type WorkspaceBlockType,
   type WorkspaceAssetCategory,
+  type WorkspacePageSummary,
 } from "@/hooks/useWorkspace";
+import WorkspaceDocumentEditor, { type DocumentSaveState } from "@/components/workspace/WorkspaceDocumentEditor";
+import WorkspaceAssetPreview, { assetKind, downloadWorkspaceAsset } from "@/components/workspace/WorkspaceAssetPreview";
 
-type PageNode = WorkspacePage & { children: PageNode[] };
+type PageNode = WorkspacePageSummary & { children: PageNode[] };
 
-const BLOCK_TYPES: Array<{
-  type: WorkspaceBlockType;
-  label: string;
-  icon: typeof Type;
-}> = [
-  { type: "paragraph", label: "Text", icon: Type },
-  { type: "heading", label: "Heading", icon: Heading1 },
-  { type: "subheading", label: "Subheading", icon: Heading2 },
-  { type: "bullet", label: "Bullet", icon: List },
-  { type: "todo", label: "To-do", icon: Check },
-  { type: "quote", label: "Quote", icon: Quote },
-];
-
-const BLOCK_COMMANDS: Array<{
-  type: WorkspaceBlockType;
-  label: string;
-  description: string;
-  icon: typeof Type;
-}> = [
-  { type: "paragraph", label: "Text", description: "Start with plain writing", icon: Type },
-  { type: "heading", label: "Heading", description: "Large section title", icon: Heading1 },
-  { type: "subheading", label: "Subheading", description: "Smaller section title", icon: Heading2 },
-  { type: "bullet", label: "Bullet list", description: "Capture points quickly", icon: List },
-  { type: "todo", label: "To-do", description: "Track an action item", icon: Check },
-  { type: "quote", label: "Quote", description: "Call out context or notes", icon: Quote },
-  { type: "divider", label: "Divider", description: "Separate sections", icon: Type },
-];
+const h1 = (text: string) => `<h1>${text}</h1>`;
+const h2 = (text: string) => `<h2>${text}</h2>`;
+const p = (text: string) => `<p>${text}</p>`;
+const bullets = (...items: string[]) => `<ul>${items.map((item) => `<li><p>${item}</p></li>`).join("")}</ul>`;
+const tasks = (...items: string[]) =>
+  `<ul data-type="taskList">${items.map((item) => `<li data-type="taskItem" data-checked="false"><p>${item}</p></li>`).join("")}</ul>`;
+const quote = (text: string) => `<blockquote><p>${text}</p></blockquote>`;
 
 const PAGE_TEMPLATES: Array<{
   id: string;
@@ -123,7 +96,7 @@ const PAGE_TEMPLATES: Array<{
   description: string;
   title: string;
   metadata: Json;
-  blocks: Array<{ type: WorkspaceBlockType; content: WorkspaceBlockContent }>;
+  html: string;
 }> = [
   {
     id: "campaign",
@@ -131,14 +104,14 @@ const PAGE_TEMPLATES: Array<{
     description: "Goals, audience, channels, timeline",
     title: "Campaign plan",
     metadata: { category: "campaign" },
-    blocks: [
-      { type: "heading", content: { text: "Campaign overview" } },
-      { type: "paragraph", content: { text: "Objective, target audience, core offer, and launch window." } },
-      { type: "subheading", content: { text: "Channel plan" } },
-      { type: "bullet", content: { text: "Email, social, paid, website, and partner touchpoints." } },
-      { type: "subheading", content: { text: "Launch checklist" } },
-      { type: "todo", content: { text: "Confirm final assets and owner", checked: false } },
-    ],
+    html: [
+      h1("Campaign overview"),
+      p("Objective, target audience, core offer, and launch window."),
+      h2("Channel plan"),
+      bullets("Email, social, paid, website, and partner touchpoints."),
+      h2("Launch checklist"),
+      tasks("Confirm final assets and owner"),
+    ].join(""),
   },
   {
     id: "brief",
@@ -146,14 +119,14 @@ const PAGE_TEMPLATES: Array<{
     description: "Scope, audience, approvals, constraints",
     title: "Client brief",
     metadata: { category: "client-brief" },
-    blocks: [
-      { type: "heading", content: { text: "Client context" } },
-      { type: "paragraph", content: { text: "Business background, stakeholders, and current priorities." } },
-      { type: "subheading", content: { text: "Deliverables" } },
-      { type: "bullet", content: { text: "List what the team needs to create and by when." } },
-      { type: "subheading", content: { text: "Approvals" } },
-      { type: "todo", content: { text: "Confirm reviewer, due date, and decision criteria", checked: false } },
-    ],
+    html: [
+      h1("Client context"),
+      p("Business background, stakeholders, and current priorities."),
+      h2("Deliverables"),
+      bullets("List what the team needs to create and by when."),
+      h2("Approvals"),
+      tasks("Confirm reviewer, due date, and decision criteria"),
+    ].join(""),
   },
   {
     id: "sop",
@@ -161,14 +134,13 @@ const PAGE_TEMPLATES: Array<{
     description: "Repeatable process and quality bar",
     title: "Standard operating procedure",
     metadata: { category: "sop" },
-    blocks: [
-      { type: "heading", content: { text: "Purpose" } },
-      { type: "paragraph", content: { text: "What this process is for and when the team should use it." } },
-      { type: "subheading", content: { text: "Steps" } },
-      { type: "todo", content: { text: "Step one", checked: false } },
-      { type: "todo", content: { text: "Step two", checked: false } },
-      { type: "quote", content: { text: "Definition of done: add the quality bar here." } },
-    ],
+    html: [
+      h1("Purpose"),
+      p("What this process is for and when the team should use it."),
+      h2("Steps"),
+      tasks("Step one", "Step two"),
+      quote("Definition of done: add the quality bar here."),
+    ].join(""),
   },
   {
     id: "meeting",
@@ -176,12 +148,12 @@ const PAGE_TEMPLATES: Array<{
     description: "Decisions, action items, follow-up",
     title: "Meeting summary",
     metadata: { category: "meeting" },
-    blocks: [
-      { type: "heading", content: { text: "Summary" } },
-      { type: "paragraph", content: { text: "Key decisions, context, and open questions." } },
-      { type: "subheading", content: { text: "Action items" } },
-      { type: "todo", content: { text: "Add owner and due date", checked: false } },
-    ],
+    html: [
+      h1("Summary"),
+      p("Key decisions, context, and open questions."),
+      h2("Action items"),
+      tasks("Add owner and due date"),
+    ].join(""),
   },
 ];
 
@@ -193,6 +165,7 @@ const ASSET_CATEGORIES: Array<{
 }> = [
   { value: "logo", label: "Logos", hint: "Brand marks and lockups", icon: FileImage },
   { value: "photo", label: "Photos", hint: "Campaign and client images", icon: FileImage },
+  { value: "video", label: "Videos", hint: "Clips, reels, and edits", icon: FileVideo },
   { value: "pdf", label: "PDFs", hint: "Briefs, decks, and specs", icon: FileText },
   { value: "palette", label: "Palettes", hint: "Colors, schemas, CSS, JSON", icon: Palette },
   { value: "design_system", label: "Design systems", hint: "Guides and component docs", icon: Layers3 },
@@ -200,7 +173,7 @@ const ASSET_CATEGORIES: Array<{
   { value: "reference", label: "References", hint: "Any useful support file", icon: Paperclip },
 ];
 
-function buildPageTree(pages: WorkspacePage[]) {
+function buildPageTree(pages: WorkspacePageSummary[]) {
   const nodes = new Map<string, PageNode>();
   const roots: PageNode[] = [];
 
@@ -220,8 +193,8 @@ function buildPageTree(pages: WorkspacePage[]) {
   return roots;
 }
 
-function descendantsOf(pages: WorkspacePage[], pageId: string) {
-  const childrenByParent = pages.reduce<Record<string, WorkspacePage[]>>((acc, page) => {
+function descendantsOf(pages: WorkspacePageSummary[], pageId: string) {
+  const childrenByParent = pages.reduce<Record<string, WorkspacePageSummary[]>>((acc, page) => {
     if (page.parent_id) acc[page.parent_id] = [...(acc[page.parent_id] ?? []), page];
     return acc;
   }, {});
@@ -236,22 +209,16 @@ function descendantsOf(pages: WorkspacePage[], pageId: string) {
   return ids;
 }
 
-function ancestorsOf(pages: WorkspacePage[], page: WorkspacePage | null) {
+function ancestorsOf(pages: WorkspacePageSummary[], page: WorkspacePageSummary | null) {
   if (!page) return [];
   const byId = new Map(pages.map((item) => [item.id, item]));
-  const ancestors: WorkspacePage[] = [];
+  const ancestors: WorkspacePageSummary[] = [];
   let parent = page.parent_id ? byId.get(page.parent_id) : null;
   while (parent) {
     ancestors.unshift(parent);
     parent = parent.parent_id ? byId.get(parent.parent_id) : null;
   }
   return ancestors;
-}
-
-function plainContent(content: Json) {
-  if (!content || typeof content !== "object" || Array.isArray(content)) return "";
-  const text = (content as WorkspaceBlockContent).text;
-  return typeof text === "string" ? text : "";
 }
 
 function useDebouncedValue<T>(value: T, delay = 250) {
@@ -285,14 +252,11 @@ export default function Workspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
-  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
-  const [dragOverBlockId, setDragOverBlockId] = useState<string | null>(null);
-  const [pageToDelete, setPageToDelete] = useState<WorkspacePage | null>(null);
+  const [pageToDelete, setPageToDelete] = useState<WorkspacePageSummary | null>(null);
   const debouncedSearch = useDebouncedValue(search.trim(), 250);
 
   const { data: pages = [], isLoading: pagesLoading } = useWorkspacePages();
-  const { data: searchBlocks = [], isFetching: searchLoading } = useWorkspaceBlockSearch(debouncedSearch);
+  const { data: searchHits = [], isFetching: searchLoading } = useWorkspaceSearch(debouncedSearch);
   const createPage = useCreateWorkspacePage();
   const updatePage = useUpdateWorkspacePage();
   const deletePage = useDeleteWorkspacePage();
@@ -302,17 +266,6 @@ export default function Workspace() {
   const selectedPage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
   const selectedAncestors = useMemo(() => ancestorsOf(pages, selectedPage), [pages, selectedPage]);
 
-  const { data: blocks = [], isLoading: blocksLoading } = useWorkspaceBlocks(selectedPage?.id ?? null);
-  const createBlock = useCreateWorkspaceBlock(selectedPage?.id ?? null);
-  const updateBlock = useUpdateWorkspaceBlock();
-  const deleteBlock = useDeleteWorkspaceBlock();
-  const reorderBlocks = useReorderWorkspaceBlocks(selectedPage?.id ?? null);
-
-  const orderedBlocks = useMemo(
-    () => [...blocks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at)),
-    [blocks]
-  );
-
   const searchPageIds = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     if (q.length < 2) return new Set<string>();
@@ -320,9 +273,9 @@ export default function Workspace() {
     pages.forEach((page) => {
       if (page.title.toLowerCase().includes(q)) ids.add(page.id);
     });
-    searchBlocks.forEach((block) => ids.add(block.page_id));
+    searchHits.forEach((hit) => ids.add(hit.pageId));
     return ids;
-  }, [debouncedSearch, pages, searchBlocks]);
+  }, [debouncedSearch, pages, searchHits]);
 
   const searchResults = useMemo(
     () => pages.filter((page) => searchPageIds.has(page.id)),
@@ -368,7 +321,7 @@ export default function Workspace() {
         title: template.title,
         parent_id: parentId ?? null,
         metadata: template.metadata,
-        blocks: template.blocks,
+        documentHtml: template.html,
       });
       if (parentId) setExpanded((current) => new Set(current).add(parentId));
       selectPage(page.id);
@@ -381,7 +334,7 @@ export default function Workspace() {
     }
   };
 
-  const handleDeletePage = async (page: WorkspacePage) => {
+  const handleDeletePage = async (page: WorkspacePageSummary) => {
     try {
       await deletePage.mutateAsync(page);
       const descendantIds = descendantsOf(pages, page.id);
@@ -399,7 +352,7 @@ export default function Workspace() {
     }
   };
 
-  const handleMovePage = async (page: WorkspacePage, parentId: string | null) => {
+  const handleMovePage = async (page: WorkspacePageSummary, parentId: string | null) => {
     if ((page.parent_id ?? null) === parentId) return;
     const blocked = descendantsOf(pages, page.id);
     if (parentId && blocked.has(parentId)) {
@@ -425,24 +378,6 @@ export default function Workspace() {
         variant: "destructive",
       });
     }
-  };
-
-  const handleAddBlock = async (afterBlockId?: string | null) => {
-    const block = await createBlock.mutateAsync({ afterBlockId, type: "paragraph", content: { text: "" } });
-    setFocusedBlockId(block.id);
-  };
-
-  const handleDropBlock = (targetBlockId: string) => {
-    if (!draggedBlockId || draggedBlockId === targetBlockId) return;
-    const moving = orderedBlocks.find((block) => block.id === draggedBlockId);
-    if (!moving) return;
-    const withoutMoving = orderedBlocks.filter((block) => block.id !== draggedBlockId);
-    const targetIndex = withoutMoving.findIndex((block) => block.id === targetBlockId);
-    const next = [...withoutMoving];
-    next.splice(Math.max(targetIndex, 0), 0, moving);
-    reorderBlocks.mutate(next);
-    setDraggedBlockId(null);
-    setDragOverBlockId(null);
   };
 
   return (
@@ -521,7 +456,7 @@ export default function Workspace() {
                     <SearchResultRow
                       key={page.id}
                       page={page}
-                      blocks={searchBlocks.filter((block) => block.page_id === page.id)}
+                      snippet={searchHits.find((hit) => hit.pageId === page.id)?.snippet}
                       selected={selectedPage?.id === page.id}
                       onSelect={() => selectPage(page.id)}
                     />
@@ -573,33 +508,18 @@ export default function Workspace() {
             </div>
           ) : (
             <DocumentEditor
+              key={selectedPage.id}
               page={selectedPage}
               pages={pages}
               ancestors={selectedAncestors}
-              blocks={orderedBlocks}
-              blocksLoading={blocksLoading}
-              saving={updatePage.isPending || updateBlock.isPending || reorderBlocks.isPending}
-              saveError={updatePage.error || updateBlock.error || reorderBlocks.error}
-              focusedBlockId={focusedBlockId}
-              draggedBlockId={draggedBlockId}
-              dragOverBlockId={dragOverBlockId}
+              titleSaving={updatePage.isPending}
+              titleError={updatePage.error}
               onTitleChange={(title) => updatePage.mutate({ id: selectedPage.id, title })}
               onCreateSubpage={() => handleCreatePage(selectedPage.id)}
               onCreateTemplateSubpage={(templateId) => handleCreateFromTemplate(templateId, selectedPage.id)}
               onMovePage={(parentId) => handleMovePage(selectedPage, parentId)}
               onDeletePage={() => setPageToDelete(selectedPage)}
               onSelectPage={selectPage}
-              onAddBlock={handleAddBlock}
-              onUpdateBlock={(blockId, updates) => updateBlock.mutate({ id: blockId, ...updates })}
-              onDeleteBlock={(block) => deleteBlock.mutate(block)}
-              onDragStart={setDraggedBlockId}
-              onDragEnter={setDragOverBlockId}
-              onDropBlock={handleDropBlock}
-              onDragEnd={() => {
-                setDraggedBlockId(null);
-                setDragOverBlockId(null);
-              }}
-              onFocusSettled={() => setFocusedBlockId(null)}
             />
           )}
         </main>
@@ -727,8 +647,8 @@ function PageMoveMenu({
   pages,
   onMove,
 }: {
-  page: WorkspacePage;
-  pages: WorkspacePage[];
+  page: WorkspacePageSummary;
+  pages: WorkspacePageSummary[];
   onMove: (parentId: string | null) => void;
 }) {
   const blocked = descendantsOf(pages, page.id);
@@ -827,14 +747,14 @@ function PageTree({
   depth = 0,
 }: {
   nodes: PageNode[];
-  allPages: WorkspacePage[];
+  allPages: WorkspacePageSummary[];
   selectedPageId: string | null;
   expanded: Set<string>;
   onToggle: (pageId: string) => void;
   onSelect: (pageId: string) => void;
   onCreatePage: (parentId?: string | null) => void;
-  onMovePage: (page: WorkspacePage, parentId: string | null) => void;
-  onDeletePage: (page: WorkspacePage) => void;
+  onMovePage: (page: WorkspacePageSummary, parentId: string | null) => void;
+  onDeletePage: (page: WorkspacePageSummary) => void;
   depth?: number;
 }) {
   return (
@@ -924,17 +844,15 @@ function PageTree({
 
 function SearchResultRow({
   page,
-  blocks,
+  snippet,
   selected,
   onSelect,
 }: {
-  page: WorkspacePage;
-  blocks: WorkspaceBlock[];
+  page: WorkspacePageSummary;
+  snippet?: string;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const excerpt = blocks.map((block) => plainContent(block.content)).find(Boolean);
-
   return (
     <button
       onClick={onSelect}
@@ -947,7 +865,7 @@ function SearchResultRow({
         <FileText size={13} className={cn("shrink-0 text-muted-foreground", selected && "text-primary")} />
         <span className="truncate">{page.title || "Untitled"}</span>
       </span>
-      {excerpt && <span className="mt-1 block truncate pl-5 text-xs text-muted-foreground">{excerpt}</span>}
+      {snippet && <span className="mt-1 line-clamp-2 block pl-5 text-xs text-muted-foreground">{snippet}</span>}
       <span className="mt-1 block pl-5 text-[11px] text-muted-foreground/75">Updated {relativeTime(page.updated_at)}</span>
     </button>
   );
@@ -957,59 +875,31 @@ function DocumentEditor({
   page,
   pages,
   ancestors,
-  blocks,
-  blocksLoading,
-  saving,
-  saveError,
-  focusedBlockId,
-  draggedBlockId,
-  dragOverBlockId,
+  titleSaving,
+  titleError,
   onTitleChange,
   onCreateSubpage,
   onCreateTemplateSubpage,
   onMovePage,
   onDeletePage,
   onSelectPage,
-  onAddBlock,
-  onUpdateBlock,
-  onDeleteBlock,
-  onDragStart,
-  onDragEnter,
-  onDropBlock,
-  onDragEnd,
-  onFocusSettled,
 }: {
-  page: WorkspacePage;
-  pages: WorkspacePage[];
-  ancestors: WorkspacePage[];
-  blocks: WorkspaceBlock[];
-  blocksLoading: boolean;
-  saving: boolean;
-  saveError: Error | null;
-  focusedBlockId: string | null;
-  draggedBlockId: string | null;
-  dragOverBlockId: string | null;
+  page: WorkspacePageSummary;
+  pages: WorkspacePageSummary[];
+  ancestors: WorkspacePageSummary[];
+  titleSaving: boolean;
+  titleError: Error | null;
   onTitleChange: (title: string) => void;
   onCreateSubpage: () => void;
   onCreateTemplateSubpage: (templateId: string) => void;
   onMovePage: (parentId: string | null) => void;
   onDeletePage: () => void;
   onSelectPage: (pageId: string) => void;
-  onAddBlock: (afterBlockId?: string | null) => void;
-  onUpdateBlock: (blockId: string, updates: Partial<WorkspaceBlock>) => void;
-  onDeleteBlock: (block: WorkspaceBlock) => void;
-  onDragStart: (blockId: string) => void;
-  onDragEnter: (blockId: string) => void;
-  onDropBlock: (blockId: string) => void;
-  onDragEnd: () => void;
-  onFocusSettled: () => void;
 }) {
   const [title, setTitle] = useState(page.title);
+  const [doc, setDoc] = useState<DocumentSaveState>({ dirty: false, saving: false, error: null, words: 0 });
+  const { data: document, isLoading, isError, refetch } = useWorkspaceDocument(page.id);
   const childPages = pages.filter((item) => item.parent_id === page.id).sort((a, b) => a.position - b.position);
-  const totalWords = blocks.reduce((count, block) => {
-    const text = blockText(block).trim();
-    return count + (text ? text.split(/\s+/).length : 0);
-  }, 0);
   const hasDraftTitle = title.trim() !== page.title;
 
   useEffect(() => {
@@ -1056,19 +946,22 @@ function DocumentEditor({
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="secondary" className="gap-1 rounded-md font-medium">
               <FileText size={12} />
-              {blocks.length} block{blocks.length === 1 ? "" : "s"}
+              {doc.words} word{doc.words === 1 ? "" : "s"}
             </Badge>
             <Badge variant="secondary" className="gap-1 rounded-md font-medium">
               <FolderTree size={12} />
               {childPages.length} subpage{childPages.length === 1 ? "" : "s"}
             </Badge>
-            <span>{totalWords} word{totalWords === 1 ? "" : "s"}</span>
             <span>Updated {relativeTime(page.updated_at)}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <SaveStatus dirty={hasDraftTitle} saving={saving} error={saveError} />
+          <SaveStatus
+            dirty={hasDraftTitle || doc.dirty}
+            saving={titleSaving || doc.saving}
+            error={titleError || doc.error}
+          />
           <NewPageMenu
             compact
             label="Subpage"
@@ -1076,10 +969,6 @@ function DocumentEditor({
             onBlank={onCreateSubpage}
             onTemplate={onCreateTemplateSubpage}
           />
-          <Button size="sm" variant="ghost" onClick={() => onAddBlock(blocks[blocks.length - 1]?.id ?? null)}>
-            <Plus size={13} />
-            Block
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Open page actions">
@@ -1116,51 +1005,36 @@ function DocumentEditor({
 
       <WorkspaceAssetsPanel pageId={page.id} />
 
-      {blocksLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((item) => <Skeleton key={item} className="h-10 w-full" />)}
-        </div>
-      ) : (
-        <div className="space-y-1 pb-24">
-          {blocks.length === 0 && (
-            <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-10 text-center">
-              <FileText size={20} className="mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm font-medium">This page is ready for notes.</p>
-              <p className="mt-1 text-xs text-muted-foreground">Start with a heading, checklist, brief, or campaign context.</p>
-              <Button className="mt-4" size="sm" variant="outline" onClick={() => onAddBlock(null)}>
-                <Plus size={13} />
-                Add first block
-              </Button>
+      <div className="pb-24">
+        {isLoading ? (
+          <div className="space-y-3 pt-4">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-5 w-4/5" />
+            <Skeleton className="h-5 w-3/5" />
+            <Skeleton className="h-5 w-2/3" />
+          </div>
+        ) : isError || !document ? (
+          <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-destructive/30 bg-destructive/5 px-4 py-10 text-center">
+            <AlertCircle size={20} className="text-destructive" />
+            <div>
+              <p className="text-sm font-medium">This page's content could not be loaded.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Nothing has been lost. Check your connection and try again.</p>
             </div>
-          )}
-          {blocks.map((block) => (
-            <BlockRow
-              key={block.id}
-              block={block}
-              blocksCount={blocks.length}
-              shouldFocus={focusedBlockId === block.id}
-              dragging={draggedBlockId === block.id}
-              dragOver={dragOverBlockId === block.id && draggedBlockId !== block.id}
-              onFocusSettled={onFocusSettled}
-              onAddAfter={() => onAddBlock(block.id)}
-              onUpdate={(updates) => onUpdateBlock(block.id, updates)}
-              onDelete={() => onDeleteBlock(block)}
-              onDragStart={() => onDragStart(block.id)}
-              onDragEnter={() => onDragEnter(block.id)}
-              onDrop={() => onDropBlock(block.id)}
-              onDragEnd={onDragEnd}
-            />
-          ))}
-
-          <button
-            onClick={() => onAddBlock(blocks[blocks.length - 1]?.id ?? null)}
-            className="mt-3 flex h-9 w-full items-center gap-2 rounded-md px-9 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Plus size={14} />
-            Add a block
-          </button>
-        </div>
-      )}
+            <Button size="sm" variant="outline" onClick={() => refetch()}>
+              <RotateCw size={13} />
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <WorkspaceDocumentEditor
+            key={page.id}
+            pageId={page.id}
+            initialHtml={document.html}
+            converted={document.converted}
+            onStateChange={setDoc}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -1169,8 +1043,8 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [category, setCategory] = useState<WorkspaceAssetCategory>("reference");
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const { data: assets = [], isLoading } = useWorkspaceAssets(pageId);
   const uploadAsset = useUploadWorkspaceAsset();
   const deleteAsset = useDeleteWorkspaceAsset();
@@ -1178,26 +1052,47 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
     ...item,
     assets: assets.filter((asset) => asset.category === item.value),
   })).filter((item) => item.assets.length > 0);
+  // The preview steps through files in the order they are shown, group by group.
+  const ordered = grouped.flatMap((group) => group.assets);
+
+  /**
+   * Where a file is filed. A video always goes under Videos, whatever chip is
+   * selected: a clip filed under Logos would be hard to find again. Anything
+   * dropped while Videos is selected that is not a video goes to References.
+   */
+  const categoryFor = (file: File): WorkspaceAssetCategory => {
+    if (isVideoFile(file)) return "video";
+    return category === "video" ? "reference" : category;
+  };
 
   const handleFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
     if (!list.length) return;
-    const oversized = list.filter((file) => file.size > WORKSPACE_ASSET_MAX_BYTES);
+    const oversized = list.filter((file) => file.size > maxBytesFor(file));
     if (oversized.length) {
       toast({
         title: "Some files are too large",
-        description: `${oversized.map((file) => file.name).join(", ")} exceed the 50 MB limit.`,
+        description: `${oversized.map((file) => file.name).join(", ")} ${oversized.length === 1 ? "is" : "are"} over the limit: 500 MB for video, 50 MB for everything else.`,
         variant: "destructive",
       });
       return;
     }
 
-    setUploading(true);
-    setProgress(0);
+    // Progress is measured in bytes, not files. Counted by files, one large
+    // video sat at 0% for its whole upload and then jumped to 100%.
+    const totalBytes = list.reduce((sum, file) => sum + file.size, 0) || 1;
+    let doneBytes = 0;
     try {
-      for (const [index, file] of list.entries()) {
-        await uploadAsset.mutateAsync({ pageId, file, category });
-        setProgress(Math.round(((index + 1) / list.length) * 100));
+      for (const file of list) {
+        setUploading({ name: file.name, progress: Math.round((doneBytes / totalBytes) * 100) });
+        await uploadAsset.mutateAsync({
+          pageId,
+          file,
+          category: categoryFor(file),
+          onProgress: (sent) =>
+            setUploading({ name: file.name, progress: Math.min(99, Math.round(((doneBytes + sent) / totalBytes) * 100)) }),
+        });
+        doneBytes += file.size;
       }
       toast({
         title: "Workspace assets uploaded",
@@ -1210,8 +1105,7 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
         variant: "destructive",
       });
     } finally {
-      setUploading(false);
-      setProgress(0);
+      setUploading(null);
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -1233,7 +1127,7 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
             <h3 className="text-sm font-semibold">Reference library</h3>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Attach logos, photos, PDFs, palettes, design systems, task calendars, and source context to this page.
+            Attach logos, photos, videos, PDFs, palettes, design systems, task calendars, and source context to this page.
           </p>
         </div>
         <Badge variant="secondary" className="w-fit rounded-md font-medium">
@@ -1292,6 +1186,7 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
                         key={asset.id}
                         asset={asset}
                         deleting={deleteAsset.isPending}
+                        onOpen={() => setPreviewIndex(ordered.findIndex((item) => item.id === asset.id))}
                         onDelete={() => deleteAsset.mutate(asset, {
                           onError: (error) => toast({
                             title: "Asset was not deleted",
@@ -1319,7 +1214,7 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
           className={cn(
             "flex min-h-52 cursor-pointer flex-col justify-between rounded-md border border-dashed bg-background p-4 transition-colors",
             dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
-            uploading && "pointer-events-none opacity-70"
+            uploading && "pointer-events-none opacity-80"
           )}
         >
           <input
@@ -1336,18 +1231,20 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
             </div>
             <div>
               <p className="text-sm font-semibold">
-                {uploading ? "Uploading assets" : `Upload ${assetCategoryMeta(category).label.toLowerCase()}`}
+                {uploading ? "Uploading" : `Upload ${assetCategoryMeta(category).label.toLowerCase()}`}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Drag files here or click to choose. Images, PDFs, JSON, CSS, CSV, ICS, Office docs, and ZIP files up to 50 MB.
+                {uploading
+                  ? uploading.name
+                  : "Drag files here or click to choose. Videos up to 500 MB; images, PDFs, JSON, CSS, CSV, ICS, Office docs, and ZIP files up to 50 MB."}
               </p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
             {uploading ? (
               <>
-                <Progress value={progress} className="h-1.5" />
-                <p className="text-xs text-muted-foreground">{progress}% uploaded</p>
+                <Progress value={uploading.progress} className="h-1.5" />
+                <p className="text-xs text-muted-foreground">{uploading.progress}% uploaded</p>
               </>
             ) : (
               <Button type="button" size="sm" variant="outline" className="pointer-events-none w-full">
@@ -1358,6 +1255,8 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
           </div>
         </div>
       </div>
+
+      <WorkspaceAssetPreview assets={ordered} index={previewIndex} onIndexChange={setPreviewIndex} />
     </section>
   );
 }
@@ -1365,47 +1264,62 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
 function WorkspaceAssetCard({
   asset,
   deleting,
+  onOpen,
   onDelete,
 }: {
   asset: WorkspaceAsset;
   deleting: boolean;
+  onOpen: () => void;
   onDelete: () => void;
 }) {
   const { data: signedUrl } = useWorkspaceAssetSignedUrl(asset.storage_path);
   const meta = assetCategoryMeta(asset.category);
   const Icon = meta.icon;
-  const isImage = asset.mime_type?.startsWith("image/");
+  const kind = assetKind(asset);
 
   return (
     <div className="group overflow-hidden rounded-md border border-border bg-background">
-      <div className="flex h-24 items-center justify-center bg-muted/40">
-        {isImage && signedUrl ? (
-          <img src={signedUrl} alt={asset.file_name} className="h-full w-full object-cover" />
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`View ${asset.file_name}`}
+        className="relative flex h-24 w-full items-center justify-center overflow-hidden bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+      >
+        {kind === "image" && signedUrl ? (
+          <img src={signedUrl} alt={asset.file_name} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
+        ) : kind === "video" && signedUrl ? (
+          <>
+            {/* Loads only the header of the file, enough to draw a first frame. */}
+            <video src={`${signedUrl}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full bg-black object-cover" />
+            <span className="absolute flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
+              <Play size={16} className="ml-0.5 fill-current" />
+            </span>
+          </>
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-background text-muted-foreground shadow-sm">
+          <span className="flex h-10 w-10 items-center justify-center rounded-md bg-background text-muted-foreground shadow-sm">
             <Icon size={18} />
-          </div>
+          </span>
         )}
-      </div>
+      </button>
       <div className="space-y-2 p-2.5">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium" title={asset.file_name}>{asset.file_name}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{meta.label} · {formatFileSize(asset.file_size)}</p>
         </div>
         <div className="flex items-center gap-1.5">
-          {signedUrl ? (
-            <Button size="sm" variant="outline" className="h-7 flex-1 px-2 text-xs" asChild>
-              <a href={signedUrl} target="_blank" rel="noreferrer">
-                <Download size={12} />
-                Open
-              </a>
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" className="h-7 flex-1 px-2 text-xs" disabled>
-              <Download size={12} />
-              Open
-            </Button>
-          )}
+          <Button size="sm" variant="outline" className="h-7 flex-1 px-2 text-xs" onClick={onOpen}>
+            <Eye size={12} />
+            View
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => downloadWorkspaceAsset(asset)}
+            aria-label={`Download ${asset.file_name}`}
+          >
+            <Download size={13} />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -1417,266 +1331,6 @@ function WorkspaceAssetCard({
             {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
           </Button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BlockRow({
-  block,
-  blocksCount,
-  shouldFocus,
-  dragging,
-  dragOver,
-  onFocusSettled,
-  onAddAfter,
-  onUpdate,
-  onDelete,
-  onDragStart,
-  onDragEnter,
-  onDrop,
-  onDragEnd,
-}: {
-  block: WorkspaceBlock;
-  blocksCount: number;
-  shouldFocus: boolean;
-  dragging: boolean;
-  dragOver: boolean;
-  onFocusSettled: () => void;
-  onAddAfter: () => void;
-  onUpdate: (updates: Partial<WorkspaceBlock>) => void;
-  onDelete: () => void;
-  onDragStart: () => void;
-  onDragEnter: () => void;
-  onDrop: () => void;
-  onDragEnd: () => void;
-}) {
-  const content = getBlockContent(block);
-  const [text, setText] = useState(content.text ?? "");
-  const [isFocused, setIsFocused] = useState(false);
-  const [commandIndex, setCommandIndex] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const commandQuery = text.startsWith("/") ? text.slice(1).trim().toLowerCase() : "";
-  const commandItems = BLOCK_COMMANDS.filter((item) =>
-    `${item.label} ${item.description} ${item.type}`.toLowerCase().includes(commandQuery)
-  );
-  const showCommandMenu = isFocused && text.startsWith("/") && commandItems.length > 0;
-
-  useEffect(() => {
-    setText(blockText(block));
-  }, [block.id, block.content]);
-
-  useEffect(() => {
-    if (!shouldFocus) return;
-    textareaRef.current?.focus();
-    onFocusSettled();
-  }, [onFocusSettled, shouldFocus]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = "0px";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }, [text, block.type]);
-
-  useEffect(() => {
-    if (text === blockText(block)) return;
-    if (text.startsWith("/")) return;
-    const timer = window.setTimeout(() => {
-      onUpdate({ content: { ...content, text } as Json });
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [block, content, onUpdate, text]);
-
-  useEffect(() => {
-    if (commandIndex >= commandItems.length) setCommandIndex(0);
-  }, [commandIndex, commandItems.length]);
-
-  const TypeIcon = BLOCK_TYPES.find((item) => item.type === block.type)?.icon ?? Type;
-  const isDivider = block.type === "divider";
-
-  const updateType = (type: WorkspaceBlockType) => {
-    onUpdate({ type, content: { ...content, text } as Json });
-  };
-
-  const applyCommand = (type: WorkspaceBlockType) => {
-    setText("");
-    setCommandIndex(0);
-    onUpdate({ type, content: { ...content, text: "" } as Json });
-    window.requestAnimationFrame(() => textareaRef.current?.focus());
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showCommandMenu) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setCommandIndex((current) => (current + 1) % commandItems.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setCommandIndex((current) => (current - 1 + commandItems.length) % commandItems.length);
-        return;
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault();
-        applyCommand(commandItems[commandIndex]?.type ?? "paragraph");
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setText("");
-        return;
-      }
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      onAddAfter();
-    }
-    if (event.key === "Backspace" && text.length === 0 && blocksCount > 1) {
-      event.preventDefault();
-      onDelete();
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "group relative flex gap-1 rounded-md px-1 py-0.5 transition-colors",
-        dragOver && "bg-primary/5 ring-1 ring-primary/20",
-        dragging && "opacity-40"
-      )}
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        onDragStart();
-      }}
-      onDragEnter={(event) => {
-        event.preventDefault();
-        onDragEnter();
-      }}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDrop();
-      }}
-      onDragEnd={onDragEnd}
-    >
-      <div className="mt-1.5 flex w-8 shrink-0 items-start justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="flex h-6 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Open block menu"
-            >
-              <Plus size={13} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {BLOCK_TYPES.map((item) => (
-              <DropdownMenuItem key={item.type} onClick={() => updateType(item.type)}>
-                <item.icon size={13} />
-                {item.label}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuItem onClick={() => updateType("divider")}>
-              <span className="h-px w-3 bg-current" />
-              Divider
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onAddAfter}>
-              <Plus size={13} />
-              Add below
-            </DropdownMenuItem>
-            {blocksCount > 1 && (
-              <DropdownMenuItem className="text-destructive" onClick={onDelete}>
-                <Trash2 size={13} />
-                Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span
-          className="flex h-6 w-4 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-hidden="true"
-        >
-          <GripVertical size={14} />
-        </span>
-      </div>
-
-      <div className="min-w-0 flex-1">
-        {isDivider ? (
-          <button
-            onClick={() => updateType("paragraph")}
-            className="my-3 h-px w-full bg-border transition-colors hover:bg-primary/40"
-            title="Convert divider to text"
-            aria-label="Convert divider to text"
-          />
-        ) : (
-          <div className="relative flex items-start gap-2">
-            {block.type === "bullet" && <span className="mt-2.5 h-1.5 w-1.5 rounded-full bg-foreground/70" />}
-            {block.type === "todo" && (
-              <button
-                onClick={() => onUpdate({ content: { ...content, checked: !content.checked, text } as Json })}
-                aria-label={content.checked ? "Mark to-do incomplete" : "Mark to-do complete"}
-                className={cn(
-                  "mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                  content.checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                )}
-              >
-                {content.checked && <Check size={11} />}
-              </button>
-            )}
-            {block.type === "quote" && <span className="mt-1 h-7 w-0.5 rounded-full bg-primary/60" />}
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder={block.type === "heading" ? "Heading" : "Type '/' for commands or start writing"}
-              className={cn(
-                "min-h-8 w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground/45 focus:ring-0",
-                block.type === "heading" && "text-2xl font-semibold leading-8",
-                block.type === "subheading" && "text-lg font-semibold leading-7",
-                block.type === "quote" && "text-muted-foreground",
-                block.type === "todo" && content.checked && "text-muted-foreground line-through"
-              )}
-              rows={1}
-            />
-            {showCommandMenu && (
-              <div className="absolute left-0 top-9 z-20 w-72 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
-                <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                  Blocks
-                </div>
-                {commandItems.map((item, index) => (
-                  <button
-                    key={item.type}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => applyCommand(item.type)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm",
-                      index === commandIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-                    )}
-                  >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-background">
-                      <item.icon size={14} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block font-medium">{item.label}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-2 hidden w-6 justify-center text-muted-foreground/40 group-hover:flex">
-        <TypeIcon size={13} />
       </div>
     </div>
   );

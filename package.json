@@ -54,6 +54,7 @@
     "@tiptap/extension-image": "^3.20.4",
     "@tiptap/extension-link": "^3.20.4",
     "@tiptap/extension-placeholder": "^3.20.4",
+    "@tiptap/extension-table": "^3.20.4",
     "@tiptap/extension-text-align": "^3.20.4",
     "@tiptap/extension-text-style": "^3.20.4",
     "@tiptap/extension-underline": "^3.20.4",
@@ -78,10 +79,12 @@
     "react-hook-form": "^7.71.2",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.30.3",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
+    "tus-js-client": "^4.3.1",
     "zod": "^4.3.6"
   }
 }

@@ -878,3 +878,81 @@
 
 .creative-canvas-stage:has(.creative-toolbar--open) .react-flow__panel.react-flow__controls { left: 180px; }
 .creative-canvas-stage:has(.creative-inspector--open) .react-flow__panel.react-flow__minimap { right: 386px; }
+
+/* ── Workspace document ───────────────────────────────────────────────────────
+   The page body is one rich document (prose-sm). These rules fit the typography
+   plugin to an editor people write in, rather than an article they read. */
+
+.workspace-doc > :first-child { margin-top: 0; }
+
+/* The empty-page prompt, shown only while the page has no content. */
+.workspace-doc p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--muted-foreground) / 0.55);
+}
+
+/* Prose wraps quotes in quotation marks and inline code in backticks. In a
+   document someone edits, both read as characters that were typed. */
+.workspace-doc blockquote p::before,
+.workspace-doc blockquote p::after,
+.workspace-doc code::before,
+.workspace-doc code::after { content: none; }
+.workspace-doc blockquote { font-style: normal; font-weight: 400; border-left-color: #CB2039; }
+.workspace-doc :not(pre) > code {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-weight: 500;
+}
+.workspace-doc pre { white-space: pre-wrap; }
+.workspace-doc a { color: #CB2039; text-underline-offset: 2px; }
+
+/* Checklists: a checkbox beside each line, and done items struck through. */
+.workspace-doc ul[data-type="taskList"] { list-style: none; padding-left: 0.1em; }
+.workspace-doc ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding-left: 0;
+  margin: 0.2em 0;
+}
+.workspace-doc ul[data-type="taskList"] li::marker { content: none; }
+.workspace-doc ul[data-type="taskList"] li > label { flex: none; margin-top: 0.3em; user-select: none; }
+.workspace-doc ul[data-type="taskList"] li > label input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: #CB2039;
+  cursor: pointer;
+}
+.workspace-doc ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.workspace-doc ul[data-type="taskList"] li > div > p { margin: 0; }
+.workspace-doc ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: hsl(var(--muted-foreground));
+  text-decoration: line-through;
+}
+
+/* Tables scroll inside themselves instead of widening the page. */
+.workspace-doc .tableWrapper { overflow-x: auto; margin: 1em 0; }
+.workspace-doc table { border-collapse: collapse; width: 100%; margin: 0; table-layout: auto; }
+.workspace-doc th,
+.workspace-doc td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+  position: relative;
+  min-width: 4rem;
+}
+.workspace-doc th { background: hsl(var(--muted)); text-align: left; font-weight: 600; }
+.workspace-doc th > p,
+.workspace-doc td > p { margin: 0; }
+.workspace-doc .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(203, 32, 57, 0.08);
+  pointer-events: none;
+}
+.workspace-doc hr { border-color: hsl(var(--border)); margin: 1.5em 0; }
