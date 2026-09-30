@@ -2,6 +2,7 @@
  * submit-av-lead: public endpoint (no JWT required)
  * Shared lead-capture backend for the LV Branding service landing forms (EN + ES):
  *   av-landing · web-solutions · ux-ui-design · creative-content ·
+ *   website-contact ·
  *   photo-video · brand-strategy · digital-marketing ·
  *   campaign-calculator · website-audit
  *
@@ -70,6 +71,15 @@ const FORM_CONFIGS: Record<string, FormConfig> = {
     label: "Photo & Video", labelEs: "Foto y Video", emoji: "📸", tag: "Photo & Video Lead",
     replyContext: "photography & video request", replyContextEs: "solicitud de fotografía y video",
     fields: { type: "Shoot type", timeframe: "Timeframe", date: "Shoot date", venue: "Location", attendees: "Company size" },
+  },
+  // The contact and project forms on lvbranding.com. Every other source here
+  // is a service-specific landing page whose form asks about that service;
+  // this one is the general enquiry, so the field labels stay neutral and the
+  // AV-shaped slots (date, venue, attendees) simply arrive empty.
+  "website-contact": {
+    label: "Website Contact", labelEs: "Contacto del Sitio", emoji: "✉️", tag: "Website Contact Lead",
+    replyContext: "enquiry from the website", replyContextEs: "consulta desde el sitio web",
+    fields: { type: "Enquiry", timeframe: "Timeline", date: "Target date", venue: "Company location", attendees: "Company size" },
   },
   "brand-strategy": {
     label: "Brand Strategy", labelEs: "Estrategia de Marca", emoji: "🧭", tag: "Brand Strategy Lead",
