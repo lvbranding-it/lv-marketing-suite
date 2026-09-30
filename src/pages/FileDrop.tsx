@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { format } from "date-fns";
 import {
   Copy, Check, FolderDown, Plus, ChevronDown, ChevronUp,
   Download, X, Loader2, Share2, FileIcon, Trash2, LinkIcon,
-  UploadCloud, CalendarClock, RefreshCw,
+  UploadCloud, CalendarClock, RefreshCw, MessageSquare,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -48,6 +48,7 @@ import {
   useDeleteFileShare,
   type FileShare,
 } from "@/hooks/useFileShares";
+import { groupByNote } from "@/lib/fileRequests/submissions";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -127,9 +128,12 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
   // The upload page no longer asks clients for a name and email, so only older
   // submissions carry them. The columns show only where there is something in them.
   const showSender = submissions.some((s) => s.uploader_name || s.uploader_email);
+  const columnCount = showSender ? 6 : 4;
 
   return (
-    <div className="pt-3 overflow-x-auto">
+    // The container's width is what a client note wraps to (100cqw below), so
+    // a note stays readable when the table is wider than the card and scrolls.
+    <div className="pt-3 overflow-x-auto [container-type:inline-size]">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border text-muted-foreground">
@@ -142,29 +146,49 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {submissions.map((s) => (
-            <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-              {showSender && <td className="py-2 pr-3 font-medium">{s.uploader_name || "—"}</td>}
-              {showSender && <td className="py-2 pr-3 text-muted-foreground">{s.uploader_email || "—"}</td>}
-              <td className="py-2 pr-3 max-w-[180px] truncate" title={s.file_name}>{s.file_name}</td>
-              <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">{formatBytes(s.file_size)}</td>
-              <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">
-                {format(new Date(s.created_at), "MMM d, yyyy")}
-              </td>
-              <td className="py-2">
-                <Button
-                  size="sm"
-                  variant={downloading[s.id] ? "secondary" : "outline"}
-                  className="h-6 text-[10px] gap-1"
-                  onClick={() => handleDownload(s)}
-                  disabled={downloading[s.id]}
-                >
-                  {downloading[s.id]
-                    ? <><Loader2 size={10} className="animate-spin" /> Downloading…</>
-                    : <><Download size={10} /> Download</>}
-                </Button>
-              </td>
-            </tr>
+          {/* A client's note shows once, above the files it was sent with. */}
+          {groupByNote(submissions).map((group) => (
+            <Fragment key={group.rows[0].id}>
+              {group.note && (
+                <tr>
+                  <td colSpan={columnCount} className="pt-3 pb-1.5">
+                    <div className="sticky left-0 flex w-[100cqw] items-start gap-2 rounded-md bg-muted/60 px-2.5 py-2">
+                      <MessageSquare size={12} className="mt-0.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Client note{group.rows.length > 1 ? ` · ${group.rows.length} files` : ""}
+                        </p>
+                        <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-foreground [overflow-wrap:anywhere]">{group.note}</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {group.rows.map((s) => (
+                <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                  {showSender && <td className="py-2 pr-3 font-medium">{s.uploader_name || "—"}</td>}
+                  {showSender && <td className="py-2 pr-3 text-muted-foreground">{s.uploader_email || "—"}</td>}
+                  <td className="py-2 pr-3 max-w-[180px] truncate" title={s.file_name}>{s.file_name}</td>
+                  <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">{formatBytes(s.file_size)}</td>
+                  <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">
+                    {format(new Date(s.created_at), "MMM d, yyyy")}
+                  </td>
+                  <td className="py-2">
+                    <Button
+                      size="sm"
+                      variant={downloading[s.id] ? "secondary" : "outline"}
+                      className="h-6 text-[10px] gap-1"
+                      onClick={() => handleDownload(s)}
+                      disabled={downloading[s.id]}
+                    >
+                      {downloading[s.id]
+                        ? <><Loader2 size={10} className="animate-spin" /> Downloading…</>
+                        : <><Download size={10} /> Download</>}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
       </table>

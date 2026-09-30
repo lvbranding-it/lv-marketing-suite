@@ -48,19 +48,26 @@ export function useFileRequests() {
   });
 }
 
+/** What the public upload page is shown about a request: never its token, org, or id. */
+export type PublicFileRequest = Pick<FileRequest, "title" | "description" | "status" | "expires_at">;
+
 // ── Single file_request by token (public — no org filter) ─────────────────────
+/**
+ * The upload page looks its link up through get_file_request_by_token, which
+ * answers for one exact token. It used to read the table directly, and the
+ * policy that allowed that let anyone with the public key list every active
+ * request's token.
+ */
 export function useFileRequest(token: string | null) {
-  return useQuery<FileRequest | null>({
+  return useQuery<PublicFileRequest | null>({
     queryKey: ["file-request-token", token],
     queryFn: async () => {
       if (!token) return null;
       const { data, error } = await db
-        .from("file_requests")
-        .select("*")
-        .eq("token", token)
+        .rpc("get_file_request_by_token", { p_token: token })
         .maybeSingle();
       if (error) throw error;
-      return data as FileRequest | null;
+      return data as PublicFileRequest | null;
     },
     enabled: !!token,
   });
