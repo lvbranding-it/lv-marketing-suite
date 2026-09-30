@@ -865,7 +865,7 @@ function SearchResultRow({
         <FileText size={13} className={cn("shrink-0 text-muted-foreground", selected && "text-primary")} />
         <span className="truncate">{page.title || "Untitled"}</span>
       </span>
-      {snippet && <span className="mt-1 line-clamp-2 block pl-5 text-xs text-muted-foreground">{snippet}</span>}
+      {snippet && <span className="mt-1 line-clamp-2 pl-5 text-xs text-muted-foreground">{snippet}</span>}
       <span className="mt-1 block pl-5 text-[11px] text-muted-foreground/75">Updated {relativeTime(page.updated_at)}</span>
     </button>
   );

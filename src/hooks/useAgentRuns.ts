@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "./useOrg";
+import type { ProjectActivity } from "@/lib/agents/runHistory";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,37 @@ export function useAgentRunCounts() {
   });
 }
 
+/**
+ * For each project: how many agent runs it has and when the last one was.
+ *
+ * Reads only two narrow columns across the org, which is what lets the project
+ * switcher sort by recent work without loading every run's content.
+ */
+export function useAgentProjectActivity() {
+  const { org } = useOrg();
+  return useQuery({
+    queryKey: ["agent_project_activity", org?.id],
+    enabled: !!org,
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("agent_runs")
+        .select("project_id, created_at")
+        .eq("org_id", org!.id);
+      if (error) throw error;
+      const activity: Record<string, ProjectActivity> = {};
+      for (const row of (data ?? []) as { project_id: string | null; created_at: string }[]) {
+        if (!row.project_id) continue;
+        const entry = (activity[row.project_id] ??= { runs: 0, lastRun: null });
+        entry.runs += 1;
+        if (!entry.lastRun || row.created_at > entry.lastRun) entry.lastRun = row.created_at;
+      }
+      return activity;
+    },
+  });
+}
+
 // ── Mutation: run an agent ────────────────────────────────────────────────────
 
 export interface Attachment {
@@ -149,6 +181,10 @@ export function useRunAgent() {
     },
     onSuccess: (_, { projectId }) => {
       qc.invalidateQueries({ queryKey: ["agent_runs", projectId] });
+      // A new run changes the project's count and moves it to the top of the
+      // switcher; the counts on the Projects page were going stale without this.
+      qc.invalidateQueries({ queryKey: ["agent_project_activity"] });
+      qc.invalidateQueries({ queryKey: ["agent_run_counts"] });
     },
   });
 }

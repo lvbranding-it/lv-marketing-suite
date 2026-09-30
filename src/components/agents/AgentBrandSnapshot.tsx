@@ -13,20 +13,49 @@ import {
   buildBrandedDocument, documentFileName, downloadAsText, downloadAsWord,
   markdownToHtml, printAsPdf,
 } from "@/lib/agents/document-export";
+import {
+  cleanText, describeItem, humanLabel, inlineText, isRecord, objectListToMarkdown, objectListToText,
+  scalarText, type SnapshotRecord,
+} from "@/lib/agents/snapshotFormat";
 
 interface Props {
   snapshot:  Record<string, unknown> | null;
   projectId?: string;
 }
 
-/** Strip common markdown characters that don't belong in snapshot field values */
-function cleanSnapshotString(text: string): string {
-  return text
-    .replace(/\*\*/g, "")
-    .replace(/\*/g, "")
-    .replace(/`/g, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .trim();
+/**
+ * A list of items — a service menu, a set of tiers, a contact list — as one
+ * compact card per item: its name as the title, then its fields. The panel is
+ * narrow, so cards stack rather than forming a table; the exports get tables.
+ */
+function ItemCards({ items, depth }: { items: SnapshotRecord[]; depth: number }) {
+  return (
+    <div className="mt-1 space-y-1.5">
+      {items.map((item, index) => {
+        const { title, fields } = describeItem(item, `Item ${index + 1}`);
+        return (
+          <div key={index} className="rounded-md border border-gray-200 bg-white px-2.5 py-2">
+            <p className="text-sm font-medium leading-snug text-gray-800 [overflow-wrap:anywhere]">{title}</p>
+            {fields.length > 0 && (
+              <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 text-xs">
+                {fields.map(([key, value]) => {
+                  const simple = scalarText(value);
+                  return (
+                    <React.Fragment key={key}>
+                      <dt className="text-gray-400">{humanLabel(key)}</dt>
+                      <dd className="min-w-0 text-gray-700 [overflow-wrap:anywhere]">
+                        {simple !== null ? simple : renderValue(value, depth + 1)}
+                      </dd>
+                    </React.Fragment>
+                  );
+                })}
+              </dl>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function renderValue(value: unknown, depth = 0): React.ReactElement {
@@ -45,8 +74,8 @@ function renderValue(value: unknown, depth = 0): React.ReactElement {
         if (typeof parsed === "object") return renderValue(parsed, depth);
       } catch { /* not valid JSON — fall through to string rendering */ }
     }
-    const clean = cleanSnapshotString(trimmed);
-    return <span className="text-gray-700 text-sm leading-relaxed break-words">{clean || <span className="text-gray-400 italic">—</span>}</span>;
+    const clean = cleanText(trimmed);
+    return <span className="text-gray-700 text-sm leading-relaxed [overflow-wrap:anywhere]">{clean || <span className="text-gray-400 italic">—</span>}</span>;
   }
   if (typeof value === "number" || typeof value === "boolean") {
     return <span className="text-rose-600 font-mono text-xs">{String(value)}</span>;
@@ -55,14 +84,24 @@ function renderValue(value: unknown, depth = 0): React.ReactElement {
     if (value.length === 0) {
       return <span className="text-gray-400 italic text-xs">empty</span>;
     }
+    // Items (a service, a tier, a contact) get cards; plain values stay as tags.
+    // Each used to be JSON.stringify'd into a tag, which is how a price list
+    // showed up as {"name":…,"price":…}.
+    const items = value.filter(isRecord);
+    const tags = value.filter((item) => !isRecord(item));
     return (
-      <div className="flex flex-wrap gap-1 mt-1">
-        {value.map((item, i) => (
-          <Badge key={i} variant="outline" className="text-xs font-normal text-gray-600 border-gray-200 break-words">
-            {typeof item === "string" ? cleanSnapshotString(item) : JSON.stringify(item)}
-          </Badge>
-        ))}
-      </div>
+      <>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {tags.map((item, i) => (
+              <Badge key={i} variant="outline" className="text-xs font-normal text-gray-600 border-gray-200 [overflow-wrap:anywhere]">
+                {inlineText(item)}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {items.length > 0 && <ItemCards items={items} depth={depth} />}
+      </>
     );
   }
   if (typeof value === "object") {
@@ -79,7 +118,7 @@ function renderValue(value: unknown, depth = 0): React.ReactElement {
       </div>
     );
   }
-  return <span className="text-sm text-gray-700 break-words">{String(value)}</span>;
+  return <span className="text-sm text-gray-700 [overflow-wrap:anywhere]">{String(value)}</span>;
 }
 
 /** Convert snapshot to a readable plain-text string for export */
@@ -98,7 +137,9 @@ function snapshotToMarkdown(snapshot: Record<string, unknown>): string {
     for (const [key, value] of Object.entries(node)) {
       if (Array.isArray(value)) {
         lines.push(`${"#".repeat(Math.min(depth + 2, 3))} ${label(key)}`, "");
-        value.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`));
+        const items = value.filter(isRecord);
+        value.filter((item) => !isRecord(item)).forEach((item) => lines.push(`- ${inlineText(item)}`));
+        if (items.length) lines.push("", objectListToMarkdown(items));
         lines.push("");
       } else if (value && typeof value === "object") {
         lines.push(`${"#".repeat(Math.min(depth + 2, 3))} ${label(key)}`, "");
@@ -121,7 +162,8 @@ function snapshotToText(snapshot: Record<string, unknown>): string {
       const pad = "  ".repeat(indent);
       if (Array.isArray(v)) {
         lines.push(`${pad}${label}:`);
-        v.forEach((item) => lines.push(`${pad}  • ${typeof item === "string" ? item : JSON.stringify(item)}`));
+        v.filter((item) => !isRecord(item)).forEach((item) => lines.push(`${pad}  • ${inlineText(item)}`));
+        lines.push(...objectListToText(v.filter(isRecord), `${pad}  `));
       } else if (v && typeof v === "object") {
         lines.push(`${pad}${label}:`);
         walk(v as Record<string, unknown>, indent + 1);
@@ -315,7 +357,10 @@ export default function AgentBrandSnapshot({ snapshot, projectId }: Props) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      {/* Kept to the panel's width: by default the scroll area's inner wrapper
+          grows to fit the longest unbroken word, and a long URL pushed every
+          value past the panel's edge. */}
+      <ScrollArea className="flex-1 min-h-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
         <div className="px-3 py-3">
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">

@@ -1,14 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  PanelLeftOpen, PanelRightOpen, FolderOpen,
+  PanelLeftOpen, PanelRightOpen, FolderOpen, ArrowRight,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import AgentProjectSidebar from "@/components/agents/AgentProjectSidebar";
 import AgentRunChat from "@/components/agents/AgentRunChat";
 import AgentBrandSnapshot from "@/components/agents/AgentBrandSnapshot";
 import { useOrg } from "@/hooks/useOrg";
-import { useProject } from "@/hooks/useProjects";
+import { useProject, useProjects } from "@/hooks/useProjects";
+import { useAgentProjectActivity } from "@/hooks/useAgentRuns";
+import { runDateLabel, sortProjectsByActivity } from "@/lib/agents/runHistory";
 import type { RunResult } from "@/hooks/useAgentRuns";
 
 export default function AgentWorkspace() {
@@ -20,10 +22,13 @@ export default function AgentWorkspace() {
   const [snapshot,          setSnapshot]          = useState<Record<string, unknown> | null>(null);
   const [loadRunId,         setLoadRunId]         = useState<string | null>(null);
   const [chatKey,           setChatKey]           = useState(0);
-  const [refreshKey,        setRefreshKey]        = useState(0);
 
-  const [leftOpen,  setLeftOpen]  = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  // On a phone both panels are overlays, and opening both at once stacked the
+  // snapshot on top of the sidebar. There the sidebar opens only when a project
+  // still has to be chosen, and the snapshot waits until it is asked for.
+  const isPhone = typeof window !== "undefined" && window.innerWidth < 768;
+  const [leftOpen,  setLeftOpen]  = useState(() => !isPhone || !urlProjectId);
+  const [rightOpen, setRightOpen] = useState(() => !isPhone);
 
   // Resizable snapshot panel
   const SNAP_MIN = 220;
@@ -60,6 +65,11 @@ export default function AgentWorkspace() {
   }, [snapshotWidth]);
 
   const { data: project } = useProject(selectedProjectId ?? undefined);
+  const { data: allProjects = [] } = useProjects();
+  const { data: activity = {} } = useAgentProjectActivity();
+  // The landing shows where work was last happening, so the usual next step
+  // is one click instead of a hunt through the switcher.
+  const recentProjects = sortProjectsByActivity(allProjects, activity).slice(0, 6);
 
   // Sync URL → state when navigating directly to /agents/:projectId
   useEffect(() => {
@@ -86,7 +96,6 @@ export default function AgentWorkspace() {
     if (Object.keys(result.brandSnapshot).length > 0) {
       setSnapshot(result.brandSnapshot);
     }
-    setRefreshKey((k) => k + 1);
   }, []);
 
   // Show whatever snapshot we have: newly returned from a run, or the one stored on the project
@@ -119,7 +128,6 @@ export default function AgentWorkspace() {
                   if (window.innerWidth < 768) setLeftOpen(false);
                 }}
                 selectedRunId={loadRunId}
-                refreshKey={refreshKey}
                 onClose={() => setLeftOpen(false)}
               />
             </div>
@@ -160,18 +168,53 @@ export default function AgentWorkspace() {
               loadRunId={loadRunId}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
-              <p className="text-4xl mb-3">🤖</p>
-              <p className="text-lg font-semibold mb-1">Agent Workspace</p>
-              <p className="text-muted-foreground text-sm max-w-sm">
-                Select a project from the left sidebar to start running agents. Agents automatically read the project's marketing context and client brief so they're already briefed before you type.
-              </p>
+            <div className="h-full overflow-y-auto">
+              <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center px-6 py-10">
+                <p className="text-lg font-semibold">Pick up where you left off</p>
+                <p className="mt-1 max-w-lg text-sm text-muted-foreground">
+                  Agents read a project's marketing context and client brief before you type, so they start already briefed.
+                </p>
+                {recentProjects.length > 0 && (
+                  <div className="mt-6 grid gap-2">
+                    {recentProjects.map((item) => {
+                      const entry = activity[item.id];
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleSelectProject(item.id)}
+                          className="group flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-left transition-colors hover:border-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                        >
+                          <FolderOpen size={15} className="mt-0.5 shrink-0 text-rose-500" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{item.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[
+                                item.client_name?.trim(),
+                                entry?.runs ? `${entry.runs} run${entry.runs === 1 ? "" : "s"}` : "No runs yet",
+                                entry?.lastRun ? runDateLabel(entry.lastRun) : null,
+                              ].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <ArrowRight size={14} className="mt-0.5 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-rose-500" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {allProjects.length > recentProjects.length && (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    {allProjects.length - recentProjects.length} more in the project switcher at the top of the sidebar.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        {/* ── Right: Brand Snapshot — resizable, desktop always visible, mobile overlay ── */}
-        {rightOpen ? (
+        {/* ── Right: Brand Snapshot — resizable, desktop always visible, mobile overlay ──
+            Only once a project is open: a snapshot belongs to a project, and with
+            none chosen the panel could only take room from the landing. */}
+        {!selectedProjectId ? null : rightOpen ? (
           <>
             {/* Mobile backdrop */}
             <div

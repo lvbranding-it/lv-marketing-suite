@@ -1,31 +1,41 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, ChevronRight, Clock, Plus, Filter, History } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Bot, ChevronLeft, History, Search, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { useProjects } from "@/hooks/useProjects";
-import { useAgentRuns } from "@/hooks/useAgentRuns";
-import { getAgent, CATEGORY_COLORS } from "@/lib/agents";
+import { useAgentProjectActivity, useAgentRuns } from "@/hooks/useAgentRuns";
+import { agents, getAgent, CATEGORY_COLORS } from "@/lib/agents";
+import { groupRunsByDate, runDateLabel, sortProjectsByActivity } from "@/lib/agents/runHistory";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import AgentProjectSwitcher from "./AgentProjectSwitcher";
 
 interface Props {
   selectedProjectId: string | null;
   onSelectProject:   (id: string) => void;
   onSelectRun:       (runId: string) => void;
   selectedRunId?:    string | null;
-  refreshKey?:       number;
   onClose?:          () => void;
 }
 
-const STATUS_DOT: Record<string, string> = {
-  active:   "bg-green-500",
-  paused:   "bg-amber-400",
-  archived: "bg-gray-300",
-};
+interface RunRow {
+  id: string;
+  agent_id: string;
+  mode?: string;
+  created_at: string;
+  input?: { text?: string };
+}
 
+/**
+ * The Agents sidebar: which project you are in, and what has been run in it.
+ *
+ * It used to hold both the full project list and the run history in one
+ * scrolling column, so expanding either buried the other: with every project
+ * showing, a project's runs started below the bottom of the screen, and the
+ * only way to collapse the list again was an unlabelled filter icon. The
+ * project list now lives in the switcher at the top, and the rest of the
+ * column belongs to the selected project's runs.
+ */
 export default function AgentProjectSidebar({
   selectedProjectId,
   onSelectProject,
@@ -34,188 +44,191 @@ export default function AgentProjectSidebar({
   onClose,
 }: Props) {
   const navigate = useNavigate();
-  const { data: projects = [], isLoading } = useProjects();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: runs = [], isLoading: runsLoading } = useAgentRuns(selectedProjectId ?? undefined) as any;
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const { data: activity = {} } = useAgentProjectActivity();
+  const { data: runs = [], isLoading: runsLoading } = useAgentRuns(selectedProjectId ?? undefined);
+  const [query, setQuery] = useState("");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
 
-  // Filter: when a project is selected, default to showing only that project
-  const [showAll, setShowAll] = useState(false);
+  // A search or filter belongs to the project it was typed in.
+  useEffect(() => {
+    setQuery("");
+    setAgentFilter("all");
+  }, [selectedProjectId]);
 
-  const visibleProjects = (showAll || !selectedProjectId)
-    ? projects
-    : projects.filter((p: { id: string }) => p.id === selectedProjectId);
+  const sortedProjects = useMemo(() => sortProjectsByActivity(projects, activity), [projects, activity]);
+
+  // Only the agents this project has actually used, in the registry's order.
+  const agentsUsed = useMemo(() => {
+    const counts = new Map<string, number>();
+    (runs as RunRow[]).forEach((run) => counts.set(run.agent_id, (counts.get(run.agent_id) ?? 0) + 1));
+    return agents.filter((agent) => counts.has(agent.id)).map((agent) => ({ agent, count: counts.get(agent.id)! }));
+  }, [runs]);
+
+  const filteredRuns = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return (runs as RunRow[]).filter((run) => {
+      if (agentFilter !== "all" && run.agent_id !== agentFilter) return false;
+      if (!term) return true;
+      const agentName = getAgent(run.agent_id)?.shortName ?? run.agent_id;
+      return `${run.input?.text ?? ""} ${agentName}`.toLowerCase().includes(term);
+    });
+  }, [agentFilter, query, runs]);
+
+  const groups = useMemo(() => groupRunsByDate(filteredRuns), [filteredRuns]);
+  const filtering = !!query.trim() || agentFilter !== "all";
 
   return (
-    <div className="w-72 flex flex-col h-full bg-gray-50 border-r border-gray-200 shrink-0">
-      {/* Header */}
-      <div className="px-3 pt-3 pb-2 border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-2 mb-2.5">
-          <Bot size={15} className="text-rose-600 shrink-0" />
-          <span className="text-xs font-bold text-gray-800 uppercase tracking-wide flex-1">Agents</span>
-          {selectedProjectId && (
-            <button
-              onClick={() => setShowAll((s) => !s)}
-              title={showAll ? "Show current project only" : "Show all projects"}
-              className={cn(
-                "flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:bg-gray-200 transition-colors",
-                !showAll && "text-rose-500 bg-rose-50",
-              )}
-            >
-              <Filter size={12} />
-            </button>
-          )}
+    <div className="flex h-full w-72 shrink-0 flex-col border-r border-gray-200 bg-gray-50">
+      <div className="shrink-0 space-y-2.5 border-b border-gray-200 px-3 pb-3 pt-3">
+        <div className="flex items-center gap-2">
+          <Bot size={15} className="shrink-0 text-rose-600" />
+          <span className="flex-1 text-xs font-bold uppercase tracking-wide text-gray-800">Agents</span>
           {onClose && (
             <button
               onClick={onClose}
-              className="flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:bg-gray-200 transition-colors"
-              title="Close sidebar"
+              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700"
+              title="Hide sidebar"
+              aria-label="Hide sidebar"
             >
-              <ChevronRight size={12} />
+              <ChevronLeft size={14} />
             </button>
           )}
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full gap-1.5 text-xs h-7 border-gray-200 text-gray-600 hover:bg-white hover:text-gray-900"
-          onClick={() => navigate("/projects")}
-        >
-          <Plus size={12} />
-          New Project
-        </Button>
+
+        {projectsLoading ? (
+          <Skeleton className="h-[52px] w-full rounded-lg" />
+        ) : (
+          <AgentProjectSwitcher
+            projects={sortedProjects}
+            activity={activity}
+            selectedProjectId={selectedProjectId}
+            onSelect={onSelectProject}
+            onNewProject={() => navigate("/projects")}
+          />
+        )}
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        {/* Projects list */}
-        <div className="px-2 pt-2 pb-1">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1">
-            Projects
-          </p>
-
-          {isLoading ? (
-            <div className="space-y-1 px-1">
-              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-9 w-full rounded-md" />)}
-            </div>
-          ) : projects.length === 0 ? (
-            <p className="text-xs text-gray-400 px-1 py-2 italic">No projects yet.</p>
-          ) : (
-            <>
-              {visibleProjects.map((p: { id: string; name: string; status?: string | null; client_name?: string | null }) => {
-                const isSelected = selectedProjectId === p.id;
-                const dot = STATUS_DOT[p.status ?? "active"] ?? STATUS_DOT.active;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectProject(p.id)}
-                    className={cn(
-                      "w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg transition-all duration-100 group mb-0.5",
-                      isSelected
-                        ? "bg-rose-50 border border-rose-200 shadow-sm"
-                        : "hover:bg-white hover:shadow-sm border border-transparent",
-                    )}
-                  >
-                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0 mt-0.5", dot)} />
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        "text-xs font-medium truncate leading-tight",
-                        isSelected ? "text-rose-700" : "text-gray-800",
-                      )}>
-                        {p.name}
-                      </p>
-                      {p.client_name && (
-                        <p className="text-[10px] text-gray-400 truncate leading-tight mt-0.5">
-                          {p.client_name}
-                        </p>
-                      )}
-                    </div>
-                    {isSelected && (
-                      <ChevronRight size={12} className="shrink-0 text-rose-400" />
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Show-all toggle when a project is selected and we're in filter mode */}
-              {selectedProjectId && !showAll && projects.length > 1 && (
+      {!selectedProjectId ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <History size={18} className="mb-2 text-gray-300" />
+          <p className="text-xs text-gray-500">Choose a project to see everything its agents have produced.</p>
+        </div>
+      ) : (
+        <>
+          <div className="shrink-0 space-y-2 border-b border-gray-200 px-3 py-2.5">
+            <div className="relative">
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => event.key === "Escape" && setQuery("")}
+                placeholder="Search this project's runs"
+                aria-label="Search this project's runs"
+                className="h-8 w-full rounded-md border border-gray-200 bg-white pl-8 pr-7 text-xs outline-none transition-shadow placeholder:text-gray-400 focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+              />
+              {query && (
                 <button
-                  onClick={() => setShowAll(true)}
-                  className="w-full text-left text-[11px] text-gray-400 hover:text-gray-600 px-2 py-1 mt-0.5"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                 >
-                  + {projects.length - 1} more project{projects.length - 1 !== 1 ? "s" : ""}…
+                  <X size={12} />
                 </button>
               )}
-            </>
-          )}
-        </div>
+            </div>
 
-        {/* Run history */}
-        {selectedProjectId && (
-          <div className="px-2 pt-1 pb-2 border-t border-gray-200 mt-1">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5 flex items-center gap-1">
-              <History size={9} /> Run History
-            </p>
-
-            {runsLoading ? (
-              <div className="space-y-1 px-1">
-                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
-              </div>
-            ) : runs.length === 0 ? (
-              <p className="text-[11px] text-gray-400 px-1 py-1 italic">
-                No runs yet — pick an agent and start.
-              </p>
-            ) : (
-              <div className="space-y-0.5">
-                {runs.map((run: {
-                  id: string;
-                  agent_id: string;
-                  mode?: string;
-                  created_at: string;
-                  input?: { text?: string };
-                }) => {
-                  const agent = getAgent(run.agent_id);
-                  const catColor = agent ? CATEGORY_COLORS[agent.category] : "bg-gray-100 text-gray-500 border-gray-200";
-                  const isSelected = selectedRunId === run.id;
-                  const inputPreview = run.input?.text?.slice(0, 45) || "";
-                  return (
+            {agentsUsed.length > 1 && (
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by agent">
+                {[{ id: "all", label: "All", count: runs.length }, ...agentsUsed.map(({ agent, count }) => ({ id: agent.id, label: agent.shortName, count }))].map(
+                  (chip) => (
                     <button
-                      key={run.id}
-                      onClick={() => onSelectRun(run.id)}
+                      key={chip.id}
+                      onClick={() => setAgentFilter(chip.id)}
+                      aria-pressed={agentFilter === chip.id}
                       className={cn(
-                        "w-full text-left flex flex-col gap-0.5 px-2 py-1.5 rounded-lg transition-all",
-                        isSelected
-                          ? "bg-rose-50 border border-rose-200"
-                          : "hover:bg-white border border-transparent",
+                        "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                        agentFilter === chip.id
+                          ? "bg-rose-600 font-medium text-white"
+                          : "bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:ring-gray-300",
                       )}
                     >
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[9px] px-1.5 py-0 h-4 shrink-0 border font-medium", catColor)}
-                        >
-                          {agent?.shortName ?? run.agent_id}
-                        </Badge>
-                        {run.mode === "revise" && (
-                          <span className="text-[9px] text-gray-400">↩ revise</span>
-                        )}
-                      </div>
-                      {inputPreview && (
-                        <p className="text-[10px] text-gray-500 truncate leading-tight px-0.5">
-                          {inputPreview}
-                          {(run.input?.text?.length ?? 0) > 45 ? "…" : ""}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                        <Clock size={9} />
-                        {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
-                      </div>
+                      {chip.label}
+                      <span className={cn("ml-1 tabular-nums", agentFilter === chip.id ? "text-white/75" : "text-gray-400")}>{chip.count}</span>
                     </button>
-                  );
-                })}
+                  ),
+                )}
               </div>
             )}
           </div>
-        )}
-      </ScrollArea>
+
+          {/* The scroll area's inner wrapper is a table by default and grew to fit
+              the longest unbroken word, so one pasted URL widened every row past
+              the sidebar and clipped them all. Block keeps it to the sidebar. */}
+          <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
+            <div className="px-2 pb-3">
+              {runsLoading ? (
+                <div className="space-y-1.5 px-1 pt-3">
+                  {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
+                </div>
+              ) : runs.length === 0 ? (
+                <p className="px-2 pt-4 text-[11px] italic text-gray-400">No runs yet — pick an agent and start.</p>
+              ) : filteredRuns.length === 0 ? (
+                <div className="px-2 pt-4 text-center">
+                  <p className="text-[11px] text-gray-500">No runs match.</p>
+                  <button
+                    onClick={() => {
+                      setQuery("");
+                      setAgentFilter("all");
+                    }}
+                    className="mt-1 text-[11px] font-medium text-rose-600 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
+                groups.map((group) => (
+                  <section key={group.label} className="pt-2">
+                    {/* Headings stay in view while their runs scroll past. */}
+                    <h3 className="sticky top-0 z-10 flex items-center justify-between bg-gray-50/95 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 backdrop-blur">
+                      {group.label}
+                      <span className="font-normal normal-case tracking-normal tabular-nums">{group.runs.length}</span>
+                    </h3>
+                    <div className="space-y-0.5">
+                      {group.runs.map((run) => {
+                        const agent = getAgent(run.agent_id);
+                        const catColor = agent ? CATEGORY_COLORS[agent.category] : "bg-gray-100 text-gray-500 border-gray-200";
+                        const isSelected = selectedRunId === run.id;
+                        const text = run.input?.text?.trim();
+                        return (
+                          <button
+                            key={run.id}
+                            onClick={() => onSelectRun(run.id)}
+                            aria-current={isSelected ? "true" : undefined}
+                            className={cn(
+                              "w-full rounded-lg border px-2 py-1.5 text-left transition-colors",
+                              isSelected ? "border-rose-200 bg-rose-50" : "border-transparent hover:bg-white",
+                            )}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span className={cn("shrink-0 rounded border px-1.5 text-[10px] font-medium leading-4", catColor)}>
+                                {agent?.shortName ?? run.agent_id}
+                              </span>
+                              {run.mode === "revise" && <span className="text-[10px] text-gray-400">↩ revision</span>}
+                              <span className="ml-auto shrink-0 text-[10px] tabular-nums text-gray-400">{runDateLabel(run.created_at)}</span>
+                            </span>
+                            {text && <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere]">{text}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </>
+      )}
     </div>
   );
 }
