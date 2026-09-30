@@ -27,9 +27,15 @@ const BRAND       = "#CB2039";
 const MAX_REQUEST_BYTES = 3_000_000;
 const MAX_ATTACHMENT_BYTES = 2_000_000;
 
+// The same four mailboxes the website notifies, so a lead does not reach a
+// different set of people depending on which form it came through. Kept in
+// step with Settings, Internal notifications in the website CMS; that list is
+// editable there, this one needs a redeploy.
 const NOTIFY_RECIPIENTS = [
-  { email: "luis@lvbranding.com", name: "Luis" },
-  { email: "yex@lvbranding.com",  name: "Yex"  },
+  { email: "admin@lvbranding.com",    name: "LV Branding" },
+  { email: "luis@lvbranding.com",     name: "Luis" },
+  { email: "yex@lvbranding.com",      name: "Yex"  },
+  { email: "lvbrandingusa@gmail.com", name: "LV Branding (backup)" },
 ];
 
 const CRM_ORG_ID = Deno.env.get("AV_LEAD_ORG_ID") ?? "0122121e-5dec-446e-92b3-4e85b145910a";
