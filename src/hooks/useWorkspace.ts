@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, WorkspaceAsset, WorkspaceBlock, WorkspacePage } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
 import { blocksToHtml } from "@/lib/workspace/document";
+import { contentTypeFor, isVideoFile, VIDEO_TYPES_BY_EXTENSION } from "@/lib/media/fileTypes";
+import { RESUMABLE_CHUNK, uploadResumable } from "@/lib/storage/resumableUpload";
+
+export { isVideoFile };
 
 export type WorkspaceAssetCategory = WorkspaceAsset["category"];
 
@@ -47,26 +50,8 @@ export const WORKSPACE_ASSET_MAX_BYTES = 50 * 1024 * 1024;
 /** Video gets more room; the bucket itself is capped at the same figure. */
 export const WORKSPACE_VIDEO_MAX_BYTES = 500 * 1024 * 1024;
 
-/**
- * Above this, uploads go through Supabase's resumable endpoint.
- *
- * A single request carrying a few hundred megabytes shows no progress until it
- * is done and loses everything if the connection blinks. The resumable endpoint
- * sends 6 MB pieces, retries a failed piece rather than the whole file, and
- * reports progress as it goes. Supabase requires exactly 6 MB pieces.
- */
-const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
-const RESUMABLE_CHUNK = 6 * 1024 * 1024;
-
-const VIDEO_TYPES_BY_EXTENSION: Record<string, string> = {
-  mp4: "video/mp4",
-  m4v: "video/x-m4v",
-  mov: "video/quicktime",
-  webm: "video/webm",
-  mpeg: "video/mpeg",
-  mpg: "video/mpeg",
-  ogv: "video/ogg",
-};
+/** Above this, uploads go through Supabase's resumable endpoint, in pieces of this size. */
+const RESUMABLE_THRESHOLD = RESUMABLE_CHUNK;
 
 export const WORKSPACE_ASSET_ACCEPT = [
   "image/*",
@@ -93,28 +78,8 @@ export const WORKSPACE_ASSET_ACCEPT = [
   ...Object.keys(VIDEO_TYPES_BY_EXTENSION).map((extension) => `.${extension}`),
 ].join(",");
 
-function extensionOf(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-export function isVideoFile(file: Pick<File, "name" | "type">) {
-  return file.type.startsWith("video/") || extensionOf(file.name) in VIDEO_TYPES_BY_EXTENSION;
-}
-
 export function maxBytesFor(file: Pick<File, "name" | "type">) {
   return isVideoFile(file) ? WORKSPACE_VIDEO_MAX_BYTES : WORKSPACE_ASSET_MAX_BYTES;
-}
-
-/**
- * The type a file is stored under.
- *
- * Some browsers report no type at all for a .mov. Stored as a generic binary it
- * would still upload, but the preview would be handed a file it cannot tell is
- * a video, and Safari will not play it.
- */
-function contentTypeFor(file: File) {
-  if (file.type) return file.type;
-  return VIDEO_TYPES_BY_EXTENSION[extensionOf(file.name)] ?? "application/octet-stream";
 }
 
 function nextPosition<T extends { parent_id?: string | null; position: number }>(
@@ -367,44 +332,18 @@ export function useWorkspaceAssetSignedUrl(
   });
 }
 
-async function uploadResumable(storagePath: string, file: File, contentType: string, onProgress?: (sent: number) => void) {
+async function uploadWorkspaceResumable(storagePath: string, file: File, contentType: string, onProgress?: (sent: number) => void) {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) throw new Error("Your session has expired. Sign in again to upload.");
 
-  await new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/upload/resumable`,
-      retryDelays: [0, 2000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        "x-upsert": "false",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      chunkSize: RESUMABLE_CHUNK,
-      metadata: {
-        bucketName: WORKSPACE_ASSET_BUCKET,
-        objectName: storagePath,
-        contentType,
-        cacheControl: "3600",
-      },
-      onProgress: (sent) => onProgress?.(sent),
-      onSuccess: () => resolve(),
-      onError: (error) => {
-        // The storage server explains a refusal in the response body; tus
-        // wraps it in a long technical message the person cannot act on.
-        const body = (error as tus.DetailedError).originalResponse?.getBody?.();
-        const status = (error as tus.DetailedError).originalResponse?.getStatus?.();
-        if (status === 413 || /maximum allowed size|too large/i.test(body ?? "")) {
-          reject(new Error(`${file.name} is larger than the upload limit allows.`));
-        } else {
-          reject(new Error(body ? `Upload failed: ${body}` : error.message));
-        }
-      },
-    });
-    upload.start();
+  await uploadResumable({
+    bucket: WORKSPACE_ASSET_BUCKET,
+    objectName: storagePath,
+    file,
+    contentType,
+    auth: { accessToken: token },
+    onProgress,
   });
 }
 
@@ -425,7 +364,7 @@ export function useUploadWorkspaceAsset() {
       const contentType = contentTypeFor(file);
 
       if (file.size > RESUMABLE_THRESHOLD) {
-        await uploadResumable(storagePath, file, contentType, onProgress);
+        await uploadWorkspaceResumable(storagePath, file, contentType, onProgress);
       } else {
         const { error: uploadError } = await supabase.storage
           .from(WORKSPACE_ASSET_BUCKET)

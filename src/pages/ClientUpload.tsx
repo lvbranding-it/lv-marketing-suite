@@ -1,10 +1,17 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { Upload, X, CheckCircle2, AlertCircle, Loader2, FileIcon } from "lucide-react";
+import { Upload, X, CheckCircle2, AlertCircle, Loader2, FileIcon, Film } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFileRequest } from "@/hooks/useFileRequests";
+import { isVideoFile } from "@/lib/media/fileTypes";
+import {
+  CLIENT_FILE_MAX_BYTES,
+  CLIENT_VIDEO_MAX_BYTES,
+  formatBytes,
+  sendClientFile,
+  uploadProblem,
+} from "@/lib/fileRequests/clientUpload";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 // LV Logo SVG component (circular badge logo)
@@ -66,44 +73,69 @@ function PageShell({ children }: { children: React.ReactNode }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-type FileStatus = "pending" | "uploading" | "done" | "error";
+/** "rejected" is a file that cannot be sent at all (too large, empty); it is never attempted. */
+type FileStatus = "pending" | "uploading" | "done" | "error" | "rejected";
 
 interface SelectedFile {
+  id: string;
   file: File;
   status: FileStatus;
+  /** Bytes sent so far, for the progress bar. */
+  sent: number;
   errorMsg?: string;
+  /** Set once the file is in storage, so a retry only has to record it. */
+  storedPath?: string;
 }
+
+let nextFileId = 0;
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ClientUpload() {
   const { token } = useParams<{ token: string }>();
   const { data: request, isLoading, error } = useFileRequest(token ?? null);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  /** Which file of the batch is being sent, for the button: "Sending 2 of 3". */
+  const [batch, setBatch] = useState({ index: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((files: File[]) => {
-    const newEntries: SelectedFile[] = files.map((f) => ({ file: f, status: "pending" }));
+    const newEntries: SelectedFile[] = files.map((f) => {
+      const problem = uploadProblem(f);
+      return {
+        id: `file-${nextFileId++}`,
+        file: f,
+        status: problem ? "rejected" : "pending",
+        sent: 0,
+        errorMsg: problem ?? undefined,
+      };
+    });
     setSelectedFiles((prev) => [...prev, ...newEntries]);
   }, []);
 
-  const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  const removeFile = (id: string) => {
+    setSelectedFiles((prev) => prev.filter((sf) => sf.id !== id));
   };
+
+  const updateFile = (id: string, changes: Partial<SelectedFile>) => {
+    setSelectedFiles((prev) => prev.map((sf) => (sf.id === id ? { ...sf, ...changes } : sf)));
+  };
+
+  // A video can take minutes to send. Closing the tab part-way loses it, so the
+  // browser asks first.
+  useEffect(() => {
+    if (!isUploading) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isUploading]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -125,47 +157,34 @@ export default function ClientUpload() {
     e.target.value = "";
   };
 
+  const sendable = selectedFiles.filter((sf) => sf.status !== "done" && sf.status !== "rejected");
+  const rejectedCount = selectedFiles.filter((sf) => sf.status === "rejected").length;
+  const sentCount = selectedFiles.filter((sf) => sf.status === "done").length;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || selectedFiles.length === 0 || !token) return;
+    if (sendable.length === 0 || !token) return;
 
     setIsUploading(true);
-    const edgeFnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/client-upload`;
-
     let allOk = true;
 
-    for (let i = 0; i < selectedFiles.length; i++) {
-      if (selectedFiles[i].status === "done") continue;
-
-      setSelectedFiles((prev) =>
-        prev.map((sf, idx) => (idx === i ? { ...sf, status: "uploading" } : sf))
-      );
-
-      const formData = new FormData();
-      formData.append("token", token);
-      formData.append("uploader_name", name.trim());
-      formData.append("uploader_email", email.trim());
-      if (message.trim()) formData.append("message", message.trim());
-      formData.append("file", selectedFiles[i].file);
+    for (const [index, entry] of sendable.entries()) {
+      setBatch({ index, total: sendable.length });
+      updateFile(entry.id, { status: "uploading", errorMsg: undefined, sent: entry.storedPath ? entry.file.size : 0 });
 
       try {
-        const res = await fetch(edgeFnUrl, { method: "POST", body: formData });
-        const json = await res.json();
-        if (!res.ok || !json.ok) {
-          throw new Error(json.error ?? "Upload failed");
-        }
-        setSelectedFiles((prev) =>
-          prev.map((sf, idx) => (idx === i ? { ...sf, status: "done" } : sf))
-        );
+        await sendClientFile({
+          token,
+          file: entry.file,
+          message,
+          storedPath: entry.storedPath,
+          onStored: (storedPath) => updateFile(entry.id, { storedPath }),
+          onProgress: (sent) => updateFile(entry.id, { sent }),
+        });
+        updateFile(entry.id, { status: "done", sent: entry.file.size });
       } catch (err) {
         allOk = false;
-        setSelectedFiles((prev) =>
-          prev.map((sf, idx) =>
-            idx === i
-              ? { ...sf, status: "error", errorMsg: err instanceof Error ? err.message : "Upload failed" }
-              : sf
-          )
-        );
+        updateFile(entry.id, { status: "error", errorMsg: err instanceof Error ? err.message : "Upload failed" });
       }
     }
 
@@ -222,8 +241,13 @@ export default function ClientUpload() {
             <div>
               <h1 className="text-xl font-bold text-white">Files received!</h1>
               <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>
-                Thank you{name ? `, ${name}` : ""}. Your files have been delivered securely.
+                Thank you. {sentCount === 1 ? "Your file has" : sentCount === 2 ? "Both files have" : `All ${sentCount} files have`} been delivered securely.
               </p>
+              {rejectedCount > 0 && (
+                <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.45)" }}>
+                  {rejectedCount === 1 ? "1 file was" : `${rejectedCount} files were`} over the size limit and not sent.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -231,7 +255,7 @@ export default function ClientUpload() {
     );
   }
 
-  const canSubmit = name.trim() && email.trim() && selectedFiles.length > 0 && !isUploading;
+  const canSubmit = sendable.length > 0 && !isUploading;
 
   return (
     <PageShell>
@@ -274,35 +298,6 @@ export default function ClientUpload() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Uploader info */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.8)" }}>
-                  Your name <span className="text-red-400">*</span>
-                </label>
-                <Input
-                  placeholder="Jane Smith"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.8)" }}>
-                  Your email <span className="text-red-400">*</span>
-                </label>
-                <Input
-                  type="email"
-                  placeholder="jane@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isUploading}
-                />
-              </div>
-            </div>
-
             <div className="space-y-1.5">
               <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.8)" }}>
                 Message <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>(optional)</span>
@@ -332,7 +327,12 @@ export default function ClientUpload() {
             >
               <Upload size={28} className="mx-auto mb-3" style={{ color: "rgba(255,255,255,0.4)" }} />
               <p className="text-sm font-medium text-white">Drop files here or click to browse</p>
-              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>Any file type · multiple files supported</p>
+              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Any file type, including video · multiple files supported
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Videos up to {formatBytes(CLIENT_VIDEO_MAX_BYTES)} · other files up to {formatBytes(CLIENT_FILE_MAX_BYTES)}
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -346,62 +346,93 @@ export default function ClientUpload() {
             {/* File list */}
             {selectedFiles.length > 0 && (
               <ul className="space-y-2">
-                {selectedFiles.map((sf, i) => (
-                  <li
-                    key={i}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm",
-                      sf.status === "done"
-                        ? "bg-emerald-50 border-emerald-200"
-                        : sf.status === "error"
-                        ? "bg-red-50 border-red-200"
-                        : sf.status === "uploading"
-                        ? "bg-blue-50 border-blue-200"
-                        : "bg-white border-gray-200"
-                    )}
-                  >
-                    <FileIcon size={14} className="shrink-0 text-gray-400" />
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium text-white">{sf.file.name}</p>
-                      <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{formatBytes(sf.file.size)}</p>
-                      {sf.status === "error" && sf.errorMsg && (
-                        <p className="text-xs text-red-600 mt-0.5">{sf.errorMsg}</p>
+                {selectedFiles.map((sf) => {
+                  const Icon = isVideoFile(sf.file) ? Film : FileIcon;
+                  const failed = sf.status === "error" || sf.status === "rejected";
+                  const pct = sf.file.size ? Math.min(100, Math.round((sf.sent / sf.file.size) * 100)) : 0;
+                  return (
+                    <li
+                      key={sf.id}
+                      className={cn(
+                        "flex items-start gap-3 px-3 py-2.5 rounded-lg border text-sm",
+                        sf.status === "done"
+                          ? "bg-emerald-400/10 border-emerald-400/30"
+                          : failed
+                          ? "bg-red-400/10 border-red-400/30"
+                          : sf.status === "uploading"
+                          ? "bg-white/[0.08] border-white/25"
+                          : "bg-white/5 border-white/10"
                       )}
-                    </div>
-                    {sf.status === "uploading" && (
-                      <Loader2 size={14} className="animate-spin text-blue-500 shrink-0" />
-                    )}
-                    {sf.status === "done" && (
-                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                    )}
-                    {sf.status === "error" && (
-                      <AlertCircle size={14} className="text-red-500 shrink-0" />
-                    )}
-                    {sf.status === "pending" && !isUploading && (
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="text-gray-400 hover:text-gray-600 shrink-0"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </li>
-                ))}
+                    >
+                      <Icon size={16} className="mt-0.5 shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate font-medium text-white">{sf.file.name}</p>
+                        <p className="text-xs tabular-nums" style={{ color: "rgba(255,255,255,0.5)" }}>
+                          {sf.status === "uploading"
+                            ? `${formatBytes(sf.sent)} of ${formatBytes(sf.file.size)} · ${pct}%`
+                            : sf.status === "done"
+                            ? `Sent · ${formatBytes(sf.file.size)}`
+                            : formatBytes(sf.file.size)}
+                        </p>
+                        {sf.status === "uploading" && (
+                          <div
+                            className="mt-1.5 h-1 rounded-full overflow-hidden bg-white/10"
+                            role="progressbar"
+                            aria-label={`Sending ${sf.file.name}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={pct}
+                          >
+                            <div className="h-full rounded-full bg-red-500 transition-[width] duration-300" style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
+                        {failed && sf.errorMsg && (
+                          <p className="text-xs text-red-300 mt-0.5">{sf.errorMsg}</p>
+                        )}
+                      </div>
+                      {sf.status === "uploading" && (
+                        <Loader2 size={14} className="mt-0.5 animate-spin text-white/60 shrink-0" />
+                      )}
+                      {sf.status === "done" && (
+                        <CheckCircle2 size={14} className="mt-0.5 text-emerald-400 shrink-0" />
+                      )}
+                      {failed && (
+                        <AlertCircle size={14} className="mt-0.5 text-red-400 shrink-0" />
+                      )}
+                      {sf.status !== "done" && sf.status !== "uploading" && !isUploading && (
+                        <button
+                          type="button"
+                          onClick={() => removeFile(sf.id)}
+                          aria-label={`Remove ${sf.file.name}`}
+                          className="mt-0.5 shrink-0 text-white/40 hover:text-white"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
 
-            <Button
-              type="submit"
-              className="w-full bg-red-600 hover:bg-red-700 text-white"
-              disabled={!canSubmit}
-            >
-              {isUploading ? (
-                <><Loader2 size={15} className="animate-spin mr-2" /> Uploading…</>
-              ) : (
-                <><Upload size={15} className="mr-2" /> Upload {selectedFiles.length > 0 ? `${selectedFiles.length} file${selectedFiles.length !== 1 ? "s" : ""}` : "Files"}</>
+            <div className="space-y-2">
+              <Button
+                type="submit"
+                className="w-full bg-red-600 hover:bg-red-700 text-white"
+                disabled={!canSubmit}
+              >
+                {isUploading ? (
+                  <><Loader2 size={15} className="animate-spin mr-2" /> Uploading{batch.total > 1 ? ` ${batch.index + 1} of ${batch.total}` : ""}…</>
+                ) : (
+                  <><Upload size={15} className="mr-2" /> Upload {sendable.length > 0 ? `${sendable.length} file${sendable.length !== 1 ? "s" : ""}` : "Files"}</>
+                )}
+              </Button>
+              {isUploading && (
+                <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.5)" }}>
+                  Keep this page open until every file shows Sent.
+                </p>
               )}
-            </Button>
+            </div>
           </form>
         </div>
 

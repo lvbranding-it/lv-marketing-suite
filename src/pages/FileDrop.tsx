@@ -88,20 +88,19 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
   const handleDownload = async (submission: FileSubmission) => {
     setDownloading(prev => ({ ...prev, [submission.id]: true }));
     try {
+      // The link carries the file name and tells the browser to save it, so the
+      // download streams to disk. Fetching it into the page first held a whole
+      // video in memory before the save could even start.
       const { data, error } = await supabase.storage
         .from("client-uploads")
-        .createSignedUrl(submission.file_path, 3600);
+        .createSignedUrl(submission.file_path, 3600, { download: submission.file_name });
       if (error) throw error;
-      const res = await fetch(data.signedUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = submission.file_name;
+      a.href = data.signedUrl;
+      a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
     } catch {
       toast({ variant: "destructive", description: "Failed to download file." });
     } finally {
@@ -125,13 +124,17 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
     );
   }
 
+  // The upload page no longer asks clients for a name and email, so only older
+  // submissions carry them. The columns show only where there is something in them.
+  const showSender = submissions.some((s) => s.uploader_name || s.uploader_email);
+
   return (
     <div className="pt-3 overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border text-muted-foreground">
-            <th className="text-left pb-2 font-medium">Name</th>
-            <th className="text-left pb-2 font-medium">Email</th>
+            {showSender && <th className="text-left pb-2 font-medium">Name</th>}
+            {showSender && <th className="text-left pb-2 font-medium">Email</th>}
             <th className="text-left pb-2 font-medium">File</th>
             <th className="text-left pb-2 font-medium">Size</th>
             <th className="text-left pb-2 font-medium">Date</th>
@@ -141,8 +144,8 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
         <tbody className="divide-y divide-border">
           {submissions.map((s) => (
             <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-              <td className="py-2 pr-3 font-medium">{s.uploader_name}</td>
-              <td className="py-2 pr-3 text-muted-foreground">{s.uploader_email}</td>
+              {showSender && <td className="py-2 pr-3 font-medium">{s.uploader_name || "—"}</td>}
+              {showSender && <td className="py-2 pr-3 text-muted-foreground">{s.uploader_email || "—"}</td>}
               <td className="py-2 pr-3 max-w-[180px] truncate" title={s.file_name}>{s.file_name}</td>
               <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">{formatBytes(s.file_size)}</td>
               <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">

@@ -428,6 +428,11 @@ verify_jwt = false
 # secret for recurring queue processing. Both paths are authenticated in code.
 verify_jwt = false
 
+[functions.client-upload]
+# Called from the public /upload/:token page, where nobody is signed in. The
+# function checks the link's token itself before it signs or records anything.
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
