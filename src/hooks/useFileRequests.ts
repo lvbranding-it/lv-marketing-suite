@@ -11,6 +11,8 @@ export interface FileRequest {
   expires_at: string | null;
   status: string;
   created_at: string;
+  /** Shows the client the logo file guidelines on the upload page. */
+  is_logo_request: boolean;
 }
 
 export interface FileSubmission {
@@ -49,7 +51,7 @@ export function useFileRequests() {
 }
 
 /** What the public upload page is shown about a request: never its token, org, or id. */
-export type PublicFileRequest = Pick<FileRequest, "title" | "description" | "status" | "expires_at">;
+export type PublicFileRequest = Pick<FileRequest, "title" | "description" | "status" | "expires_at" | "is_logo_request">;
 
 // ── Single file_request by token (public — no org filter) ─────────────────────
 /**
@@ -91,6 +93,38 @@ export function useFileSubmissions(requestId: string | null) {
   });
 }
 
+// ── Storage used by each request ──────────────────────────────────────────────
+export interface FileRequestUsage {
+  files: number;
+  bytes: number;
+}
+
+/** How many files each request has received and how much room they take, by request id. */
+export function useFileRequestUsage() {
+  const { org } = useOrg();
+  return useQuery<Record<string, FileRequestUsage>>({
+    queryKey: ["file-request-usage", org?.id],
+    queryFn: async () => {
+      const usage: Record<string, FileRequestUsage> = {};
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await db
+          .from("file_submissions")
+          .select("request_id, file_size")
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        for (const row of (data ?? []) as Pick<FileSubmission, "request_id" | "file_size">[]) {
+          const entry = (usage[row.request_id] ??= { files: 0, bytes: 0 });
+          entry.files += 1;
+          entry.bytes += Number(row.file_size) || 0;
+        }
+        if (!data || data.length < PAGE) return usage;
+      }
+    },
+    enabled: !!org,
+  });
+}
+
 // ── Create file request ───────────────────────────────────────────────────────
 function generateToken(length = 12): string {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -110,6 +144,7 @@ export function useCreateFileRequest() {
       title: string;
       description?: string | null;
       expires_at?: string | null;
+      is_logo_request?: boolean;
     }) => {
       if (!org) throw new Error("No org");
       const token = generateToken(12);
@@ -122,6 +157,7 @@ export function useCreateFileRequest() {
           token,
           expires_at: payload.expires_at || null,
           status: "active",
+          is_logo_request: !!payload.is_logo_request,
         })
         .select()
         .single();
@@ -145,5 +181,92 @@ export function useCloseFileRequest() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["file-requests"] }),
+  });
+}
+
+// ── Mark a request as a logo request ──────────────────────────────────────────
+export function useSetLogoRequest() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, value }: { id: string; value: boolean }) => {
+      const { error } = await db
+        .from("file_requests")
+        .update({ is_logo_request: value })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    // The switch moves as soon as it is pressed; a failed save is undone by the refetch.
+    onMutate: ({ id, value }) => {
+      qc.setQueriesData<FileRequest[]>({ queryKey: ["file-requests"] }, (old) =>
+        old?.map((request) => (request.id === id ? { ...request, is_logo_request: value } : request)),
+      );
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["file-requests"] }),
+  });
+}
+
+// ── Delete a request with everything clients sent through it ─────────────────
+const CLIENT_UPLOAD_BUCKET = "client-uploads";
+const LIST_PAGE = 1000;
+const REMOVE_BATCH = 100;
+
+/**
+ * Removes the link, the files clients sent through it, and their records.
+ *
+ * The files go first: everything recorded against the request, plus anything
+ * in its storage folder that was never recorded (an upload whose last step
+ * failed). If storage still holds any of them afterwards, the request is kept,
+ * so the team can see it and try again rather than being left with files that
+ * nothing points to. Deleting the request removes its submissions by cascade.
+ */
+export function useDeleteFileRequest() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: FileRequest) => {
+      const bucket = supabase.storage.from(CLIENT_UPLOAD_BUCKET);
+      const folder = `${request.org_id}/${request.id}`;
+
+      const filesInFolder = async () => {
+        const paths: string[] = [];
+        for (let offset = 0; ; offset += LIST_PAGE) {
+          const { data, error } = await bucket.list(folder, { limit: LIST_PAGE, offset });
+          if (error) throw error;
+          // Entries without an id are folders, not files.
+          paths.push(...(data ?? []).filter((entry) => entry.id).map((entry) => `${folder}/${entry.name}`));
+          if (!data || data.length < LIST_PAGE) return paths;
+        }
+      };
+
+      const { data: submissions, error: submissionsError } = await db
+        .from("file_submissions")
+        .select("file_path")
+        .eq("request_id", request.id);
+      if (submissionsError) throw submissionsError;
+
+      const paths = [
+        ...new Set([
+          ...((submissions ?? []) as Pick<FileSubmission, "file_path">[]).map((s) => s.file_path),
+          ...(await filesInFolder()),
+        ]),
+      ];
+      for (let i = 0; i < paths.length; i += REMOVE_BATCH) {
+        const { error } = await bucket.remove(paths.slice(i, i + REMOVE_BATCH));
+        if (error) throw error;
+      }
+
+      // Storage skips files it will not let this person delete without saying so.
+      if ((await filesInFolder()).length > 0) {
+        throw new Error("Some files could not be deleted, so the link was kept. Try again, or ask an admin.");
+      }
+
+      const { error } = await db.from("file_requests").delete().eq("id", request.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["file-requests"] });
+      qc.invalidateQueries({ queryKey: ["file-request-usage"] });
+    },
   });
 }

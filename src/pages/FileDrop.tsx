@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,9 +36,13 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useFileRequests,
   useFileSubmissions,
+  useFileRequestUsage,
   useCreateFileRequest,
   useCloseFileRequest,
+  useDeleteFileRequest,
+  useSetLogoRequest,
   type FileRequest,
+  type FileRequestUsage,
   type FileSubmission,
 } from "@/hooks/useFileRequests";
 import {
@@ -151,7 +156,7 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
             <Fragment key={group.rows[0].id}>
               {group.note && (
                 <tr>
-                  <td colSpan={columnCount} className="pt-3 pb-1.5">
+                  <td colSpan={columnCount} className="px-0 pt-3 pb-1.5">
                     <div className="sticky left-0 flex w-[100cqw] items-start gap-2 rounded-md bg-muted/60 px-2.5 py-2">
                       <MessageSquare size={12} className="mt-0.5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0">
@@ -199,14 +204,20 @@ function SubmissionsPanel({ requestId }: { requestId: string }) {
 // ── Request card ──────────────────────────────────────────────────────────────
 function RequestCard({
   request,
+  usage,
   onClose,
+  onDelete,
 }: {
   request: FileRequest;
+  usage?: FileRequestUsage;
   onClose: (r: FileRequest) => void;
+  onDelete: (r: FileRequest) => void;
 }) {
   const [filesOpen, setFilesOpen] = useState(false);
+  const setLogoRequest = useSetLogoRequest();
   const shareUrl = `${window.location.origin}/upload/${request.token}`;
   const isActive = request.status === "active";
+  const logoSwitchId = `logo-${request.id}`;
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-3">
@@ -236,16 +247,26 @@ function RequestCard({
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{request.description}</p>
           )}
         </div>
-        {isActive && (
+        <div className="flex items-center gap-2 shrink-0">
+          {isActive && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => onClose(request)}
+            >
+              <X size={11} className="mr-1" /> Close Link
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs text-muted-foreground shrink-0"
-            onClick={() => onClose(request)}
+            className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50 gap-1"
+            onClick={() => onDelete(request)}
           >
-            <X size={11} className="mr-1" /> Close Link
+            <Trash2 size={11} /> Delete
           </Button>
-        )}
+        </div>
       </div>
 
       {/* Shareable link */}
@@ -255,17 +276,35 @@ function RequestCard({
       </div>
 
       {/* Actions row */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setFilesOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
-        >
-          {filesOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          View Files
-        </button>
-        <span className="text-xs text-muted-foreground">
-          Created {format(new Date(request.created_at), "MMM d, yyyy")}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilesOpen((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
+          >
+            {filesOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            View Files
+          </button>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {usage?.files
+              ? `${usage.files} file${usage.files === 1 ? "" : "s"} · ${formatBytes(usage.bytes)}`
+              : "No files yet"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Only a logo request shows the client the logo file guidelines. */}
+          <label htmlFor={logoSwitchId} className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch
+              id={logoSwitchId}
+              checked={request.is_logo_request}
+              onCheckedChange={(value) => setLogoRequest.mutate({ id: request.id, value })}
+            />
+            Logo guidelines
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Created {format(new Date(request.created_at), "MMM d, yyyy")}
+          </span>
+        </div>
       </div>
 
       {/* Submissions panel */}
@@ -287,6 +326,9 @@ function NewDropDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  // Follows the title ("Acme – Logos") until someone sets it by hand.
+  const [logoChoice, setLogoChoice] = useState<boolean | null>(null);
+  const isLogoRequest = logoChoice ?? /logo/i.test(title);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -296,11 +338,13 @@ function NewDropDialog({
         title: title.trim(),
         description: description.trim() || null,
         expires_at: expiresAt || null,
+        is_logo_request: isLogoRequest,
       });
       toast({ description: "Drop link created." });
       setTitle("");
       setDescription("");
       setExpiresAt("");
+      setLogoChoice(null);
       onOpenChange(false);
     } catch {
       toast({ variant: "destructive", description: "Failed to create drop link." });
@@ -340,6 +384,20 @@ function NewDropDialog({
               onChange={(e) => setExpiresAt(e.target.value)}
             />
           </div>
+          <label htmlFor="new-drop-logo" className="flex items-start gap-3 rounded-md border border-border p-3 cursor-pointer">
+            <Switch
+              id="new-drop-logo"
+              checked={isLogoRequest}
+              onCheckedChange={setLogoChoice}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">Logo request</span>
+              <span className="block text-xs text-muted-foreground">
+                Shows the client which logo files to send: .AI, .EPS or .PDF, or a high-res PNG or JPG.
+              </span>
+            </span>
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -670,7 +728,9 @@ function EditExpiryDialog({
 export default function FileDrop() {
   const { data: requests = [], isLoading: requestsLoading } = useFileRequests();
   const { data: shares = [], isLoading: sharesLoading } = useFileShares();
+  const { data: usage = {} } = useFileRequestUsage();
   const closeRequest = useCloseFileRequest();
+  const deleteRequest = useDeleteFileRequest();
   const deleteShare = useDeleteFileShare();
   const regenerateToken = useRegenerateFileShareToken();
   const { toast } = useToast();
@@ -679,7 +739,22 @@ export default function FileDrop() {
   const [dropDialogOpen, setDropDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<FileRequest | null>(null);
+  const [deleteRequestTarget, setDeleteRequestTarget] = useState<FileRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileShare | null>(null);
+
+  // What every link's files take up together, so the team can see when it is time to clear some out.
+  const received = requests.reduce(
+    (total, r) => ({ files: total.files + (usage[r.id]?.files ?? 0), bytes: total.bytes + (usage[r.id]?.bytes ?? 0) }),
+    { files: 0, bytes: 0 },
+  );
+  // The dialog keeps showing the link it was opened for while it fades out;
+  // without this its text would switch to the "no files" wording mid-close.
+  const shownDeleteRequest = useRef<{ request: FileRequest; usage?: FileRequestUsage } | null>(null);
+  if (deleteRequestTarget) {
+    shownDeleteRequest.current = { request: deleteRequestTarget, usage: usage[deleteRequestTarget.id] };
+  }
+  const deleteRequestUsage = shownDeleteRequest.current?.usage;
+  const deleteRequestTitle = shownDeleteRequest.current?.request.title;
   const [editExpiryTarget, setEditExpiryTarget] = useState<FileShare | null>(null);
   const [regenerateTarget, setRegenerateTarget] = useState<FileShare | null>(null);
 
@@ -692,6 +767,19 @@ export default function FileDrop() {
       toast({ variant: "destructive", description: "Failed to close link." });
     }
     setCloseTarget(null);
+  };
+
+  const handleConfirmDeleteRequest = async (e: React.MouseEvent) => {
+    // Stays open while the files are removed; a link with many files takes a moment.
+    e.preventDefault();
+    if (!deleteRequestTarget) return;
+    try {
+      await deleteRequest.mutateAsync(deleteRequestTarget);
+      toast({ description: `"${deleteRequestTarget.title}" and its files deleted.` });
+      setDeleteRequestTarget(null);
+    } catch (err) {
+      toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed to delete link." });
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -768,8 +856,20 @@ export default function FileDrop() {
             </div>
           ) : (
             <div className="space-y-3">
+              {received.files > 0 && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  Client uploads: {received.files} file{received.files === 1 ? "" : "s"} · {formatBytes(received.bytes)}.
+                  Deleting a link removes its files from storage.
+                </p>
+              )}
               {requests.map((r) => (
-                <RequestCard key={r.id} request={r} onClose={setCloseTarget} />
+                <RequestCard
+                  key={r.id}
+                  request={r}
+                  usage={usage[r.id]}
+                  onClose={setCloseTarget}
+                  onDelete={setDeleteRequestTarget}
+                />
               ))}
             </div>
           )
@@ -827,6 +927,36 @@ export default function FileDrop() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Close Link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete drop link confirm */}
+      <AlertDialog
+        open={!!deleteRequestTarget}
+        onOpenChange={(open) => !open && !deleteRequest.isPending && setDeleteRequestTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this link and its files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteRequestUsage?.files
+                ? `"${deleteRequestTitle}" and the ${deleteRequestUsage.files} file${deleteRequestUsage.files === 1 ? "" : "s"} clients sent through it (${formatBytes(deleteRequestUsage.bytes)}) will be permanently deleted. Download anything you want to keep first.`
+                : `"${deleteRequestTitle}" will be permanently deleted. No files were received through it.`}{" "}
+              The link stops working. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteRequest.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteRequest}
+              disabled={deleteRequest.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteRequest.isPending
+                ? <><Loader2 size={14} className="animate-spin mr-1.5" /> Deleting…</>
+                : deleteRequestUsage?.files ? "Delete link and files" : "Delete link"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

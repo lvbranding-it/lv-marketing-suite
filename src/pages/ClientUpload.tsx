@@ -276,26 +276,29 @@ export default function ClientUpload() {
             )}
           </div>
 
-          {/* File format instructions */}
-          <div className="rounded-xl p-5 text-center space-y-3" style={{ background: "rgba(203,32,57,0.1)", border: "1px solid rgba(203,32,57,0.25)" }}>
-            <p className="text-sm font-medium text-white">
-              To ensure your brand looks its best, please send your logo in one of the following formats:
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-3 text-sm">
-              <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
-                <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>PREFERRED (VECTOR)</p>
-                <p className="font-mono font-bold text-white">.AI · .EPS · .PDF</p>
+          {/* Logo file guidelines — only on links asking for a logo; a link for
+              video or photos would otherwise tell the client to send an .AI file. */}
+          {request.is_logo_request && (
+            <div className="rounded-xl p-5 text-center space-y-3" style={{ background: "rgba(203,32,57,0.1)", border: "1px solid rgba(203,32,57,0.25)" }}>
+              <p className="text-sm font-medium text-white">
+                To ensure your brand looks its best, please send your logo in one of the following formats:
+              </p>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 text-sm">
+                <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>PREFERRED (VECTOR)</p>
+                  <p className="font-mono font-bold text-white">.AI · .EPS · .PDF</p>
+                </div>
+                <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>ALTERNATIVE (HIGH-RES)</p>
+                  <p className="font-mono font-bold text-white">.PNG · .JPG <span className="text-xs font-normal" style={{ color: "rgba(255,255,255,0.5)" }}>min 300 dpi</span></p>
+                </div>
               </div>
-              <div className="rounded-lg px-4 py-2.5" style={{ background: "rgba(255,255,255,0.07)" }}>
-                <p className="text-xs font-semibold mb-1" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em" }}>ALTERNATIVE (HIGH-RES)</p>
-                <p className="font-mono font-bold text-white">.PNG · .JPG <span className="text-xs font-normal" style={{ color: "rgba(255,255,255,0.5)" }}>min 300 dpi</span></p>
-              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
+                Help us make you look good! Since we're printing on a large scale, we can only use high-quality formats. Low-res files won't make the final cut — please send the best version you have!
+              </p>
+              <p className="text-xs font-semibold" style={{ color: "rgba(203,32,57,0.9)" }}>Thank you for your support!</p>
             </div>
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
-              Help us make you look good! Since we're printing on a large scale, we can only use high-quality formats. Low-res files won't make the final cut — please send the best version you have!
-            </p>
-            <p className="text-xs font-semibold" style={{ color: "rgba(203,32,57,0.9)" }}>Thank you for your support!</p>
-          </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
