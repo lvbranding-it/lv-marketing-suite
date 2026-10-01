@@ -34,6 +34,7 @@ const AcceptInvite  = lazy(() => import("@/pages/AcceptInvite"));
 const PhotoSessions        = lazy(() => import("@/pages/PhotoSessions"));
 const PhotoSessionDetail   = lazy(() => import("@/pages/PhotoSessionDetail"));
 const ClientPhotoSelection = lazy(() => import("@/pages/ClientPhotoSelection"));
+const BossRedirect         = lazy(() => import("@/components/boss/BossHeader").then((m) => ({ default: m.BossRedirect })));
 const FileDrop             = lazy(() => import("@/pages/FileDrop"));
 const ClientUpload         = lazy(() => import("@/pages/ClientUpload"));
 const Contests             = lazy(() => import("@/pages/Contests"));
@@ -152,6 +153,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Suspense fallback={null}><CreativeCanvasWorkspace /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      {/* BOSS: one sidebar entry for Skills and Agents, opening the tab used last. */}
+      <Route
+        path="/boss"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><BossRedirect /></Suspense>
           </ProtectedRoute>
         }
       />

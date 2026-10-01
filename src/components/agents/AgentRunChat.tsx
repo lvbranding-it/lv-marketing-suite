@@ -177,7 +177,7 @@ function conversationDocument(messages: ChatMessage[], projectName?: string, pro
     content: message.content,
     meta: message.type === "agent" ? getAgent(message.agentId || "")?.shortName : undefined,
   }));
-  const label = projectName ? `${projectName} — conversation` : "LV Intelligence conversation";
+  const label = projectName ? `${projectName} — conversation with BOSS` : "Conversation with BOSS";
   return {
     label,
     html: buildBrandedDocument({
@@ -187,7 +187,7 @@ function conversationDocument(messages: ChatMessage[], projectName?: string, pro
       qrTarget: projectId ? `${window.location.origin}/agents/${projectId}` : undefined,
     }),
     markdown: messages
-      .map((message) => `## ${message.type === "user" ? "You" : getAgent(message.agentId || "")?.shortName || "LV Intelligence"}\n\n${message.content}`)
+      .map((message) => `## ${message.type === "user" ? "You" : ["BOSS", getAgent(message.agentId || "")?.shortName].filter(Boolean).join(" · ")}\n\n${message.content}`)
       .join("\n\n---\n\n"),
   };
 }
@@ -584,7 +584,7 @@ export default function AgentRunChat({
       onRunComplete(result);
     } catch (err) {
       toast({
-        title:       "Agent failed",
+        title:       "BOSS couldn't finish this",
         description: err instanceof Error ? err.message : "Unknown error",
         variant:     "destructive",
       });
@@ -799,7 +799,7 @@ export default function AgentRunChat({
                 {projectName ? `Working on: ${projectName}` : "Select a project to start"}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1 max-w-xs">
-                Pick an agent above and type your input. The agent will ask questions first, then deliver the full output.
+                Pick an agent above and type your input. BOSS will ask questions first, then deliver the full output.
               </p>
             </div>
           )}
@@ -862,13 +862,15 @@ export default function AgentRunChat({
                   <Bot size={14} className="text-rose-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  {agent && (
-                    <div className="flex items-center gap-2 mb-1.5">
+                  {/* BOSS speaks; the agent is the role BOSS is working in. */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-semibold tracking-wide">BOSS</span>
+                    {agent && (
                       <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 border", catColor)}>
                         {agent.shortName}
                       </Badge>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3">
                     <ChatMessageText role="assistant" content={displayText} />
@@ -979,7 +981,7 @@ export default function AgentRunChat({
               </div>
               <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                 <Loader2 size={14} className="animate-spin text-rose-500" />
-                <span className="text-sm text-muted-foreground">Agent is thinking…</span>
+                <span className="text-sm text-muted-foreground">BOSS is thinking…</span>
               </div>
             </div>
           )}

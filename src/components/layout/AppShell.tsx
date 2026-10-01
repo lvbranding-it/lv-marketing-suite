@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   Compass,
   LayoutDashboard,
-  Zap,
   FolderOpen,
   BookOpen,
   History,
@@ -63,8 +62,8 @@ const NAV_ITEMS = [
   { to: "/portal", labelKey: "nav.portal", icon: Handshake },
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/dashboard/creative-canvas", labelKey: "nav.creativeCanvas", icon: PenTool },
-  { to: "/skills", labelKey: "nav.skills", icon: Zap },
-  { to: "/agents", labelKey: "nav.agents", icon: Bot },
+  // BOSS holds Skills and Agents as two tabs; /boss opens the one used last.
+  { to: "/boss", labelKey: "nav.boss", icon: Bot },
   { to: "/projects", labelKey: "nav.projects", icon: FolderOpen },
   { to: "/workspace", labelKey: "nav.workspace", icon: BookOpen },
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
@@ -92,6 +91,9 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
   const { org } = useOrg();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // BOSS's entry stays lit on either of its tabs, which live at their own paths.
+  const onBoss = /^\/(skills|agents)(\/|$)/.test(pathname);
   const perms = usePermissions();
   // Shares its cache with the portal itself, so this costs no extra request.
   const portalWorkspaces = usePortalWorkspaces();
@@ -134,7 +136,6 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
             if (to === "/contacts")     return perms.canAccessContacts;
             if (to === "/projects")     return perms.canAccessProjects;
             if (to === "/workspace")    return perms.canAccessWorkspace;
-            if (to === "/skills")       return perms.canAccessSkills;
             if (to === "/intake")       return perms.canAccessIntake;
             if (to === "/dashboard/creative-canvas") return perms.canAccessCreativeCanvas;
             // Absent until membership is confirmed, which also keeps the link
@@ -155,7 +156,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                     className={({ isActive }) =>
                       cn(
                         "flex items-center justify-center w-full p-2 rounded-md transition-colors",
-                        isActive
+                        isActive || (to === "/boss" && onBoss)
                           ? "bg-sidebar-primary text-sidebar-primary-foreground"
                           : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
                       )
@@ -174,7 +175,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors",
-                  isActive
+                  isActive || (to === "/boss" && onBoss)
                     ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
                     : "hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
                 )
@@ -307,7 +308,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                       <Crown size={18} />
                     </a>
                   </TooltipTrigger>
-                  <TooltipContent side="right">LV Branding's Boss</TooltipContent>
+                  <TooltipContent side="right">Master Boss</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider delayDuration={0}>
@@ -405,7 +406,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                 className="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm transition-colors hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground"
               >
                 <Crown size={16} />
-                LV Branding's Boss
+                Master Boss
                 <ExternalLink size={11} className="ml-auto opacity-50" />
               </a>
               <a

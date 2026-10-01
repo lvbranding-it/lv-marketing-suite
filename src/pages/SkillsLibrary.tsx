@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, LayoutGrid, Rows3, ArrowRight, History, Check, Compass } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
-import Header from "@/components/layout/Header";
+import BossHeader from "@/components/boss/BossHeader";
 import SkillGrid, { filterSkills } from "@/components/skills/SkillGrid";
 import SkillCard, { type SkillLayout } from "@/components/skills/SkillCard";
 import { Input } from "@/components/ui/input";
@@ -99,10 +99,7 @@ export default function SkillsLibrary() {
 
   return (
     <AppShell>
-      <Header
-        title={t("skills.title")}
-        subtitle={t("skills.subtitle", { count: SKILLS.length })}
-      />
+      <BossHeader active="skills" />
 
       <div className="mx-auto max-w-7xl px-3 pb-10 sm:px-6">
         {/* Filters stay reachable while 33 skills scroll past underneath. */}

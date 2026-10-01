@@ -9,6 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { AiAccessError, requireAiUser, requireAiOrganization, requireAiProject } from "../_shared/ai-authorization.ts";
 import { LV_BRAND_IDENTITY_GUARDRAIL } from "../_shared/lv-brand-identity.ts";
+import { BOSS_IDENTITY } from "../_shared/boss-identity.ts";
 
 const CLAUDE_API_KEY  = Deno.env.get("CLAUDE_API_KEY")!;
 const SUPABASE_URL    = Deno.env.get("SUPABASE_URL")!;
@@ -256,8 +257,11 @@ serve(async (req) => {
     ? `\n\nBRAND SNAPSHOT (accumulated from previous agent runs):\n${snapshotJson.slice(0, 3000)}${snapshotJson.length > 3000 ? "\n...}" : ""}`
     : "";
 
+  // Each agent is a role BOSS takes on; BOSS_IDENTITY says who is wearing it.
+  // The pieces used to run together with no space between them.
   const systemPrompt = [
     LV_BRAND_IDENTITY_GUARDRAIL,
+    `\n\n${BOSS_IDENTITY}\n\n`,
     agent.systemPrompt,
     AGENT_OS_RULES,
     `LANGUAGE CONTROL: ${lang}`,

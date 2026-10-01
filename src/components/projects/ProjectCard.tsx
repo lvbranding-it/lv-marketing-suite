@@ -80,7 +80,7 @@ export default function ProjectCard({ project, outputCount = 0, agentRunCount = 
                 navigate(`/agents/${project.id}`);
               }}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-colors font-medium"
-              title="Open in Agent Workspace"
+              title="Open with BOSS"
             >
               <Bot size={10} />
               {agentRunCount} run{agentRunCount !== 1 ? "s" : ""}

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as portalAdvisor from "./portal-advisor";
 import * as authorization from "./ai-authorization";
 import * as brandIdentity from "./lv-brand-identity";
+import * as bossIdentity from "./boss-identity";
 
 // Execute the real endpoint handlers with only network/database boundaries mocked.
 function endpoint(
@@ -69,6 +70,7 @@ function endpoint(
     if (id.includes("portal-advisor")) return portalAdvisor;
     if (id.includes("ai-authorization")) return authorization;
     if (id.includes("lv-brand-identity")) return brandIdentity;
+    if (id.includes("boss-identity")) return bossIdentity;
     throw new Error(`Unexpected import ${id}`);
   };
   new Function("require", "exports", "Deno", "fetch", compiled)(
@@ -105,6 +107,18 @@ it("injects the shared LV Branding identity distinction into the primary agent e
   const source = readFileSync(new URL("../agent-run/index.ts", import.meta.url), "utf8");
   expect(source).toContain('import { LV_BRAND_IDENTITY_GUARDRAIL }');
   expect(source).toMatch(/const systemPrompt = \[\s*LV_BRAND_IDENTITY_GUARDRAIL,/);
+});
+
+it("speaks as BOSS in every agent, right after the brand distinction", () => {
+  const source = readFileSync(new URL("../agent-run/index.ts", import.meta.url), "utf8");
+  expect(source).toContain('import { BOSS_IDENTITY }');
+  expect(source).toMatch(/const systemPrompt = \[\s*LV_BRAND_IDENTITY_GUARDRAIL,\s*`\\n\\n\$\{BOSS_IDENTITY\}\\n\\n`,\s*agent\.systemPrompt,/);
+});
+
+it("speaks as BOSS for the Skills page and the portal only, not for other features using skill-run", () => {
+  const source = readFileSync(new URL("../skill-run/index.ts", import.meta.url), "utf8");
+  expect(source).toContain('const asBoss = !!advisor || sourceType === "ai_skill";');
+  expect(source).toContain('${asBoss ? `${BOSS_IDENTITY}\\n\\n` : ""}');
 });
 
 describe.each(["agent-run", "skill-run"])("%s request boundary", (name) => {
@@ -185,6 +199,8 @@ it("grounds advisor requests in reviewed website content without internal delive
  const payload = JSON.parse(app.provider.mock.calls[0][1].body as string);
  expect(payload.system).toContain(portalAdvisor.ADVISOR_BRAND_CONTEXT);
  expect(payload.system).toContain(brandIdentity.LV_BRAND_IDENTITY_GUARDRAIL);
+ expect(payload.system).toContain(bossIdentity.BOSS_IDENTITY);
+ expect(payload.system.indexOf(bossIdentity.BOSS_IDENTITY)).toBeLessThan(payload.system.indexOf(portalAdvisor.ADVISOR_RULES));
  expect(payload.system).toContain(portalAdvisor.AMBASSADOR_TRAINING_CONTEXT);
  expect(payload.system).toContain(portalAdvisor.AMBASSADOR_COMMISSION_CONTEXT);
  expect(payload.system).toContain("Respond in Spanish");

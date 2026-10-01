@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, ChevronLeft, History, Search, Undo2, X } from "lucide-react";
+import { ChevronLeft, FolderOpen, History, Search, Undo2, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/hooks/useProjects";
@@ -82,8 +82,8 @@ export default function AgentProjectSidebar({
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-gray-200 bg-gray-50">
       <div className="shrink-0 space-y-2.5 border-b border-gray-200 px-3 pb-3 pt-3">
         <div className="flex items-center gap-2">
-          <Bot size={15} className="shrink-0 text-rose-600" />
-          <span className="flex-1 text-xs font-bold uppercase tracking-wide text-gray-800">Agents</span>
+          <FolderOpen size={15} className="shrink-0 text-rose-600" />
+          <span className="flex-1 text-xs font-bold uppercase tracking-wide text-gray-800">Projects</span>
           {onClose && (
             <button
               onClick={onClose}

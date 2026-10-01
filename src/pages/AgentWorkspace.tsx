@@ -4,6 +4,7 @@ import {
   PanelLeftOpen, PanelRightOpen, FolderOpen, ArrowRight,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
+import BossHeader from "@/components/boss/BossHeader";
 import AgentProjectSidebar from "@/components/agents/AgentProjectSidebar";
 import AgentRunChat from "@/components/agents/AgentRunChat";
 import AgentBrandSnapshot from "@/components/agents/AgentBrandSnapshot";
@@ -106,7 +107,9 @@ export default function AgentWorkspace() {
 
   return (
     <AppShell noPadding>
-      <div className="relative flex h-full overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
+      <BossHeader active="agents" />
+      <div className="relative flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── Left sidebar — desktop always visible, mobile overlay ── */}
         {leftOpen ? (
@@ -199,7 +202,7 @@ export default function AgentWorkspace() {
               <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center px-6 py-10">
                 <p className="text-lg font-semibold">Pick up where you left off</p>
                 <p className="mt-1 max-w-lg text-sm text-muted-foreground">
-                  Agents read a project's marketing context and client brief before you type, so they start already briefed.
+                  BOSS reads a project's marketing context and client brief before you type, so every agent starts already briefed.
                 </p>
                 {recentProjects.length > 0 && (
                   <div className="mt-6 grid gap-2">
@@ -282,6 +285,7 @@ export default function AgentWorkspace() {
             </div>
           </>
         )}
+      </div>
       </div>
     </AppShell>
   );

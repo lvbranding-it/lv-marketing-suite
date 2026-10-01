@@ -246,12 +246,12 @@ export const CAPABILITIES: Capability[] = [
   {
     id: "skills", group: "make", status: "live", path: "/skills",
     en: {
-      name: "Skills",
+      name: "BOSS Skills",
       what: "33 single-shot marketing specialists: SEO audits, page CRO, copywriting, paid ads, pricing strategy and more. Each asks a few questions and returns finished thinking.",
       when: "You need one solid answer on a specific discipline, today.",
     },
     es: {
-      name: "Habilidades",
+      name: "Habilidades de BOSS",
       what: "33 especialistas de marketing de una sola pasada: auditorías SEO, CRO de páginas, redacción, medios pagados, estrategia de precios y más. Cada uno hace unas preguntas y devuelve un razonamiento terminado.",
       when: "Necesitas una respuesta sólida sobre una disciplina concreta, hoy.",
     },
@@ -259,12 +259,12 @@ export const CAPABILITIES: Capability[] = [
   {
     id: "agents", group: "make", status: "live", path: "/agents",
     en: {
-      name: "Agents",
+      name: "BOSS Agents",
       what: "Nine agents that hold a brief across a project: lead intel, strategy, offers, proposals, content systems, production, website audits, client comms, project management. 218 runs to date, exportable to PDF or Word.",
       when: "The output is going in front of a client and needs to be structured, not conversational.",
     },
     es: {
-      name: "Agentes",
+      name: "Agentes de BOSS",
       what: "Nueve agentes que sostienen un brief a lo largo de un proyecto: inteligencia de prospectos, estrategia, ofertas, propuestas, sistemas de contenido, producción, auditoría web, comunicación con el cliente y gestión de proyectos. 218 ejecuciones hasta hoy, exportables a PDF o Word.",
       when: "El resultado va a ponerse frente a un cliente y necesita estructura, no una conversación.",
     },
@@ -492,13 +492,13 @@ export const CAPABILITIES: Capability[] = [
 export const AI_SYSTEMS: { id: string; en: Copy; es: Copy }[] = [
   {
     id: "skills",
-    en: { name: "Skills", what: "One job, one answer.", when: "Answer a few questions, get a finished piece of thinking back. An SEO audit, a pricing model, a page teardown." },
-    es: { name: "Habilidades", what: "Un trabajo, una respuesta.", when: "Contestas unas preguntas y recibes un razonamiento terminado. Una auditoría SEO, un modelo de precios, el desglose de una página." },
+    en: { name: "BOSS Skills", what: "One job, one answer.", when: "Answer a few questions, get a finished piece of thinking back. An SEO audit, a pricing model, a page teardown." },
+    es: { name: "Habilidades de BOSS", what: "Un trabajo, una respuesta.", when: "Contestas unas preguntas y recibes un razonamiento terminado. Una auditoría SEO, un modelo de precios, el desglose de una página." },
   },
   {
     id: "agents",
-    en: { name: "Agents", what: "A brief, not a question.", when: "They hold context across a whole project and produce a structured deliverable. Use them when the output has to survive review." },
-    es: { name: "Agentes", what: "Un brief, no una pregunta.", when: "Sostienen el contexto de un proyecto entero y producen un entregable estructurado. Úsalos cuando el resultado tenga que aguantar una revisión." },
+    en: { name: "BOSS Agents", what: "A brief, not a question.", when: "They hold context across a whole project and produce a structured deliverable. Use them when the output has to survive review." },
+    es: { name: "Agentes de BOSS", what: "Un brief, no una pregunta.", when: "Sostienen el contexto de un proyecto entero y producen un entregable estructurado. Úsalos cuando el resultado tenga que aguantar una revisión." },
   },
   {
     id: "commands",

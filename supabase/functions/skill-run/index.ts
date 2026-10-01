@@ -15,6 +15,7 @@ import {
   parseAdvisorInput,
   completeAdvisorResponse,
 } from "../_shared/portal-advisor.ts";
+import { BOSS_IDENTITY } from "../_shared/boss-identity.ts";
 import { LV_BRAND_IDENTITY_GUARDRAIL } from "../_shared/lv-brand-identity.ts";
 
 const CORS_HEADERS = {
@@ -181,7 +182,11 @@ serve(async (req) => {
     // Prepend the permanent LV Branding agency identity to every skill's system prompt.
     // This ensures all Claude calls are grounded in who we are, what we do, and
     // what standard our client deliverables must meet, regardless of which skill runs.
-    const fullSystemPrompt = `${LV_BRAND_IDENTITY_GUARDRAIL}\n\n${advisor ? [ADVISOR_BRAND_CONTEXT, AMBASSADOR_TRAINING_CONTEXT, AMBASSADOR_COMMISSION_CONTEXT].join("\n\n") : AGENCY_CONTEXT}\n\n---\n\n${skillSystemPrompt}`;
+    // BOSS speaks in the portal and on the Skills page, which marks its requests
+    // "ai_skill". Other features use this endpoint for drafting and research
+    // without a persona, and send no source type.
+    const asBoss = !!advisor || sourceType === "ai_skill";
+    const fullSystemPrompt = `${LV_BRAND_IDENTITY_GUARDRAIL}\n\n${asBoss ? `${BOSS_IDENTITY}\n\n` : ""}${advisor ? [ADVISOR_BRAND_CONTEXT, AMBASSADOR_TRAINING_CONTEXT, AMBASSADOR_COMMISSION_CONTEXT].join("\n\n") : AGENCY_CONTEXT}\n\n---\n\n${skillSystemPrompt}`;
 
     // Call Claude API with streaming
     const claudeResponse = await fetch(
