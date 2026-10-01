@@ -259,7 +259,11 @@ export default function PhotoSessionDetail() {
           {["photos", "selected", "editing", "ready"].map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-4 space-y-4">
               {tab === "photos" && org && (
-                <PhotoUploadZone sessionId={session.id} orgId={org.id} />
+                <PhotoUploadZone
+                  sessionId={session.id}
+                  orgId={org.id}
+                  nextOrder={photos.reduce((last, photo) => Math.max(last, photo.display_order), -1) + 1}
+                />
               )}
               {photosLoading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">

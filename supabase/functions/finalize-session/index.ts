@@ -67,8 +67,21 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── 2. Guard: already finalized? return current data ─────────────────────
-    if (session.finalized_at) {
+    // ── 2. Claim the session, or report it already finalized ─────────────────
+    // Claimed in one conditional update before anything that cannot be undone.
+    // Reading finalized_at and writing it at the end let two confirmations
+    // from two tabs both get through and both create an invoice.
+    const { data: claimed } = session.finalized_at
+      ? { data: null }
+      : await supabaseAdmin
+          .from("photo_sessions")
+          .update({ finalized_at: new Date().toISOString() })
+          .eq("id", session.id)
+          .is("finalized_at", null)
+          .select("id")
+          .maybeSingle();
+
+    if (!claimed) {
       const { data: existingSession } = await supabaseAdmin
         .from("photo_sessions")
         .select("wave_invoice_url, finalized_at")
@@ -208,15 +221,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 5. Mark session as finalized ─────────────────────────────────────────
-    await supabaseAdmin
-      .from("photo_sessions")
-      .update({
-        finalized_at: new Date().toISOString(),
-        ...(waveInvoiceId ? { wave_invoice_id: waveInvoiceId } : {}),
-        ...(waveInvoiceUrl ? { wave_invoice_url: waveInvoiceUrl } : {}),
-      })
-      .eq("id", session.id);
+    // ── 5. Record the invoice on the session (finalized_at was set in step 2) ─
+    if (waveInvoiceId || waveInvoiceUrl) {
+      await supabaseAdmin
+        .from("photo_sessions")
+        .update({
+          ...(waveInvoiceId ? { wave_invoice_id: waveInvoiceId } : {}),
+          ...(waveInvoiceUrl ? { wave_invoice_url: waveInvoiceUrl } : {}),
+        })
+        .eq("id", session.id);
+    }
 
     // ── 6. Email photographer notification ────────────────────────────────────
     const sendgridKey = Deno.env.get("SENDGRID_API_KEY");

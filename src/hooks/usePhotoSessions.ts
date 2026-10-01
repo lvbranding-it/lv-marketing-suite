@@ -67,21 +67,113 @@ export function useSessionPhotos(sessionId: string | undefined) {
   });
 }
 
-// Public query — no org context needed; used by the client share view
+// ── The client's view, through the share link ────────────────────────────────
+//
+// The client page has no login. It used to read the photo tables directly,
+// under rules that let anyone with the public key list every session, photo and
+// comment. It now goes through database functions that answer for one share
+// link only (migration 20261001160000).
+
+/** What the client page knows about its session. */
+export type ClientSession = Pick<
+  PhotoSession,
+  | "id" | "name" | "client_name" | "photo_limit" | "extra_photo_price" | "allow_zip_download"
+  | "multi_round_enabled" | "max_rounds" | "current_round" | "finalized_at" | "wave_invoice_url"
+  | "deliverables_ready_at"
+>;
+
+/** A photo as the client sees it: no storage path, links come from get-photo-urls. */
+export type ClientPhoto = Pick<
+  SessionPhoto,
+  "id" | "session_id" | "file_name" | "status" | "selection_round" | "display_order" | "created_at"
+>;
+
+export type ClientComment = Pick<PhotoComment, "id" | "photo_id" | "body" | "author_label" | "created_at">;
+
+// The share-link functions are not in the generated types yet.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rpc = (fn: string, args: Record<string, unknown>) => (supabase as any).rpc(fn, args);
+
 export function useSessionByShareToken(shareToken: string | undefined) {
   return useQuery({
     queryKey: ["session-share", shareToken],
     queryFn: async () => {
       if (!shareToken) return null;
-      const { data, error } = await supabase
-        .from("photo_sessions")
-        .select("*")
-        .eq("share_token", shareToken)
-        .single();
+      const { data, error } = await rpc("get_photo_session_by_token", { p_token: shareToken }).maybeSingle();
       if (error) throw error;
-      return data as PhotoSession;
+      return (data ?? null) as ClientSession | null;
     },
     enabled: !!shareToken,
+  });
+}
+
+export function useClientSessionPhotos(shareToken: string | undefined) {
+  return useQuery({
+    queryKey: ["client-session-photos", shareToken],
+    queryFn: async () => {
+      if (!shareToken) return [];
+      const { data, error } = await rpc("get_session_photos_by_token", { p_token: shareToken });
+      if (error) throw error;
+      return (data ?? []) as ClientPhoto[];
+    },
+    enabled: !!shareToken,
+  });
+}
+
+export function useClientSessionComments(shareToken: string | undefined) {
+  return useQuery({
+    queryKey: ["client-session-comments", shareToken],
+    queryFn: async () => {
+      if (!shareToken) return [];
+      const { data, error } = await rpc("get_session_comments_by_token", { p_token: shareToken });
+      if (error) throw error;
+      return (data ?? []) as ClientComment[];
+    },
+    enabled: !!shareToken,
+  });
+}
+
+/**
+ * Select or unselect a photo as the client.
+ *
+ * The tick changes on screen at once and rolls back if the save is refused. With
+ * 172 photos, waiting on a full reload of the list after every tap made picking
+ * feel stuck.
+ */
+export function useSetClientPhotoSelection(shareToken: string | undefined) {
+  const queryClient = useQueryClient();
+  const key = ["client-session-photos", shareToken];
+
+  return useMutation({
+    mutationFn: async ({ photoId, selected }: { photoId: string; selected: boolean }) => {
+      const { error } = await rpc("set_client_photo_selection", { p_token: shareToken, p_photo_id: photoId, p_selected: selected });
+      if (error) throw error;
+    },
+    onMutate: async ({ photoId, selected }) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ClientPhoto[]>(key);
+      queryClient.setQueryData<ClientPhoto[]>(key, (photos) =>
+        photos?.map((photo) => photo.id === photoId ? { ...photo, status: selected ? "selected" : "not_selected" } : photo),
+      );
+      return { previous };
+    },
+    onError: (_error, _values, context) => {
+      if (context?.previous) queryClient.setQueryData(key, context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
+export function useAddClientComment(shareToken: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ photoId, body }: { photoId: string; body: string }) => {
+      const { data, error } = await rpc("add_client_photo_comment", { p_token: shareToken, p_photo_id: photoId, p_body: body });
+      if (error) throw error;
+      return data as ClientComment[];
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["client-session-comments", shareToken] }),
   });
 }
 
@@ -98,25 +190,6 @@ export function useSessionComments(sessionId: string | undefined) {
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as { id: string; photo_id: string; body: string; author_label: string }[];
-    },
-    enabled: !!sessionId,
-  });
-}
-
-// Public photos query — depends on session resolved via share token
-export function usePhotosForSession(sessionId: string | undefined) {
-  return useQuery({
-    queryKey: ["session-photos-public", sessionId],
-    queryFn: async () => {
-      if (!sessionId) return [];
-      const { data, error } = await supabase
-        .from("session_photos")
-        .select("*")
-        .eq("session_id", sessionId)
-        .order("display_order", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as SessionPhoto[];
     },
     enabled: !!sessionId,
   });
@@ -139,19 +212,31 @@ export function usePhotoComments(photoId: string | undefined) {
   });
 }
 
-// Signed URL query — staleTime 50 min so URLs refresh before they expire (1 hr)
-export function useSignedUrl(storagePath: string | undefined) {
+/**
+ * Signed URL query — staleTime 50 min so URLs refresh before they expire (1 hr).
+ *
+ * With a width, the link is to a resized copy. The session grid used the
+ * originals, so opening a 172-photo session downloaded every full-size file
+ * (about 500 MB) to show squares a couple of hundred pixels wide. `enabled`
+ * lets a caller wait until the picture is actually on screen.
+ */
+export function useSignedUrl(storagePath: string | undefined, options: { width?: number; enabled?: boolean } = {}) {
+  const { width, enabled = true } = options;
   return useQuery({
-    queryKey: ["signed-url", storagePath],
+    queryKey: ["signed-url", storagePath, width ?? "original"],
     queryFn: async () => {
       if (!storagePath) return null;
       const { data, error } = await supabase.storage
         .from("session-photos")
-        .createSignedUrl(storagePath, 3600);
+        .createSignedUrl(
+          storagePath,
+          3600,
+          width ? { transform: { width, height: width, resize: "contain", quality: 75 } } : undefined,
+        );
       if (error) throw error;
       return data?.signedUrl ?? null;
     },
-    enabled: !!storagePath,
+    enabled: !!storagePath && enabled,
     staleTime: 1000 * 60 * 50,
   });
 }
@@ -341,7 +426,6 @@ export function useUpdatePhotoStatus() {
     },
     onSuccess: ({ sessionId }) => {
       queryClient.invalidateQueries({ queryKey: ["session-photos", sessionId] });
-      queryClient.invalidateQueries({ queryKey: ["session-photos-public", sessionId] });
     },
   });
 }
@@ -388,6 +472,10 @@ export function useFinalizeSession() {
         headers: {
           "Content-Type": "application/json",
           apikey: supabaseKey,
+          // The public key as a bearer token as well: finalize-session was
+          // once redeployed with login checks on, and every client's
+          // confirmation came back 401.
+          Authorization: `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({ share_token: shareToken }),
       });
@@ -406,6 +494,7 @@ export function useFinalizeSession() {
     },
     onSuccess: (_data, shareToken) => {
       queryClient.invalidateQueries({ queryKey: ["session-share", shareToken] });
+      queryClient.invalidateQueries({ queryKey: ["client-session-photos", shareToken] });
     },
   });
 }
@@ -423,6 +512,10 @@ export function useAdvanceRound() {
         headers: {
           "Content-Type": "application/json",
           apikey: supabaseKey,
+          // The public key as a bearer token as well: finalize-session was
+          // once redeployed with login checks on, and every client's
+          // confirmation came back 401.
+          Authorization: `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({ share_token: shareToken }),
       });
@@ -441,7 +534,7 @@ export function useAdvanceRound() {
     },
     onSuccess: (_data, shareToken) => {
       queryClient.invalidateQueries({ queryKey: ["session-share", shareToken] });
-      queryClient.invalidateQueries({ queryKey: ["session-photos-public"] });
+      queryClient.invalidateQueries({ queryKey: ["client-session-photos", shareToken] });
     },
   });
 }
@@ -491,7 +584,6 @@ export function useStartNextRound() {
       queryClient.invalidateQueries({ queryKey: ["photo-session", sessionId] });
       queryClient.invalidateQueries({ queryKey: ["photo-sessions"] });
       queryClient.invalidateQueries({ queryKey: ["session-photos", sessionId] });
-      queryClient.invalidateQueries({ queryKey: ["session-photos-public", sessionId] });
     },
   });
 }
@@ -538,15 +630,20 @@ export function useAddComment() {
 
 // ── Upload helper (not a React Query mutation — used directly in PhotoUploadZone) ──
 
-export type UploadProgressCallback = (filename: string, progress: number) => void;
-
+/**
+ * One photo into a session: the file to storage, then its record.
+ *
+ * `displayOrder` is the photo's place in the shoot, decided before the batch
+ * starts; every photo used to be saved as 0 and shown in the order its upload
+ * happened to finish. If the record cannot be written the file is removed
+ * again, so storage never holds a photo the session does not know about.
+ */
 export async function uploadPhoto(
   file: File,
   sessionId: string,
   orgId: string,
-  onProgress?: UploadProgressCallback
+  { displayOrder, contentType }: { displayOrder: number; contentType: string },
 ): Promise<SessionPhoto> {
-  const ext = file.name.split(".").pop() ?? "jpg";
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${orgId}/${sessionId}/${crypto.randomUUID()}-${safeName}`;
 
@@ -554,12 +651,11 @@ export async function uploadPhoto(
     .from("session-photos")
     .upload(path, file, {
       cacheControl: "3600",
+      contentType,
       upsert: false,
     });
 
   if (uploadError) throw uploadError;
-
-  onProgress?.(file.name, 100);
 
   const { data, error: insertError } = await supabase
     .from("session_photos")
@@ -569,12 +665,16 @@ export async function uploadPhoto(
       storage_path: path,
       file_name: file.name,
       file_size: file.size,
-      mime_type: file.type || `image/${ext}`,
+      mime_type: contentType,
+      display_order: displayOrder,
     })
     .select()
     .single();
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    await supabase.storage.from("session-photos").remove([path]);
+    throw insertError;
+  }
   return data as SessionPhoto;
 }
 
@@ -612,14 +712,12 @@ export function useDeleteDeliverable() {
   });
 }
 
-export type DeliverableUploadProgressCallback = (filename: string, progress: number) => void;
-
+/** One edited file into a session's deliverables; the file is removed again if its record cannot be written. */
 export async function uploadDeliverable(
   file: File,
   sessionId: string,
   orgId: string,
   quality: DeliverableQuality,
-  onProgress?: DeliverableUploadProgressCallback
 ): Promise<SessionDeliverable> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${orgId}/${sessionId}/${quality}/${crypto.randomUUID()}-${safeName}`;
@@ -629,7 +727,6 @@ export async function uploadDeliverable(
     .upload(path, file, { cacheControl: "3600", upsert: false });
 
   if (uploadError) throw uploadError;
-  onProgress?.(file.name, 100);
 
   const { data, error: insertError } = await supabase
     .from("session_deliverables")
@@ -645,7 +742,10 @@ export async function uploadDeliverable(
     .select()
     .single();
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    await supabase.storage.from("session-deliverables").remove([path]);
+    throw insertError;
+  }
   return data as SessionDeliverable;
 }
 

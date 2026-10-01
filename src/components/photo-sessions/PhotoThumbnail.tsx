@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import PhotoStatusBadge from "./PhotoStatusBadge";
 import { useSignedUrl, useUpdatePhotoStatus, useDeletePhoto } from "@/hooks/usePhotoSessions";
+import { useInView } from "@/hooks/useInView";
 import type { SessionPhoto, PhotoStatus } from "@/integrations/supabase/types";
 
 const STATUS_OPTIONS: { value: PhotoStatus; label: string }[] = [
@@ -39,7 +40,10 @@ interface PhotoThumbnailProps {
 }
 
 export default function PhotoThumbnail({ photo, photoNumber, comments = [], onClick }: PhotoThumbnailProps) {
-  const { data: signedUrl, isLoading } = useSignedUrl(photo.storage_path);
+  // A 400px copy, requested once the card nears the screen. The grid used to
+  // sign and download every original as soon as the session opened.
+  const [frameRef, inView] = useInView<HTMLDivElement>();
+  const { data: signedUrl, isLoading } = useSignedUrl(photo.storage_path, { width: 400, enabled: inView });
   const updateStatus = useUpdatePhotoStatus();
   const deletePhoto  = useDeletePhoto();
   const [imgError, setImgError] = useState(false);
@@ -59,13 +63,15 @@ export default function PhotoThumbnail({ photo, photoNumber, comments = [], onCl
   return (
     <div className="group rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors bg-card">
       {/* Image */}
-      <div className="relative aspect-square bg-muted cursor-pointer" onClick={onClick}>
-        {isLoading ? (
+      <div ref={frameRef} className="relative aspect-square bg-muted cursor-pointer" onClick={onClick}>
+        {!inView || isLoading ? (
           <Skeleton className="absolute inset-0" />
         ) : signedUrl && !imgError ? (
           <img
             src={signedUrl}
             alt={photo.file_name}
+            loading="lazy"
+            decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
             onError={() => setImgError(true)}
           />

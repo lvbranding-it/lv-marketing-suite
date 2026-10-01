@@ -1,85 +1,64 @@
-import { useRef, useState, useCallback } from "react";
-import { Upload, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { useRef, useState } from "react";
+import { Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { uploadPhoto } from "@/hooks/usePhotoSessions";
+import { useUploadBatch, type SkippedFile } from "@/hooks/useUploadBatch";
+import { byFileName, photoContentType, photoProblem } from "@/lib/photo-sessions/uploads";
+import UploadBatchStatus from "./UploadBatchStatus";
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
-const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"];
-
-interface FileProgress {
-  name: string;
-  progress: number;
-  error?: string;
-}
+/** Four at a time: fast on a good connection, and one slow file does not hold up the rest. */
+const CONCURRENT_UPLOADS = 4;
 
 interface PhotoUploadZoneProps {
   sessionId: string;
   orgId: string;
+  /** Where the next photo goes in the session's order: one past the last photo already in it. */
+  nextOrder: number;
 }
 
-export default function PhotoUploadZone({ sessionId, orgId }: PhotoUploadZoneProps) {
+/**
+ * Adds a shoot to a session.
+ *
+ * Files are checked first and the ones that cannot go in are named with the
+ * reason; the rest are numbered in file-name order — the order they were shot —
+ * and uploaded four at a time. The grid fills in as they arrive.
+ */
+export default function PhotoUploadZone({ sessionId, orgId, nextOrder }: PhotoUploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
-  const [uploading, setUploading] = useState(false);
   const queryClient = useQueryClient();
 
-  const processFiles = useCallback(async (files: File[]) => {
-    const validFiles = files.filter((f) => {
-      if (!ACCEPTED_TYPES.includes(f.type)) return false;
-      if (f.size > MAX_FILE_SIZE) return false;
-      return true;
-    });
+  const batch = useUploadBatch({
+    concurrency: CONCURRENT_UPLOADS,
+    upload: (entry) =>
+      uploadPhoto(entry.file, sessionId, orgId, {
+        displayOrder: entry.order,
+        contentType: photoContentType(entry.file) ?? "image/jpeg",
+      }),
+    onProgress: () => queryClient.invalidateQueries({ queryKey: ["session-photos", sessionId] }),
+  });
 
-    if (validFiles.length === 0) return;
-
-    setUploading(true);
-    setFileProgress(validFiles.map((f) => ({ name: f.name, progress: 0 })));
-
-    const results = await Promise.allSettled(
-      validFiles.map(async (file, idx) => {
-        try {
-          await uploadPhoto(file, sessionId, orgId, (_, progress) => {
-            setFileProgress((prev) =>
-              prev.map((fp, i) => (i === idx ? { ...fp, progress } : fp))
-            );
-          });
-        } catch (err) {
-          setFileProgress((prev) =>
-            prev.map((fp, i) =>
-              i === idx ? { ...fp, error: "Upload failed", progress: 0 } : fp
-            )
-          );
-          throw err;
-        }
-      })
-    );
-
-    // Invalidate after all uploads complete
-    const anySuccess = results.some((r) => r.status === "fulfilled");
-    if (anySuccess) {
-      queryClient.invalidateQueries({ queryKey: ["session-photos", sessionId] });
+  const processFiles = (files: File[]) => {
+    if (!files.length || batch.running) return;
+    const skipped: SkippedFile[] = [];
+    const accepted: File[] = [];
+    for (const file of files) {
+      const problem = photoProblem(file);
+      if (problem) skipped.push({ name: file.name, reason: problem });
+      else accepted.push(file);
     }
-
-    // Clear progress after a short delay
-    setTimeout(() => {
-      setFileProgress([]);
-      setUploading(false);
-    }, 2000);
-  }, [sessionId, orgId, queryClient]);
+    accepted.sort(byFileName);
+    batch.start(accepted.map((file, index) => ({ file, order: nextOrder + index })), skipped);
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    processFiles(files);
+    processFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    processFiles(files);
+    processFiles(Array.from(e.target.files ?? []));
     // Reset input so same file can be uploaded again if needed
     e.target.value = "";
   };
@@ -90,11 +69,11 @@ export default function PhotoUploadZone({ sessionId, orgId }: PhotoUploadZonePro
         onDrop={handleDrop}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onClick={() => !uploading && inputRef.current?.click()}
+        onClick={() => !batch.running && inputRef.current?.click()}
         className={`
           border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
           ${dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/40"}
-          ${uploading ? "pointer-events-none opacity-60" : ""}
+          ${batch.running ? "pointer-events-none opacity-60" : ""}
         `}
       >
         <Upload size={28} className="mx-auto mb-2 text-muted-foreground" />
@@ -102,40 +81,28 @@ export default function PhotoUploadZone({ sessionId, orgId }: PhotoUploadZonePro
           {dragging ? "Drop photos here" : "Drop photos or click to upload"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          JPEG, PNG, WebP, HEIC — max 15 MB each
+          JPEG, PNG or WebP — max 15 MB each. Shown in file-name order.
         </p>
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept="image/*,.heic,.heif"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
           className="hidden"
           onChange={handleFileInput}
         />
       </div>
 
-      {/* Upload progress */}
-      {fileProgress.length > 0 && (
-        <div className="space-y-2">
-          {fileProgress.map((fp, i) => (
-            <div key={i} className="bg-muted rounded-lg p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-foreground truncate flex-1 mr-2">{fp.name}</span>
-                {fp.error ? (
-                  <span className="text-xs text-destructive flex items-center gap-1">
-                    <X size={12} /> Failed
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">{fp.progress}%</span>
-                )}
-              </div>
-              {!fp.error && (
-                <Progress value={fp.progress} className="h-1.5" />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <UploadBatchStatus
+        noun={{ one: "photo", many: "photos" }}
+        total={batch.total}
+        done={batch.done}
+        running={batch.running}
+        failed={batch.failed}
+        skipped={batch.skipped}
+        onRetry={batch.retryFailed}
+        onDismiss={batch.dismiss}
+      />
     </div>
   );
 }

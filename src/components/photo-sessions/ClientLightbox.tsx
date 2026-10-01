@@ -2,17 +2,17 @@ import { useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, CheckCircle2, Circle, MessageSquare, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { SessionPhoto } from "@/integrations/supabase/types";
+import type { ClientPhoto } from "@/hooks/usePhotoSessions";
 
 interface ClientLightboxProps {
-  photo: SessionPhoto | null;
-  photos: SessionPhoto[];
+  photo: ClientPhoto | null;
+  photos: ClientPhoto[];
   signedUrls: Record<string, string>;
   commentCountByPhotoId: Record<string, number>;
   onClose: () => void;
-  onNavigate: (photo: SessionPhoto) => void;
-  onToggle: (photo: SessionPhoto) => void;
-  onComment: (photo: SessionPhoto) => void;
+  onNavigate: (photo: ClientPhoto) => void;
+  onToggle: (photo: ClientPhoto) => void;
+  onComment: (photo: ClientPhoto) => void;
   disabled: boolean; // limit reached and this photo is not selected
   protectImages?: boolean; // block right-click / long-press save until editing is done
 }

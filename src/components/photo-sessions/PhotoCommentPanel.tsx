@@ -6,56 +6,93 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePhotoComments, useSignedUrl, useAddComment } from "@/hooks/usePhotoSessions";
+import { toast } from "@/hooks/use-toast";
+import {
+  usePhotoComments,
+  useSignedUrl,
+  useAddComment,
+  useClientSessionComments,
+  useAddClientComment,
+  type ClientPhoto,
+} from "@/hooks/usePhotoSessions";
 import type { SessionPhoto } from "@/integrations/supabase/types";
 
-interface PhotoCommentPanelProps {
-  photo: SessionPhoto | null;
-  sessionId: string;
-  orgId: string;
-  authorLabel: string;
-  authorUserId: string | null;
-  onClose: () => void;
+/**
+ * The comment thread on one photo, for the team or for the client.
+ *
+ * The team reads and writes through its own access. The client has no login:
+ * it goes through the share link, and its picture is the link the page already
+ * holds — a client cannot sign storage paths itself, so the panel used to show
+ * "Image unavailable" to every client who opened it.
+ */
+type PhotoCommentPanelProps =
+  | {
+      photo: SessionPhoto | null;
+      sessionId: string;
+      orgId: string;
+      authorLabel: string;
+      authorUserId: string | null;
+      shareToken?: undefined;
+      imageUrl?: undefined;
+      onClose: () => void;
+    }
+  | {
+      photo: ClientPhoto | null;
+      shareToken: string | undefined;
+      imageUrl: string | null;
+      onClose: () => void;
+    };
+
+function TeamPhotoDisplay({ storagePath }: { storagePath: string }) {
+  const { data: signedUrl, isLoading } = useSignedUrl(storagePath, { width: 1200 });
+  return <PhotoImage url={signedUrl ?? null} loading={isLoading} />;
 }
 
-function PhotoDisplay({ storagePath }: { storagePath: string }) {
-  const { data: signedUrl, isLoading } = useSignedUrl(storagePath);
-
-  if (isLoading) return <Skeleton className="w-full aspect-square rounded-lg" />;
-  if (!signedUrl) return <div className="w-full aspect-square bg-muted rounded-lg flex items-center justify-center text-muted-foreground text-sm">Image unavailable</div>;
-
-  return (
-    <img
-      src={signedUrl}
-      alt="Photo"
-      className="w-full rounded-lg object-contain max-h-72 bg-muted"
-    />
-  );
+function PhotoImage({ url, loading }: { url: string | null; loading?: boolean }) {
+  if (loading) return <Skeleton className="w-full aspect-square rounded-lg" />;
+  if (!url) return <div className="w-full aspect-square bg-muted rounded-lg flex items-center justify-center text-muted-foreground text-sm">Image unavailable</div>;
+  return <img src={url} alt="Photo" className="w-full rounded-lg object-contain max-h-72 bg-muted" />;
 }
 
-export default function PhotoCommentPanel({
-  photo,
-  sessionId,
-  orgId,
-  authorLabel,
-  authorUserId,
-  onClose,
-}: PhotoCommentPanelProps) {
+export default function PhotoCommentPanel(props: PhotoCommentPanelProps) {
+  const { photo, onClose } = props;
+  const isClient = "shareToken" in props && props.shareToken !== undefined;
   const [body, setBody] = useState("");
-  const { data: comments = [], isLoading: commentsLoading } = usePhotoComments(photo?.id);
-  const addComment = useAddComment();
+
+  // Both readers are mounted; only the one for this mode is enabled.
+  const team = usePhotoComments(!isClient ? photo?.id : undefined);
+  const client = useClientSessionComments(isClient ? props.shareToken : undefined);
+  const addTeamComment = useAddComment();
+  const addClientComment = useAddClientComment(isClient ? props.shareToken : undefined);
+
+  const comments = isClient ? (client.data ?? []).filter((comment) => comment.photo_id === photo?.id) : team.data ?? [];
+  const commentsLoading = isClient ? client.isLoading : team.isLoading;
+  const sending = addTeamComment.isPending || addClientComment.isPending;
 
   const handleSend = async () => {
     if (!photo || !body.trim()) return;
-    await addComment.mutateAsync({
-      photoId: photo.id,
-      sessionId,
-      orgId,
-      body: body.trim(),
-      authorLabel,
-      authorUserId,
-    });
-    setBody("");
+    try {
+      if (isClient) {
+        await addClientComment.mutateAsync({ photoId: photo.id, body: body.trim() });
+      } else {
+        const teamProps = props as Extract<PhotoCommentPanelProps, { sessionId: string }>;
+        await addTeamComment.mutateAsync({
+          photoId: photo.id,
+          sessionId: teamProps.sessionId,
+          orgId: teamProps.orgId,
+          body: body.trim(),
+          authorLabel: teamProps.authorLabel,
+          authorUserId: teamProps.authorUserId,
+        });
+      }
+      setBody("");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Comment was not sent",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
+      });
+    }
   };
 
   return (
@@ -66,7 +103,9 @@ export default function PhotoCommentPanel({
         </SheetHeader>
 
         <div className="p-4 pt-3">
-          {photo && <PhotoDisplay storagePath={photo.storage_path} />}
+          {photo && (isClient
+            ? <PhotoImage url={props.imageUrl ?? null} />
+            : <TeamPhotoDisplay storagePath={(photo as SessionPhoto).storage_path} />)}
         </div>
 
         <div className="px-4 pb-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">
@@ -102,7 +141,8 @@ export default function PhotoCommentPanel({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write a comment…"
-            className="resize-none text-sm min-h-[60px]"
+            maxLength={2000}
+            className="resize-none min-h-[60px]"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
             }}
@@ -110,10 +150,11 @@ export default function PhotoCommentPanel({
           <Button
             size="icon"
             onClick={handleSend}
-            disabled={!body.trim() || addComment.isPending}
+            disabled={!body.trim() || sending}
+            aria-label="Send comment"
             className="shrink-0 self-end"
           >
-            {addComment.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </Button>
         </div>
       </SheetContent>

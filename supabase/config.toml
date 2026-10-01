@@ -428,6 +428,22 @@ verify_jwt = false
 # secret for recurring queue processing. Both paths are authenticated in code.
 verify_jwt = false
 
+# The photo-session functions the client page calls, without a login, through
+# the session's share link. Each checks the share link itself. finalize-session
+# was redeployed on 2026-09-08 without this setting and started refusing every
+# client's "confirm selection" with a 401.
+[functions.get-photo-urls]
+verify_jwt = false
+
+[functions.finalize-session]
+verify_jwt = false
+
+[functions.advance-round]
+verify_jwt = false
+
+[functions.get-deliverable-urls]
+verify_jwt = false
+
 [functions.client-upload]
 # Called from the public /upload/:token page, where nobody is signed in. The
 # function checks the link's token itself before it signs or records anything.

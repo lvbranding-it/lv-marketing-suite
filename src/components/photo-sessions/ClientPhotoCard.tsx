@@ -2,13 +2,13 @@ import { useState } from "react";
 import { CheckCircle2, MessageSquare, ZoomIn } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import LVLogo from "@/components/LVLogo";
-import type { SessionPhoto } from "@/integrations/supabase/types";
+import type { ClientPhoto } from "@/hooks/usePhotoSessions";
 
 interface ClientPhotoCardProps {
-  photo: SessionPhoto;
-  onToggle: (photo: SessionPhoto) => void;
-  onViewPhoto: (photo: SessionPhoto) => void;  // opens lightbox
-  onComment: (photo: SessionPhoto) => void;
+  photo: ClientPhoto;
+  onToggle: (photo: ClientPhoto) => void;
+  onViewPhoto: (photo: ClientPhoto) => void;  // opens lightbox
+  onComment: (photo: ClientPhoto) => void;
   disabled: boolean;   // limit reached and photo is not_selected
   signedUrl: string | null;
   commentCount: number;

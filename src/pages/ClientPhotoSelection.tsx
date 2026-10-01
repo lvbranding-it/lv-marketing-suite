@@ -18,13 +18,19 @@ import {
 } from "@/components/ui/sheet";
 import {
   useSessionByShareToken,
-  usePhotosForSession,
-  useSessionComments,
-  useUpdatePhotoStatus,
+  useClientSessionPhotos,
+  useClientSessionComments,
+  useSetClientPhotoSelection,
   useFinalizeSession,
   useAdvanceRound,
+  type ClientPhoto,
 } from "@/hooks/usePhotoSessions";
-import type { SessionPhoto } from "@/integrations/supabase/types";
+import { toast } from "@/hooks/use-toast";
+
+/** Image links last an hour; they are renewed before that, so a long visit keeps its pictures. */
+const LINK_REFRESH_MS = 45 * 60 * 1000;
+/** Roughly how much of a delivery one ZIP holds before the next part starts. */
+const ZIP_PART_BYTES = 300 * 1024 * 1024;
 
 // Deliverable signed URLs — fetched via Edge Function for anon clients
 async function fetchDeliverableUrls(
@@ -35,7 +41,7 @@ async function fetchDeliverableUrls(
 
   const res = await fetch(`${supabaseUrl}/functions/v1/get-deliverable-urls`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", apikey: supabaseKey },
+    headers: { "Content-Type": "application/json", apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
     body: JSON.stringify({ share_token: shareToken }),
   });
   if (!res.ok) return [];
@@ -56,6 +62,7 @@ async function fetchSignedUrls(
     headers: {
       "Content-Type": "application/json",
       apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
     },
     body: JSON.stringify({ share_token: shareToken, photo_ids: photoIds }),
   });
@@ -73,17 +80,17 @@ export default function ClientPhotoSelection() {
   const { shareToken } = useParams<{ shareToken: string }>();
 
   const { data: session, isLoading: sessionLoading } = useSessionByShareToken(shareToken);
-  const { data: photos = [], isLoading: photosLoading } = usePhotosForSession(session?.id);
-  const { data: allComments = [] } = useSessionComments(session?.id);
-  const updatePhotoStatus = useUpdatePhotoStatus();
+  const { data: photos = [], isLoading: photosLoading } = useClientSessionPhotos(session ? shareToken : undefined);
+  const { data: allComments = [] } = useClientSessionComments(session ? shareToken : undefined);
+  const setSelection = useSetClientPhotoSelection(shareToken);
   const finalizeSession = useFinalizeSession();
   const advanceRound = useAdvanceRound();
 
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [urlsLoading, setUrlsLoading] = useState(false);
 
-  const [lightboxPhoto, setLightboxPhoto] = useState<SessionPhoto | null>(null);
-  const [commentPhoto, setCommentPhoto] = useState<SessionPhoto | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<ClientPhoto | null>(null);
+  const [commentPhoto, setCommentPhoto] = useState<ClientPhoto | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitDone, setSubmitDone] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
@@ -104,14 +111,41 @@ export default function ClientPhotoSelection() {
   // The pool of photos the client can select from in the current round
   const roundPhotos = photos.filter((p) => p.selection_round === currentRound);
 
-  // Fetch signed URLs once photos load
+  // Fetch signed URLs once photos load, and renew them before they expire.
+  // They last an hour; choosing from a large session can take longer, and a
+  // tab left open would otherwise come back to a page of broken pictures.
+  const [linksFetchedAt, setLinksFetchedAt] = useState(0);
+  const roundPhotoIds = roundPhotos.map((p) => p.id).join(",");
   useEffect(() => {
-    if (!shareToken || roundPhotos.length === 0) return;
-    setUrlsLoading(true);
-    fetchSignedUrls(shareToken, roundPhotos.map((p) => p.id))
-      .then(setSignedUrls)
-      .finally(() => setUrlsLoading(false));
-  }, [shareToken, roundPhotos.length, currentRound]);
+    if (!shareToken || !roundPhotoIds) return;
+    let cancelled = false;
+    const load = (quiet: boolean) => {
+      if (!quiet) setUrlsLoading(true);
+      fetchSignedUrls(shareToken, roundPhotoIds.split(","))
+        .then((urls) => {
+          if (cancelled || !Object.keys(urls).length) return;
+          setSignedUrls(urls);
+          setLinksFetchedAt(Date.now());
+        })
+        .finally(() => { if (!quiet && !cancelled) setUrlsLoading(false); });
+    };
+    load(false);
+    const timer = window.setInterval(() => load(true), LINK_REFRESH_MS);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [shareToken, roundPhotoIds, currentRound]);
+
+  // A laptop that slept through the renewal comes back with expired links.
+  useEffect(() => {
+    if (!shareToken || !roundPhotoIds) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || Date.now() - linksFetchedAt < LINK_REFRESH_MS) return;
+      fetchSignedUrls(shareToken, roundPhotoIds.split(",")).then((urls) => {
+        if (Object.keys(urls).length) { setSignedUrls(urls); setLinksFetchedAt(Date.now()); }
+      });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [shareToken, roundPhotoIds, linksFetchedAt]);
 
   // Keep lightbox photo in sync with latest status from the query cache
   useEffect(() => {
@@ -150,28 +184,50 @@ export default function ClientPhotoSelection() {
     setZipping(true);
     setZipProgress(0);
 
-    try {
-      const zip = new JSZip();
-      const folder = zip.folder(quality === "all" ? "photos" : quality === "hd" ? "photos-hd" : "photos-lr")!;
+    // The ZIP is built in the browser, so everything in it sits in memory at
+    // once. A whole delivery in one ZIP could run a phone out of memory; past
+    // ZIP_PART_BYTES the ZIP is saved and a new part started. Photos are
+    // already compressed, so they are stored rather than squeezed again.
+    const folderName = quality === "all" ? "photos" : quality === "hd" ? "photos-hd" : "photos-lr";
+    const baseName = `${session?.name ?? "photos"}-${quality}`;
+    let zip = new JSZip();
+    let partBytes = 0;
+    let part = 1;
 
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        const blob = await fetch(f.signed_url).then((r) => r.blob());
-        folder.file(f.file_name, blob);
-        setZipProgress(Math.round(((i + 1) / files.length) * 80));
-      }
-
-      const zipBlob = await zip.generateAsync(
-        { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
-        (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2))
-      );
-
+    const savePart = async (isLast: boolean) => {
+      const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${session?.name ?? "photos"}-${quality}.zip`;
+      a.download = isLast && part === 1 ? `${baseName}.zip` : `${baseName}-part-${part}.zip`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoked after the browser has started the save.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    };
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const blob = await fetch(f.signed_url).then((r) => r.blob());
+        zip.folder(folderName)!.file(f.file_name, blob);
+        partBytes += blob.size;
+        setZipProgress(Math.round(((i + 1) / files.length) * 100));
+
+        const moreToCome = i < files.length - 1;
+        if (moreToCome && partBytes >= ZIP_PART_BYTES) {
+          await savePart(false);
+          zip = new JSZip();
+          partBytes = 0;
+          part += 1;
+        }
+      }
+      await savePart(true);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "The download stopped",
+        description: "Some files could not be fetched. Check your connection and try again.",
+      });
     } finally {
       setZipping(false);
       setZipProgress(0);
@@ -199,20 +255,23 @@ export default function ClientPhotoSelection() {
   // Read-only while finalized, or while waiting on the client to start the next round
   const readOnly = submitDone || roundBanner !== null;
 
-  const handleToggle = (photo: SessionPhoto) => {
+  const handleToggle = (photo: ClientPhoto) => {
     if (readOnly) return;
-    const newStatus: SessionPhoto["status"] =
-      photo.status === "selected" ? "not_selected" : "selected";
-    updatePhotoStatus.mutate({
-      photoId: photo.id,
-      sessionId: photo.session_id,
-      status: newStatus,
-    });
+    setSelection.mutate(
+      { photoId: photo.id, selected: photo.status !== "selected" },
+      {
+        onError: (error) => toast({
+          variant: "destructive",
+          title: "That change was not saved",
+          description: error instanceof Error ? error.message : "Check your connection and try again.",
+        }),
+      },
+    );
   };
 
   // Soft limit: only disable photos after the client has confirmed (read-only).
   // Selecting beyond the limit is always allowed — extras are invoiced.
-  const isDisabled = (photo: SessionPhoto) => readOnly && photo.status !== "selected";
+  const isDisabled = (photo: ClientPhoto) => readOnly && photo.status !== "selected";
 
   const handleConfirmSubmit = async () => {
     if (!shareToken) return;
@@ -226,8 +285,13 @@ export default function ClientPhotoSelection() {
         setRoundBanner({ round: result.current_round, selectedCount: result.selected_count });
       }
       setConfirmOpen(false);
-    } catch {
-      // error toast handled by react-query; keep modal open
+    } catch (error) {
+      // Keep the dialog open so they can try again.
+      toast({
+        variant: "destructive",
+        title: "Your selection was not confirmed",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
+      });
     }
   };
 
@@ -244,8 +308,12 @@ export default function ClientPhotoSelection() {
       setInvoiceUrl(result.wave_invoice_url);
       setSubmitDone(true);
       setRoundBanner(null);
-    } catch {
-      // error toast handled by react-query
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Your selection was not confirmed",
+        description: error instanceof Error ? error.message : "Check your connection and try again.",
+      });
     }
   };
 
@@ -690,10 +758,8 @@ export default function ClientPhotoSelection() {
       {/* Comment panel — side sheet */}
       <PhotoCommentPanel
         photo={commentPhoto}
-        sessionId={session.id}
-        orgId={session.org_id}
-        authorLabel={session.client_name}
-        authorUserId={null}
+        shareToken={shareToken}
+        imageUrl={commentPhoto ? signedUrls[commentPhoto.id] ?? null : null}
         onClose={() => setCommentPhoto(null)}
       />
     </>
