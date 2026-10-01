@@ -61,9 +61,15 @@ export default function AgentProjectLanding({ projects, activity, onSelect, load
   const first = (current - 1) * fit.pageSize;
   const shown = matches.slice(first, first + fit.pageSize);
 
-  useEffect(() => setPage(1), [query]);
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
   // A new page starts at its top; a single column scrolls within its page.
-  useEffect(() => gridRef.current?.scrollTo({ top: 0 }), [current]);
+  // Braces matter here: Chrome's scrollTo returns a Promise, and an effect
+  // that returns one crashes React when the landing closes.
+  useEffect(() => {
+    gridRef.current?.scrollTo({ top: 0 });
+  }, [current]);
 
   return (
     <div className="flex h-full flex-col bg-muted/40 px-4 pt-4 sm:px-6 sm:pt-5">

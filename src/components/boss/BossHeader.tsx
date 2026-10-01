@@ -42,7 +42,9 @@ export default function BossHeader({ active }: { active: BossTab }) {
   const { t } = useLanguage();
   const perms = usePermissions();
 
-  useEffect(() => rememberTab(active), [active]);
+  useEffect(() => {
+    rememberTab(active);
+  }, [active]);
 
   const tabs = [
     ...(perms.canAccessSkills ? [{ tab: "skills" as const, label: t("nav.skills"), icon: Zap }] : []),
