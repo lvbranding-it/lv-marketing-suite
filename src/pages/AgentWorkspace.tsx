@@ -1,17 +1,18 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  PanelLeftOpen, PanelRightOpen, FolderOpen, ArrowRight,
+  PanelLeftOpen, PanelRightOpen, FolderOpen, LayoutGrid,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import BossHeader from "@/components/boss/BossHeader";
 import AgentProjectSidebar from "@/components/agents/AgentProjectSidebar";
 import AgentRunChat from "@/components/agents/AgentRunChat";
 import AgentBrandSnapshot from "@/components/agents/AgentBrandSnapshot";
+import AgentProjectLanding from "@/components/agents/AgentProjectLanding";
 import { useOrg } from "@/hooks/useOrg";
 import { useProject, useProjects } from "@/hooks/useProjects";
 import { useAgentProjectActivity } from "@/hooks/useAgentRuns";
-import { runDateLabel, sortProjectsByActivity } from "@/lib/agents/runHistory";
+import { sortProjectsByActivity } from "@/lib/agents/runHistory";
 import type { RunResult } from "@/hooks/useAgentRuns";
 
 export default function AgentWorkspace() {
@@ -25,8 +26,7 @@ export default function AgentWorkspace() {
   const [chatKey,           setChatKey]           = useState(0);
 
   // On a phone both panels are overlays that cover the chat, so both wait until
-  // they are asked for. Choosing a project there starts from the landing's list
-  // of recent ones, with a button for the rest.
+  // they are asked for. Choosing a project starts from the landing's cards.
   const isPhone = typeof window !== "undefined" && window.innerWidth < 768;
   const [leftOpen,  setLeftOpen]  = useState(() => !isPhone);
   const [rightOpen, setRightOpen] = useState(() => !isPhone);
@@ -66,16 +66,18 @@ export default function AgentWorkspace() {
   }, [snapshotWidth]);
 
   const { data: project } = useProject(selectedProjectId ?? undefined);
-  const { data: allProjects = [] } = useProjects();
+  const { data: allProjects = [], isLoading: projectsLoading } = useProjects();
   const { data: activity = {} } = useAgentProjectActivity();
-  // The landing shows where work was last happening, so the usual next step
-  // is one click instead of a hunt through the switcher.
-  const recentProjects = sortProjectsByActivity(allProjects, activity).slice(0, 6);
+  // The landing shows where work was last happening first, so the usual next
+  // step is one click instead of a hunt through the switcher.
+  const projectsByActivity = sortProjectsByActivity(allProjects, activity);
 
-  // Sync URL → state when navigating directly to /agents/:projectId
+  // Sync URL → state when navigating directly to /agents/:projectId, and back
+  // to the landing at /agents: the Agents tab and All projects lead there, and
+  // the open project used to stay on screen.
   useEffect(() => {
-    if (urlProjectId && urlProjectId !== selectedProjectId) {
-      setSelectedProjectId(urlProjectId);
+    if ((urlProjectId ?? null) !== selectedProjectId) {
+      setSelectedProjectId(urlProjectId ?? null);
       setSnapshot(null);
       setLoadRunId(null);
     }
@@ -111,8 +113,10 @@ export default function AgentWorkspace() {
       <BossHeader active="agents" />
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Left sidebar — desktop always visible, mobile overlay ── */}
-        {leftOpen ? (
+        {/* ── Left sidebar — desktop always visible, mobile overlay ──
+            Only once a project is open: before that it could only say "choose a
+            project", which the landing's cards already offer with the room to do it. */}
+        {!selectedProjectId ? null : leftOpen ? (
           <>
             {/* Mobile backdrop */}
             <div
@@ -135,15 +139,6 @@ export default function AgentWorkspace() {
               />
             </div>
           </>
-        ) : !project ? (
-          // With no project open there is no header row to hold the button.
-          <button
-            onClick={() => setLeftOpen(true)}
-            className="absolute left-2 top-2 z-10 flex items-center justify-center w-9 h-9 bg-background border border-gray-200 rounded-md shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Open sidebar"
-          >
-            <PanelLeftOpen size={15} />
-          </button>
         ) : null}
 
         {/* ── Main chat area ── */}
@@ -163,6 +158,16 @@ export default function AgentWorkspace() {
                   <PanelLeftOpen size={15} />
                 </button>
               )}
+              <button
+                onClick={() => navigate("/agents")}
+                className="shrink-0 flex items-center gap-1 h-9 sm:h-8 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground transition-colors"
+                title="All projects"
+                aria-label="All projects"
+              >
+                <LayoutGrid size={14} />
+                <span className="hidden sm:inline">All projects</span>
+              </button>
+              <span className="h-4 w-px shrink-0 bg-gray-200" aria-hidden />
               <FolderOpen size={13} className="text-rose-500 shrink-0" />
               <div className="min-w-0 flex-1 truncate">
                 <span className="text-sm font-semibold">{project.name}</span>
@@ -198,56 +203,12 @@ export default function AgentWorkspace() {
               />
             </div>
           ) : (
-            <div className="h-full overflow-y-auto">
-              <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center px-6 py-10">
-                <p className="text-lg font-semibold">Pick up where you left off</p>
-                <p className="mt-1 max-w-lg text-sm text-muted-foreground">
-                  BOSS reads a project's marketing context and client brief before you type, so every agent starts already briefed.
-                </p>
-                {recentProjects.length > 0 && (
-                  <div className="mt-6 grid gap-2">
-                    {recentProjects.map((item) => {
-                      const entry = activity[item.id];
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => handleSelectProject(item.id)}
-                          className="group flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-left transition-colors hover:border-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
-                        >
-                          <FolderOpen size={15} className="mt-0.5 shrink-0 text-rose-500" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{item.name}</span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {[
-                                item.client_name?.trim(),
-                                entry?.runs ? `${entry.runs} run${entry.runs === 1 ? "" : "s"}` : "No runs yet",
-                                entry?.lastRun ? runDateLabel(entry.lastRun) : null,
-                              ].filter(Boolean).join(" · ")}
-                            </span>
-                          </span>
-                          <ArrowRight size={14} className="mt-0.5 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-rose-500" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {allProjects.length > recentProjects.length && (
-                  <>
-                    <p className="mt-4 hidden text-xs text-muted-foreground md:block">
-                      {allProjects.length - recentProjects.length} more in the project switcher at the top of the sidebar.
-                    </p>
-                    {/* The sidebar starts closed on a phone, so the rest are one tap away here. */}
-                    <button
-                      onClick={() => setLeftOpen(true)}
-                      className="mt-3 flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 transition-colors hover:border-rose-300 md:hidden"
-                    >
-                      <FolderOpen size={15} className="text-rose-500" />
-                      Browse all {allProjects.length} projects
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+            <AgentProjectLanding
+              projects={projectsByActivity}
+              activity={activity}
+              onSelect={handleSelectProject}
+              loading={projectsLoading}
+            />
           )}
         </div>
 
