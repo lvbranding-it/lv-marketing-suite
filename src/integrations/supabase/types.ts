@@ -750,6 +750,7 @@ export type Database = {
           name: string;
           client_name: string;
           client_email: string | null;
+          contact_id: string | null;
           cc_emails: string[];
           photo_limit: number;
           extra_photo_price: number;
@@ -783,6 +784,7 @@ export type Database = {
           name: string;
           client_name: string;
           client_email?: string | null;
+          contact_id?: string | null;
           cc_emails?: string[];
           photo_limit?: number;
           extra_photo_price?: number;
@@ -816,6 +818,7 @@ export type Database = {
           name?: string;
           client_name?: string;
           client_email?: string | null;
+          contact_id?: string | null;
           cc_emails?: string[];
           photo_limit?: number;
           extra_photo_price?: number;

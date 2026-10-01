@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,14 +17,12 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateSession } from "@/hooks/usePhotoSessions";
 import BranchSelect from "@/components/branches/BranchSelect";
-
-const emailSchema = z.string().email("Invalid email").or(z.literal(""));
+import SessionClientFields from "@/components/photo-sessions/SessionClientFields";
+import { clientProblem, NO_CLIENT, type SessionClient } from "@/lib/photo-sessions/clients";
 
 const schema = z.object({
   name:               z.string().min(1, "Session name is required"),
   branch_id:          z.string().optional(),
-  client_name:        z.string().min(1, "Client name is required"),
-  client_email:       emailSchema.optional(),
   photo_limit:        z.coerce.number().min(0).default(0),
   extra_photo_price:  z.coerce.number().min(0).default(0),
   allow_zip_download: z.boolean().default(false),
@@ -48,6 +46,10 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
 
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [ccErrors, setCcErrors] = useState<(string | null)[]>([]);
+  const [client, setClient] = useState<SessionClient>(NO_CLIENT);
+  // Shown once Create was pressed, then kept up to date as the client changes.
+  const [clientErrors, setClientErrors] = useState<ReturnType<typeof clientProblem>>(null);
+  const [triedToSave, setTriedToSave] = useState(false);
 
   const {
     register,
@@ -100,7 +102,22 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
     reset();
     setCcEmails([]);
     setCcErrors([]);
+    setClient(NO_CLIENT);
+    setClientErrors(null);
+    setTriedToSave(false);
     onClose();
+  };
+
+  const changeClient = (next: SessionClient) => {
+    setClient(next);
+    if (triedToSave) setClientErrors(clientProblem(next));
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    const problem = clientProblem(client);
+    setTriedToSave(true);
+    setClientErrors(problem);
+    return handleSubmit((values) => (problem ? undefined : onSubmit(values)))(event);
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -113,8 +130,7 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
       const session = await createSession.mutateAsync({
         name: values.name,
         branch_id: values.branch_id === "unassigned" ? null : values.branch_id,
-        client_name: values.client_name,
-        client_email: values.client_email || undefined,
+        client,
         cc_emails: ccEmails.filter(Boolean),
         photo_limit: values.photo_limit,
         extra_photo_price: values.extra_photo_price,
@@ -139,7 +155,7 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
           <DialogTitle>New Photo Session</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4">
           {/* ── Client details ── */}
           <div className="space-y-1.5">
             <Label htmlFor="name">Session Name <span className="text-destructive">*</span></Label>
@@ -147,17 +163,7 @@ export default function CreateSessionDialog({ open, onClose }: CreateSessionDial
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="client_name">Client Name <span className="text-destructive">*</span></Label>
-            <Input id="client_name" placeholder="Jane Smith" {...register("client_name")} />
-            {errors.client_name && <p className="text-xs text-destructive">{errors.client_name.message}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="client_email">Client Email</Label>
-            <Input id="client_email" type="email" placeholder="jane@example.com" {...register("client_email")} />
-            {errors.client_email && <p className="text-xs text-destructive">{errors.client_email.message}</p>}
-          </div>
+          <SessionClientFields idPrefix="create" value={client} onChange={changeClient} errors={clientErrors} />
 
           <div className="space-y-1.5">
             <Label>Branch</Label>

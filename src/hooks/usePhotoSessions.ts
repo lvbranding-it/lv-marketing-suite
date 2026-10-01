@@ -10,6 +10,7 @@ import type {
   SessionDeliverable,
   DeliverableQuality,
 } from "@/integrations/supabase/types";
+import { splitName, type SessionClient } from "@/lib/photo-sessions/clients";
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -260,11 +261,70 @@ export function useDeliverableSignedUrl(storagePath: string | undefined) {
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
+/**
+ * The contact a session's client is, adding them to the contacts when they
+ * are new. A contact chosen without an email gets the one typed for the
+ * session. Returns null when the contact could not be added: the session is
+ * still saved, just not linked.
+ */
+async function linkClientContact({
+  client,
+  orgId,
+  userId,
+  branchId,
+}: {
+  client: SessionClient;
+  orgId: string;
+  userId: string;
+  branchId: string | null;
+}): Promise<string | null> {
+  const email = client.email.trim();
+  try {
+    if (client.contactId) {
+      if (email) {
+        await supabase.from("contacts").update({ email }).eq("id", client.contactId).is("email", null);
+      }
+      return client.contactId;
+    }
+
+    if (email) {
+      const { data: existing } = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("org_id", orgId)
+        .ilike("email", email.replace(/[\\%_]/g, "\\$&"))
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      if (existing) return existing.id as string;
+    }
+
+    const { data: added, error } = await supabase
+      .from("contacts")
+      .insert({
+        org_id: orgId,
+        branch_id: branchId,
+        created_by: userId,
+        ...splitName(client.name),
+        email: email || null,
+        source: "manual",
+        pipeline_stage: "won",
+        signals: [],
+        raw_data: { from_photo_session: true },
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return added.id as string;
+  } catch {
+    return null;
+  }
+}
+
 type CreateSessionInput = {
   name: string;
   branch_id?: string | null;
-  client_name: string;
-  client_email?: string;
+  client: SessionClient;
   cc_emails?: string[];
   photo_limit?: number;
   extra_photo_price?: number;
@@ -283,6 +343,12 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: async (values: CreateSessionInput) => {
       if (!org || !user) throw new Error("Not authenticated");
+      const contactId = await linkClientContact({
+        client: values.client,
+        orgId: org.id,
+        userId: user.id,
+        branchId: values.branch_id ?? null,
+      });
       const { data, error } = await supabase
         .from("photo_sessions")
         .insert({
@@ -290,8 +356,9 @@ export function useCreateSession() {
           branch_id: values.branch_id ?? null,
           created_by: user.id,
           name: values.name,
-          client_name: values.client_name,
-          client_email: values.client_email ?? null,
+          contact_id: contactId,
+          client_name: values.client.name.trim(),
+          client_email: values.client.email.trim() || null,
           cc_emails: values.cc_emails ?? [],
           photo_limit: values.photo_limit ?? 0,
           extra_photo_price: values.extra_photo_price ?? 0,
@@ -304,39 +371,6 @@ export function useCreateSession() {
         .select()
         .single();
       if (error) throw error;
-
-      // ── Auto-create contact for the primary client email ───────────────────
-      if (values.client_email) {
-        try {
-          const { data: existing } = await supabase
-            .from("contacts")
-            .select("id")
-            .eq("org_id", org.id)
-            .eq("email", values.client_email)
-            .maybeSingle();
-
-          if (!existing) {
-            const nameParts = values.client_name.trim().split(/\s+/);
-            const firstName = nameParts[0] ?? values.client_name;
-            const lastName = nameParts.slice(1).join(" ") || null;
-            await supabase.from("contacts").insert({
-              org_id: org.id,
-              branch_id: values.branch_id ?? null,
-              created_by: user.id,
-              first_name: firstName,
-              last_name: lastName,
-              email: values.client_email,
-              source: "manual",
-              pipeline_stage: "lead",
-              signals: [],
-              raw_data: { from_photo_session: true },
-            });
-          }
-        } catch {
-          // Non-fatal — session was created successfully
-        }
-      }
-
       return data as PhotoSession;
     },
     onSuccess: () => {
@@ -348,12 +382,26 @@ export function useCreateSession() {
 
 export function useUpdateSession() {
   const queryClient = useQueryClient();
+  const { org } = useOrg();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({
       id,
+      client,
       ...updates
-    }: Partial<PhotoSession> & { id: string }) => {
+    }: Partial<PhotoSession> & { id: string; client?: SessionClient }) => {
+      if (client) {
+        if (!org || !user) throw new Error("Not authenticated");
+        updates.contact_id = await linkClientContact({
+          client,
+          orgId: org.id,
+          userId: user.id,
+          branchId: updates.branch_id ?? null,
+        });
+        updates.client_name = client.name.trim();
+        updates.client_email = client.email.trim() || null;
+      }
       const { data, error } = await supabase
         .from("photo_sessions")
         .update(updates)
@@ -363,9 +411,10 @@ export function useUpdateSession() {
       if (error) throw error;
       return data as PhotoSession;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["photo-session", data.id] });
       queryClient.invalidateQueries({ queryKey: ["photo-sessions"] });
+      if (variables.client) queryClient.invalidateQueries({ queryKey: ["contacts"] });
     },
   });
 }

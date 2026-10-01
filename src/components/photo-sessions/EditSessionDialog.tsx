@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,11 +28,11 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateSession, useArchiveSession, useDeleteSession } from "@/hooks/usePhotoSessions";
 import type { PhotoSession } from "@/integrations/supabase/types";
+import SessionClientFields from "@/components/photo-sessions/SessionClientFields";
+import { clientProblem, NO_CLIENT, type SessionClient } from "@/lib/photo-sessions/clients";
 
 const schema = z.object({
   name:               z.string().min(1, "Session name is required"),
-  client_name:        z.string().min(1, "Client name is required"),
-  client_email:       z.string().email("Invalid email").optional().or(z.literal("")),
   photo_limit:        z.coerce.number().min(0).default(0),
   extra_photo_price:  z.coerce.number().min(0).default(0),
   allow_zip_download: z.boolean().default(false),
@@ -60,6 +60,9 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
   // CC email slots — up to 3
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [ccErrors, setCcErrors] = useState<(string | null)[]>([]);
+  const [client, setClient] = useState<SessionClient>(NO_CLIENT);
+  const [clientErrors, setClientErrors] = useState<ReturnType<typeof clientProblem>>(null);
+  const [triedToSave, setTriedToSave] = useState(false);
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema) as Resolver<FormValues>,
@@ -72,8 +75,6 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
     if (open) {
       reset({
         name:               session.name,
-        client_name:        session.client_name,
-        client_email:       session.client_email ?? "",
         photo_limit:        session.photo_limit,
         extra_photo_price:  Number(session.extra_photo_price),
         allow_zip_download: session.allow_zip_download,
@@ -85,6 +86,16 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
       const existing = session.cc_emails ?? [];
       setCcEmails(existing);
       setCcErrors(existing.map(() => null));
+      // A session made before clients were linked shows its client as one
+      // to add: saving links them to their contact, or adds one.
+      setClient({
+        contactId: session.contact_id ?? null,
+        name: session.client_name,
+        email: session.client_email ?? "",
+        adding: !session.contact_id,
+      });
+      setClientErrors(null);
+      setTriedToSave(false);
     }
   }, [open, session, reset]);
 
@@ -111,6 +122,18 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
     );
   };
 
+  const changeClient = (next: SessionClient) => {
+    setClient(next);
+    if (triedToSave) setClientErrors(clientProblem(next));
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    const problem = clientProblem(client);
+    setTriedToSave(true);
+    setClientErrors(problem);
+    return handleSubmit((values) => (problem ? undefined : onSubmit(values)))(event);
+  };
+
   const onSubmit = async (values: FormValues) => {
     const newErrs = ccEmails.map((e) =>
       e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? "Invalid email" : null
@@ -124,8 +147,8 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
       await updateSession.mutateAsync({
         id: session.id,
         name: values.name,
-        client_name: values.client_name,
-        client_email: values.client_email || null,
+        branch_id: session.branch_id,
+        client,
         cc_emails: ccEmails.filter(Boolean),
         photo_limit: values.photo_limit,
         extra_photo_price: values.extra_photo_price,
@@ -157,29 +180,19 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Session</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="edit-name">Session Name <span className="text-destructive">*</span></Label>
             <Input id="edit-name" {...register("name")} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-client-name">Client Name <span className="text-destructive">*</span></Label>
-            <Input id="edit-client-name" {...register("client_name")} />
-            {errors.client_name && <p className="text-xs text-destructive">{errors.client_name.message}</p>}
-          </div>
-
-          {/* Primary email */}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-client-email">Client Email</Label>
-            <Input id="edit-client-email" type="email" {...register("client_email")} />
-          </div>
+          <SessionClientFields idPrefix="edit" value={client} onChange={changeClient} errors={clientErrors} />
 
           {/* CC emails */}
           {ccEmails.length > 0 && (
