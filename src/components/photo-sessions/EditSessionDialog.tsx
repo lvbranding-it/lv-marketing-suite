@@ -81,7 +81,9 @@ export default function EditSessionDialog({ session, open, onClose }: EditSessio
         invoice_type:       session.invoice_type ?? "none",
         session_fee:        Number(session.session_fee ?? 0),
         multi_round_enabled: session.multi_round_enabled ?? false,
-        max_rounds:         session.max_rounds ?? 3,
+        // A single-round session stores 1, which the hidden field rejected,
+        // so Save Changes did nothing for it. 3 is what turning rounds on offers.
+        max_rounds:         session.multi_round_enabled ? session.max_rounds : 3,
       });
       const existing = session.cc_emails ?? [];
       setCcEmails(existing);

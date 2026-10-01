@@ -29,6 +29,8 @@ import { toast } from "@/hooks/use-toast";
 
 /** Image links last an hour; they are renewed before that, so a long visit keeps its pictures. */
 const LINK_REFRESH_MS = 45 * 60 * 1000;
+/** How many photos after the opened one have their large version loaded ahead. */
+const LARGE_AHEAD = 3;
 /** Roughly how much of a delivery one ZIP holds before the next part starts. */
 const ZIP_PART_BYTES = 300 * 1024 * 1024;
 
@@ -49,10 +51,12 @@ async function fetchDeliverableUrls(
   return json.files ?? [];
 }
 
-// Signed URLs fetched via Edge Function for anon clients
+// Signed URLs fetched via Edge Function for anon clients. "large" is for the
+// photo opened on its own; the gallery uses the small grid preview.
 async function fetchSignedUrls(
   shareToken: string,
-  photoIds: string[]
+  photoIds: string[],
+  size: "grid" | "large" = "grid"
 ): Promise<Record<string, string>> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -64,7 +68,7 @@ async function fetchSignedUrls(
       apikey: supabaseKey,
       Authorization: `Bearer ${supabaseKey}`,
     },
-    body: JSON.stringify({ share_token: shareToken, photo_ids: photoIds }),
+    body: JSON.stringify({ share_token: shareToken, photo_ids: photoIds, size }),
   });
 
   if (!res.ok) return {};
@@ -88,6 +92,8 @@ export default function ClientPhotoSelection() {
 
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [urlsLoading, setUrlsLoading] = useState(false);
+  // Large versions for the opened photo, fetched as they are needed.
+  const [largeLinks, setLargeLinks] = useState<Record<string, { url: string; at: number }>>({});
 
   const [lightboxPhoto, setLightboxPhoto] = useState<ClientPhoto | null>(null);
   const [commentPhoto, setCommentPhoto] = useState<ClientPhoto | null>(null);
@@ -146,6 +152,30 @@ export default function ClientPhotoSelection() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [shareToken, roundPhotoIds, linksFetchedAt]);
+
+  // The opened photo in its large size, with the next few and the one before
+  // fetched and loaded alongside it, so moving through them does not wait.
+  const lightboxIndex = lightboxPhoto ? roundPhotos.findIndex((p) => p.id === lightboxPhoto.id) : -1;
+  useEffect(() => {
+    if (!shareToken || lightboxIndex < 0) return;
+    const nearby = roundPhotos.slice(Math.max(0, lightboxIndex - 1), lightboxIndex + LARGE_AHEAD + 1);
+    const missing = nearby
+      .map((p) => p.id)
+      .filter((id) => !largeLinks[id] || Date.now() - largeLinks[id].at > LINK_REFRESH_MS);
+    if (!missing.length) return;
+    let cancelled = false;
+    fetchSignedUrls(shareToken, missing, "large").then((urls) => {
+      if (cancelled) return;
+      const at = Date.now();
+      const fetched = Object.entries(urls).filter(([, url]) => url);
+      fetched.forEach(([, url]) => { new Image().src = url; });
+      setLargeLinks((links) => ({ ...links, ...Object.fromEntries(fetched.map(([id, url]) => [id, { url, at }])) }));
+    });
+    return () => { cancelled = true; };
+    // Only a move to another photo asks for more; largeLinks changing does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareToken, lightboxIndex, roundPhotoIds]);
+  const largeUrls = Object.fromEntries(Object.entries(largeLinks).map(([id, link]) => [id, link.url]));
 
   // Keep lightbox photo in sync with latest status from the query cache
   useEffect(() => {
@@ -743,6 +773,7 @@ export default function ClientPhotoSelection() {
         photo={lightboxPhoto}
         photos={roundPhotos}
         signedUrls={signedUrls}
+        largeUrls={largeUrls}
         commentCountByPhotoId={commentCountByPhotoId}
         onClose={() => setLightboxPhoto(null)}
         onNavigate={setLightboxPhoto}

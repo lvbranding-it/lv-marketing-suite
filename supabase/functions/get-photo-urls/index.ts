@@ -1,6 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// "grid" is the small preview in the gallery. "large" is the photo opened on
+// its own, which used the grid preview and so showed at 600 pixels at most.
+// Large ones are asked for a few at a time, as the client moves through them.
+const SIZES = {
+  grid: { width: 600, height: 600, resize: "contain", quality: 70 },
+  large: { width: 1600, height: 1600, resize: "contain", quality: 80 },
+} as const;
+const LARGE_PER_REQUEST = 12;
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -13,10 +22,12 @@ serve(async (req) => {
   }
 
   try {
-    const { share_token, photo_ids } = await req.json() as {
+    const { share_token, photo_ids, size: requestedSize } = await req.json() as {
       share_token: string;
       photo_ids: string[];
+      size?: keyof typeof SIZES;
     };
+    const size = requestedSize === "large" ? "large" : "grid";
 
     if (!share_token || !Array.isArray(photo_ids) || photo_ids.length === 0) {
       return new Response(
@@ -49,7 +60,7 @@ serve(async (req) => {
     //    The session's photos are read and filtered here: every id in an
     //    `in (...)` filter goes into the request URL, which a large session
     //    would push past what the gateway accepts.
-    const requested = new Set(photo_ids);
+    const requested = new Set(size === "large" ? photo_ids.slice(0, LARGE_PER_REQUEST) : photo_ids);
     const { data: sessionPhotos, error: photosError } = await supabaseAdmin
       .from("session_photos")
       .select("id, storage_path")
@@ -63,15 +74,13 @@ serve(async (req) => {
       );
     }
 
-    // 3. Generate a 1-hour signed URL for each photo, downscaled for grid thumbnails.
+    // 3. Generate a 1-hour signed URL for each photo, downscaled to the size asked for.
     //    Eight at a time: one after another took about 210 ms each, so a
     //    172-photo session kept the client waiting over half a minute.
     const signOne = async (photo: { id: string; storage_path: string }) => {
       const { data: urlData } = await supabaseAdmin.storage
         .from("session-photos")
-        .createSignedUrl(photo.storage_path, 3600, {
-          transform: { width: 600, height: 600, resize: "contain", quality: 70 },
-        }); // 1 hour, resized for thumbnail grid
+        .createSignedUrl(photo.storage_path, 3600, { transform: { ...SIZES[size] } });
 
       let signedUrl = urlData?.signedUrl ?? null;
 

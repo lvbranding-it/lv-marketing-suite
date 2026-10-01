@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { X, ChevronLeft, ChevronRight, CheckCircle2, Circle, MessageSquare, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ interface ClientLightboxProps {
   photo: ClientPhoto | null;
   photos: ClientPhoto[];
   signedUrls: Record<string, string>;
+  /** Large versions, shown over the grid preview once they have loaded. */
+  largeUrls?: Record<string, string>;
   commentCountByPhotoId: Record<string, number>;
   onClose: () => void;
   onNavigate: (photo: ClientPhoto) => void;
@@ -21,6 +23,7 @@ export default function ClientLightbox({
   photo,
   photos,
   signedUrls,
+  largeUrls = {},
   commentCountByPhotoId,
   onClose,
   onNavigate,
@@ -34,6 +37,7 @@ export default function ClientLightbox({
   const hasNext = currentIndex < photos.length - 1;
   const isSelected = photo?.status === "selected";
   const commentCount = photo ? (commentCountByPhotoId[photo.id] ?? 0) : 0;
+  const [loadedLarge, setLoadedLarge] = useState<string | null>(null);
 
   const goNext = useCallback(() => {
     if (hasNext) onNavigate(photos[currentIndex + 1]);
@@ -57,7 +61,14 @@ export default function ClientLightbox({
 
   if (!photo) return null;
 
-  const signedUrl = signedUrls[photo.id] ?? null;
+  const previewUrl = signedUrls[photo.id] || null;
+  const largeUrl = largeUrls[photo.id] || null;
+  const protectStyle = protectImages ? {
+    WebkitTouchCallout: "none",
+    WebkitUserSelect: "none",
+    userSelect: "none",
+    WebkitUserDrag: "none",
+  } as React.CSSProperties : undefined;
 
   return (
     <div
@@ -65,11 +76,14 @@ export default function ClientLightbox({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 shrink-0">
-        <span className="text-white/60 text-sm">
-          {currentIndex + 1} / {photos.length}
-        </span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3 px-4 py-2 shrink-0">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <span className="shrink-0 text-white/60 text-sm tabular-nums">
+            {currentIndex + 1} / {photos.length}
+          </span>
+          <span className="truncate text-white/40 text-xs">{photo.file_name}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           {commentCount > 0 && (
             <Badge variant="secondary" className="bg-white/10 text-white border-white/20 gap-1">
               <MessageSquare size={12} />
@@ -87,12 +101,12 @@ export default function ClientLightbox({
       </div>
 
       {/* Image area */}
-      <div className="flex-1 flex items-center justify-center relative min-h-0 px-14">
+      <div className="flex-1 flex items-center justify-center relative min-h-0 px-2 sm:px-16">
         {/* Prev arrow */}
         {hasPrev && (
           <button
             onClick={goPrev}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full p-2 transition-all"
+            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full p-2 transition-all"
             aria-label="Previous photo"
           >
             <ChevronLeft size={28} />
@@ -100,26 +114,38 @@ export default function ClientLightbox({
         )}
 
         {/* Photo */}
-        {signedUrl ? (
-          <div className="relative max-h-full max-w-full flex items-center justify-center">
-            <img
-              key={photo.id}
-              src={signedUrl}
-              alt={photo.file_name}
-              className="max-h-full max-w-full object-contain rounded-lg select-none"
-              draggable={false}
-              onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
-              style={protectImages ? {
-                WebkitTouchCallout: "none",
-                WebkitUserSelect: "none",
-                userSelect: "none",
-                WebkitUserDrag: "none",
-              } as React.CSSProperties : undefined}
-            />
+        {/* The photo fills the space it has. The grid preview shows at once,
+            stretched; the large version fades in over it once loaded. */}
+        {previewUrl || largeUrl ? (
+          <div key={photo.id} className="relative h-full w-full">
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt={photo.file_name}
+                className="absolute inset-0 h-full w-full object-contain select-none"
+                draggable={false}
+                onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
+                style={protectStyle}
+              />
+            )}
+            {largeUrl && (
+              <img
+                src={largeUrl}
+                alt=""
+                aria-hidden
+                onLoad={() => setLoadedLarge(largeUrl)}
+                className={`absolute inset-0 h-full w-full object-contain select-none transition-opacity duration-200 ${
+                  loadedLarge === largeUrl ? "opacity-100" : "opacity-0"
+                }`}
+                draggable={false}
+                onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
+                style={protectStyle}
+              />
+            )}
             {/* Transparent overlay blocks long-press save on mobile */}
             {protectImages && (
               <div
-                className="absolute inset-0 rounded-lg"
+                className="absolute inset-0"
                 onContextMenu={(e) => e.preventDefault()}
                 style={{ WebkitTouchCallout: "none" } as React.CSSProperties}
               />
@@ -135,7 +161,7 @@ export default function ClientLightbox({
         {hasNext && (
           <button
             onClick={goNext}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full p-2 transition-all"
+            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 text-white/70 hover:text-white bg-black/40 hover:bg-black/60 rounded-full p-2 transition-all"
             aria-label="Next photo"
           >
             <ChevronRight size={28} />
@@ -144,10 +170,7 @@ export default function ClientLightbox({
       </div>
 
       {/* Bottom action bar */}
-      <div className="shrink-0 px-4 py-4 flex flex-col items-center gap-3">
-        {/* File name */}
-        <p className="text-white/40 text-xs truncate max-w-xs">{photo.file_name}</p>
-
+      <div className="shrink-0 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col items-center gap-2">
         {/* Preview-only notice when photos are protected */}
         {protectImages && (
           <div className="flex items-center gap-1.5 bg-white/10 border border-white/20 text-white/60 text-xs rounded-full px-3 py-1">
