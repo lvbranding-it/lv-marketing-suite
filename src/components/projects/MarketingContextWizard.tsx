@@ -3,7 +3,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { ChevronRight, ChevronLeft, Loader2, CheckCircle2, Sparkles } from "lucide-react";
+import {
+  ChevronRight, ChevronLeft, Loader2, CheckCircle2, Sparkles, Package, Target, Swords, MessageSquareQuote, Layers,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,10 +64,10 @@ type Step4 = z.infer<typeof step4Schema>;
 type AllSteps = Step1 & Step2 & Step3 & Step4;
 
 const STEPS = [
-  { label: "Product Basics", icon: "📦" },
-  { label: "Target Audience", icon: "🎯" },
-  { label: "Competition", icon: "⚔️" },
-  { label: "Brand Voice", icon: "🗣️" },
+  { label: "Product Basics", icon: Package },
+  { label: "Target Audience", icon: Target },
+  { label: "Competition", icon: Swords },
+  { label: "Brand Voice", icon: MessageSquareQuote },
 ];
 
 export default function MarketingContextWizard({
@@ -222,7 +224,9 @@ Please produce a comprehensive, well-structured marketing context document that 
   if (step === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-4 sm:p-8 text-center max-w-lg mx-auto">
-        <span className="text-5xl mb-4">🏗️</span>
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 text-amber-600">
+          <Layers size={26} />
+        </span>
         <h2 className="text-xl font-semibold mb-2">Set Up Product Marketing Context</h2>
         <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
           Before running any skills, let's capture key information about your product.
@@ -287,7 +291,9 @@ Please produce a comprehensive, well-structured marketing context document that 
       <div className="p-4 border-b bg-muted/30">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xl">{stepMeta.icon}</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-background text-muted-foreground border">
+              <stepMeta.icon size={16} aria-hidden />
+            </span>
             <div>
               <p className="text-xs text-muted-foreground">
                 Step {step} of 4

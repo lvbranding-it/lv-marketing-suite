@@ -225,7 +225,7 @@ export default function TagSidebar({ contacts, selectedTag, onSelectTag }: Props
         <div className="px-2 py-4 text-center space-y-2">
           <Tag size={20} className="mx-auto text-muted-foreground opacity-40" />
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            No tags yet. Click <strong>+</strong> to create one, then assign it to contacts using the <strong>🏷</strong> button on any contact row.
+            No tags yet. Click <strong>+</strong> to create one, then assign it to contacts using the <Tag size={11} className="inline -mt-0.5" aria-label="tag" /> button on any contact row.
           </p>
         </div>
       )}
@@ -233,7 +233,7 @@ export default function TagSidebar({ contacts, selectedTag, onSelectTag }: Props
       {/* How-to hint when tags exist but a tag has 0 contacts */}
       {tagDefs.length > 0 && (
         <p className="text-[10px] text-muted-foreground/60 px-1 pt-2 leading-relaxed">
-          Use the <strong>🏷</strong> button on a contact row, or open a contact to assign tags.
+          Use the <Tag size={10} className="inline -mt-0.5" aria-label="tag" /> button on a contact row, or open a contact to assign tags.
         </p>
       )}
 

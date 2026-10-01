@@ -3,7 +3,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import { Send, Copy, Save, RotateCcw, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Send, Copy, Save, RotateCcw, AlertCircle, Loader2, ChevronLeft, ChevronRight, CircleCheck, TriangleAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +29,7 @@ import {
 import type { Project } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import SaveOutputDialog from "./SaveOutputDialog";
+import SkillIcon from "./SkillIcon";
 import { useToast } from "@/hooks/use-toast";
 
 interface SkillRunnerProps {
@@ -46,6 +49,9 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [outputToSave, setOutputToSave] = useState("");
   const [inputDataToSave, setInputDataToSave] = useState<Record<string, string>>({});
+  // A phone has room for one of the two panels: the form, then the result.
+  // Wider screens show both side by side and ignore this.
+  const [mobilePane, setMobilePane] = useState<"form" | "output">("form");
 
   const outputRef = useRef<HTMLDivElement>(null);
   const { streaming, streamedText, conversationHistory, error, run, reset } = useSkillRunner();
@@ -106,7 +112,13 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
     );
     const message = buildUserMessage(values);
     setInputDataToSave(stringValues);
+    setMobilePane("output");
     await run(message, skill, getMarketingContext(), selectedBranchId);
+  };
+
+  const handleNewRun = () => {
+    reset();
+    setMobilePane("form");
   };
 
   const handleFollowUp = async () => {
@@ -159,12 +171,30 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-0 gap-0">
       {/* ── Left Panel: Context Form ─────────────────────────────────────── */}
-      <div className="w-full lg:w-80 xl:w-96 shrink-0 border-b lg:border-b-0 lg:border-r border-border overflow-y-auto max-h-[45vh] lg:max-h-none bg-muted/30">
-        <div className="px-3 sm:px-4 py-3 sm:py-4 space-y-4">
+      {/* On a phone the form takes the whole screen, so the Run button is not
+          buried in a strip at the top; the result replaces it once it starts. */}
+      <div
+        className={cn(
+          "w-full flex-1 min-h-0 lg:flex-none lg:w-80 xl:w-96 shrink-0 lg:border-r border-border overflow-y-auto bg-muted/30",
+          mobilePane === "form" ? "block" : "hidden lg:block",
+        )}
+      >
+        <div className="px-3 sm:px-4 pt-3 sm:pt-4 space-y-4">
+          {hasOutput && (
+            <button
+              type="button"
+              onClick={() => setMobilePane("output")}
+              className="lg:hidden flex w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium"
+            >
+              {t("skills.viewResult")}
+              <ChevronRight size={16} className="text-muted-foreground" />
+            </button>
+          )}
+
           {/* Skill header */}
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">{skill.icon}</span>
+              <SkillIcon skill={skill} size="md" />
               <h2 className="text-base font-semibold">{localizedSkill.name}</h2>
             </div>
             <Badge
@@ -190,7 +220,12 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="flex items-center gap-1.5">
-                      {p.context_complete ? "✅" : "⚠️"} {p.name}
+                      {p.context_complete ? (
+                        <CircleCheck size={13} className="shrink-0 text-green-600" aria-label={t("skills.contextWillBeUsed")} />
+                      ) : (
+                        <TriangleAlert size={13} className="shrink-0 text-amber-500" aria-label={t("skills.noMarketingContext")} />
+                      )}
+                      {p.name}
                     </span>
                   </SelectItem>
                 ))}
@@ -220,12 +255,14 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   {field.required && <span className="text-destructive ml-0.5">*</span>}
                 </Label>
 
+                {/* Text boxes keep the inputs' own 16px on phones: below that,
+                    iPhones zoom the page in on focus and push it off screen. */}
                 {field.type === "textarea" ? (
                   <Textarea
                     id={field.key}
                     placeholder={localizedField.placeholder}
                     rows={3}
-                    className="text-sm resize-none"
+                    className="resize-none"
                     {...form.register(field.key)}
                   />
                 ) : field.type === "select" ? (
@@ -233,7 +270,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                     onValueChange={(v) => form.setValue(field.key, v)}
                     defaultValue=""
                   >
-                    <SelectTrigger className="h-9 text-sm">
+                    <SelectTrigger className="h-10 md:h-9 text-sm">
                       <SelectValue placeholder={t("skills.selectPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -249,7 +286,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                     id={field.key}
                     type={field.type}
                     placeholder={localizedField.placeholder}
-                    className="h-9 text-sm"
+                    className="h-10 md:h-9"
                     {...form.register(field.key)}
                   />
                 )}
@@ -263,32 +300,43 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
             );
             })}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={streaming}
-            >
-              {streaming ? (
-                <>
-                  <Loader2 size={14} className="mr-2 animate-spin" />
-                  {t("skills.running")}
-                </>
-              ) : (
-                <>
-                  <Send size={14} className="mr-2" />
-                  {t("skills.run")}
-                </>
-              )}
-            </Button>
+            {/* Pinned to the bottom of the panel, so a long form never hides it. */}
+            <div className="sticky bottom-0 -mx-3 sm:-mx-4 border-t border-border bg-background/95 px-3 sm:px-4 py-3 backdrop-blur">
+              <Button
+                type="submit"
+                className="w-full h-11 md:h-10"
+                disabled={streaming}
+              >
+                {streaming ? (
+                  <>
+                    <Loader2 size={14} className="mr-2 animate-spin" />
+                    {t("skills.running")}
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} className="mr-2" />
+                    {t("skills.run")}
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
         </div>
       </div>
 
       {/* ── Right Panel: Output ──────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className={cn("flex-1 flex-col min-h-0", mobilePane === "output" ? "flex" : "hidden lg:flex")}>
+        <button
+          type="button"
+          onClick={() => setMobilePane("form")}
+          className="lg:hidden shrink-0 flex items-center gap-1 border-b border-border px-3 py-2.5 text-sm font-medium text-muted-foreground"
+        >
+          <ChevronLeft size={16} />
+          {t("skills.editInputs")}
+        </button>
         {!hasOutput ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <span className="text-5xl mb-4">{skill.icon}</span>
+            <SkillIcon skill={skill} size="lg" className="mb-4" />
             <p className="text-muted-foreground text-sm max-w-sm">
               {t("skills.emptyState", {
                 action: t("skills.run"),
@@ -305,7 +353,10 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                   <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
                     {msg.role === "user" ? (
                       <div className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 max-w-[90%] sm:max-w-[80%] text-sm whitespace-pre-wrap shadow-sm">
-                        {msg.content}
+                        {/* The form sends "**Label:** value" lines; show the labels bold, not starred. */}
+                        {msg.content.split(/\*\*(.+?)\*\*/g).map((part, j) =>
+                          j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part,
+                        )}
                       </div>
                     ) : (
                       <div className="bg-card border border-border rounded-xl px-5 py-4 max-w-[92%] shadow-sm w-full">
@@ -368,7 +419,7 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={reset}
+                  onClick={handleNewRun}
                   className="h-8 text-xs ml-auto text-muted-foreground"
                 >
                   <RotateCcw size={12} className="mr-1.5" />
@@ -377,14 +428,16 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
               </div>
 
               {/* Follow-up input */}
+              {/* Send sits beside the box at every width; stacked under it on a
+                  phone, it ended up below the bottom of the screen. */}
               {conversationHistory.length > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex items-end gap-2">
                   <Textarea
                     value={followUp}
                     onChange={(e) => setFollowUp(e.target.value)}
                     placeholder={t("skills.followUpPlaceholder")}
                     rows={2}
-                    className="text-sm resize-none flex-1"
+                    className="min-h-[44px] max-h-40 resize-none flex-1"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault();
@@ -396,9 +449,10 @@ export default function SkillRunner({ skill }: SkillRunnerProps) {
                     size="icon"
                     onClick={handleFollowUp}
                     disabled={!followUp.trim() || streaming}
-                    className="shrink-0 self-end h-9 w-full sm:w-9"
+                    aria-label={t("skills.sendFollowUp")}
+                    className="shrink-0 h-11 w-11 md:h-9 md:w-9"
                   >
-                    <Send size={14} />
+                    <Send size={15} />
                   </Button>
                 </div>
               )}

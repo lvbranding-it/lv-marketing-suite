@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Copy, Check, ExternalLink, Plus, Pencil, Trash2,
   Trophy, Upload, X, Crown, Download, CopyPlus, ChevronLeft, ChevronRight,
+  TriangleAlert,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -454,7 +455,7 @@ function VotesTab({ contest }: { contest: Contest }) {
     if (!confirm(`Announce "${leader.name}" as the winner? This updates the contest status publicly.`)) return;
     try {
       await update.mutateAsync({ id: contest.id, status: "winner_announced", winner_contestant_id: leader.id });
-      toast({ description: `${leader.name} announced as winner! 🏆` });
+      toast({ description: `${leader.name} announced as winner.` });
     } catch (err) {
       toast({ variant: "destructive", description: err instanceof Error ? err.message : "Failed" });
     }
@@ -545,7 +546,7 @@ function VotesTab({ contest }: { contest: Contest }) {
           <Crown size={20} className="text-violet-600 shrink-0" />
           <div>
             <p className="font-semibold text-violet-800">
-              {contestants.find((c) => c.id === contest.winner_contestant_id)?.name} — Winner 🏆
+              {contestants.find((c) => c.id === contest.winner_contestant_id)?.name} — Winner
             </p>
             <p className="text-xs text-violet-600">The winner has been announced publicly.</p>
           </div>
@@ -810,8 +811,9 @@ function EmbedTab({ contest }: { contest: Contest }) {
 
       {/* Status note */}
       {contest.status === "draft" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700">
-          ⚠️ The voting page is not yet public. Change the status to <strong>Active</strong> to open voting.
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-700">
+          <TriangleAlert size={14} className="shrink-0" aria-hidden />
+          <span>The voting page is not yet public. Change the status to <strong>Active</strong> to open voting.</span>
         </div>
       )}
     </div>

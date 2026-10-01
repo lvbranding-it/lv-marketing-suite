@@ -271,7 +271,7 @@ function PhotosPanel({ eventId }: { eventId: string }) {
         </div>
       ) : photos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-          <p className="text-3xl">📸</p>
+          <span className="mx-auto  flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><Camera size={18} aria-hidden /></span>
           <p className="text-sm text-muted-foreground">No {filter !== "all" ? filter : ""} photos yet.</p>
           {filter === "pending" && (
             <p className="text-xs text-muted-foreground">Attendees can upload photos by scanning the QR code.</p>

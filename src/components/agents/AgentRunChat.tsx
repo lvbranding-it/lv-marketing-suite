@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Send, Loader2, Bot, User, Copy, RefreshCw, ChevronDown,
-  FileDown, FileText, Paperclip, X, FileIcon, FileType2, Presentation,
+  FileDown, FileText, Paperclip, X, FileIcon, FileType2, Presentation, Eraser,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -599,8 +599,12 @@ export default function AgentRunChat({
     handleSend(formattedAnswers);
   };
 
+  // Enter sends from a keyboard. A phone's keyboard has no Shift+Enter, so
+  // there Enter starts a new line and the Send button sends.
+  const isTouchScreen = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isTouchScreen) {
       e.preventDefault();
       handleSend();
     }
@@ -659,7 +663,7 @@ export default function AgentRunChat({
 
       {/* Agent artifact trail */}
       {artifactAgentIds.length > 0 && (
-        <div className="shrink-0 px-4 pt-2 pb-1 flex items-center gap-1 overflow-x-auto scrollbar-none border-b border-transparent">
+        <div className="shrink-0 px-3 sm:px-4 pt-2 pb-1 flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-transparent">
           {artifactAgentIds.map((agent, idx) => {
             const AgentIcon = agent!.icon;
             return (
@@ -681,16 +685,17 @@ export default function AgentRunChat({
       )}
 
       {/* Agent + language selectors */}
-      <div className="shrink-0 border-b px-4 py-2 flex items-center gap-2 flex-wrap bg-background">
+      <div className="shrink-0 border-b px-3 sm:px-4 py-2 flex items-center gap-2 bg-background">
         <Select value={agentId} onValueChange={setAgentId}>
-          <SelectTrigger className="h-8 text-xs w-52">
+          <SelectTrigger className="h-9 sm:h-8 text-xs min-w-0 flex-1 sm:flex-none sm:w-52 [&>span]:min-w-0">
             <SelectValue placeholder="Select agent" />
           </SelectTrigger>
           <SelectContent>
+            {/* truncate: in a narrow trigger the name ends in "…" instead of wrapping to two lines. */}
             <SelectItem value="smart">
-              <span className="flex items-center gap-1.5">
-                <Bot size={12} className="text-rose-500" />
-                Smart Chat (auto-route)
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Bot size={12} className="shrink-0 text-rose-500" />
+                <span className="truncate">Smart Chat (auto-route)</span>
               </span>
             </SelectItem>
             {(["sales", "strategy", "delivery", "ops"] as const).map((cat) => (
@@ -700,9 +705,9 @@ export default function AgentRunChat({
                 </div>
                 {agents.filter((a) => a.category === cat).map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    <span className="flex items-center gap-1.5">
-                      <a.icon size={12} />
-                      {a.shortName}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <a.icon size={12} className="shrink-0" />
+                      <span className="truncate">{a.shortName}</span>
                     </span>
                   </SelectItem>
                 ))}
@@ -712,7 +717,7 @@ export default function AgentRunChat({
         </Select>
 
         <Select value={language} onValueChange={setLanguage}>
-          <SelectTrigger className="h-8 text-xs w-28">
+          <SelectTrigger className="h-9 sm:h-8 text-xs w-24 sm:w-28 shrink-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -722,12 +727,19 @@ export default function AgentRunChat({
           </SelectContent>
         </Select>
 
+        {/* Icons only on a phone, so the row stays one line beside the two pickers. */}
         {messages.length > 0 && (
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs text-muted-foreground">
-                  <FileDown size={12} /> Export chat
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Export chat"
+                  className="h-9 w-9 p-0 sm:h-8 sm:w-auto sm:px-3 gap-1.5 text-xs text-muted-foreground"
+                >
+                  <FileDown size={14} className="sm:h-3 sm:w-3" />
+                  <span className="hidden sm:inline">Export chat</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs">
@@ -766,10 +778,12 @@ export default function AgentRunChat({
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 text-xs text-muted-foreground"
+              aria-label="Clear chat"
+              className="h-9 w-9 p-0 sm:h-8 sm:w-auto sm:px-3 gap-1.5 text-xs text-muted-foreground"
               onClick={() => setMessages([])}
             >
-              Clear chat
+              <Eraser size={14} className="sm:hidden" />
+              <span className="hidden sm:inline">Clear chat</span>
             </Button>
           </div>
         )}
@@ -777,7 +791,7 @@ export default function AgentRunChat({
 
       {/* Messages */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4 py-4 space-y-5 max-w-4xl mx-auto">
+        <div className="px-3 sm:px-4 py-4 space-y-5 max-w-4xl mx-auto">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Bot size={36} className="text-muted-foreground/30 mb-3" />
@@ -794,7 +808,7 @@ export default function AgentRunChat({
             if (msg.type === "user") {
               return (
                 <div key={i} className="flex justify-end">
-                  <div className="flex items-start gap-2 max-w-[80%]">
+                  <div className="flex items-start gap-2 max-w-[88%] sm:max-w-[80%]">
                     <div className="flex flex-col gap-1.5">
                       {/* Attachment thumbnails */}
                       {msg.attachments && msg.attachments.length > 0 && (
@@ -825,7 +839,7 @@ export default function AgentRunChat({
                       )}
                       <ChatMessageText role="user" content={msg.content} />
                     </div>
-                    <div className="shrink-0 w-7 h-7 bg-muted rounded-full flex items-center justify-center mt-0.5">
+                    <div className="shrink-0 w-7 h-7 bg-muted rounded-full hidden sm:flex items-center justify-center mt-0.5">
                       <User size={14} />
                     </div>
                   </div>
@@ -844,7 +858,7 @@ export default function AgentRunChat({
 
             return (
               <div key={i} className="flex gap-2.5">
-                <div className="shrink-0 w-7 h-7 bg-rose-100 rounded-full flex items-center justify-center mt-0.5">
+                <div className="shrink-0 w-7 h-7 bg-rose-100 rounded-full hidden sm:flex items-center justify-center mt-0.5">
                   <Bot size={14} className="text-rose-600" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -960,7 +974,7 @@ export default function AgentRunChat({
           {/* Thinking indicator */}
           {runAgent.isPending && (
             <div className="flex gap-2.5">
-              <div className="shrink-0 w-7 h-7 bg-rose-100 rounded-full flex items-center justify-center">
+              <div className="shrink-0 w-7 h-7 bg-rose-100 rounded-full hidden sm:flex items-center justify-center">
                 <Bot size={14} className="text-rose-600" />
               </div>
               <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
@@ -975,7 +989,7 @@ export default function AgentRunChat({
       </ScrollArea>
 
       {/* Input bar */}
-      <div className="shrink-0 border-t px-4 py-3 bg-background">
+      <div className="shrink-0 border-t px-3 sm:px-4 py-2.5 sm:py-3 bg-background">
         <div className="max-w-4xl mx-auto">
           {/* QuickFieldChips on first message for agents with required fields */}
           {messages.length === 0 && agentId !== "smart" && currentAgent && currentAgent.requiredFields.length > 0 && (
@@ -1029,11 +1043,14 @@ export default function AgentRunChat({
               onClick={() => fileInputRef.current?.click()}
               disabled={runAgent.isPending || pendingAttachments.length >= MAX_FILES}
               title="Attach file (images, PDF, text — max 5 MB each)"
-              className="shrink-0 h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Attach file"
+              className="shrink-0 h-11 w-11 md:h-9 md:w-9 flex items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Paperclip size={15} />
+              <Paperclip size={16} />
             </button>
 
+            {/* The textarea's own 16px on a phone: below that an iPhone zooms
+                the page in on focus and the Send button slides off screen. */}
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1041,25 +1058,26 @@ export default function AgentRunChat({
               placeholder={
                 pendingAttachments.length > 0
                   ? "Add a message about the file(s)… (optional)"
-                  : "Type your input… (Enter to send, Shift+Enter for new line)"
+                  : "Type your input…"
               }
-              className="min-h-[72px] max-h-48 resize-none text-sm flex-1"
+              className="min-h-[44px] md:min-h-[72px] max-h-48 resize-none flex-1"
               disabled={runAgent.isPending}
             />
             <Button
               onClick={() => handleSend()}
               disabled={(!input.trim() && pendingAttachments.length === 0) || runAgent.isPending}
               size="sm"
-              className="shrink-0 h-9 gap-1.5"
+              aria-label="Send"
+              className="shrink-0 h-11 w-11 p-0 md:h-9 md:w-auto md:px-3 gap-1.5"
             >
               {runAgent.isPending
-                ? <Loader2 size={14} className="animate-spin" />
-                : <Send size={14} />
+                ? <Loader2 size={16} className="animate-spin" />
+                : <Send size={16} className="md:h-3.5 md:w-3.5" />
               }
-              Send
+              <span className="hidden md:inline">Send</span>
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="hidden md:block text-[10px] text-muted-foreground mt-1">
             Enter to send · Shift+Enter for new line · Attach images, PDFs or text files (max 5 MB each)
           </p>
         </div>

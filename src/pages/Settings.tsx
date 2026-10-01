@@ -23,6 +23,12 @@ import {
   CheckCircle2,
   Globe2,
   Megaphone,
+  Folder,
+  NotebookPen,
+  Zap,
+  ClipboardList,
+  Palette,
+  type LucideIcon,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -1368,7 +1374,7 @@ export default function Settings() {
                                         <Input
                                           defaultValue={branch.country_flag ?? ""}
                                           maxLength={8}
-                                          placeholder={branchFlag || "🏳"}
+                                          placeholder={branchFlag || "—"}
                                           className="mt-1 h-7 px-2 text-xs"
                                           onBlur={(event) => {
                                             const nextFlag = event.target.value.trim() || null;
@@ -1744,22 +1750,25 @@ export default function Settings() {
                               {t("settings.featureAccess")}
                             </p>
                             {[
-                              { key: "campaigns", label: "Campaigns", icon: "📧" },
-                              { key: "contacts",  label: "Contacts",  icon: "👥" },
-                              { key: "projects",  label: "Projects",  icon: "📁" },
-                              { key: "workspace", label: "Workspace", icon: "📓" },
-                              { key: "skills",    label: "Skills",    icon: "⚡" },
-                              { key: "intake",    label: "Intake",    icon: "📋" },
+                              { key: "campaigns", label: "Campaigns", icon: Mail },
+                              { key: "contacts",  label: "Contacts",  icon: Users },
+                              { key: "projects",  label: "Projects",  icon: Folder },
+                              { key: "workspace", label: "Workspace", icon: NotebookPen },
+                              { key: "skills",    label: "Skills",    icon: Zap },
+                              { key: "intake",    label: "Intake",    icon: ClipboardList },
                               // Opt-in rather than opt-out: Creative Canvas spends
                               // provider credit per action, so it stays off until
                               // someone is deliberately given it here.
-                              { key: "creativeCanvas", label: "Creative Canvas", icon: "🎨", optIn: true },
-                            ].map(({ key, label, icon, optIn }: { key: string; label: string; icon: string; optIn?: boolean }) => {
+                              { key: "creativeCanvas", label: "Creative Canvas", icon: Palette, optIn: true },
+                            ].map(({ key, label, icon: Icon, optIn }: { key: string; label: string; icon: LucideIcon; optIn?: boolean }) => {
                               const fa = ((member as any).feature_access as Record<string, boolean>) ?? {};
                               const enabled = optIn ? fa[key] === true : fa[key] !== false;
                               return (
                                 <div key={key} className="flex items-center justify-between">
-                                  <span className="text-xs text-foreground">{icon} {label}</span>
+                                  <span className="flex items-center gap-1.5 text-xs text-foreground">
+                                    <Icon size={13} className="text-muted-foreground" aria-hidden />
+                                    {label}
+                                  </span>
                                   <button
                                     onClick={() =>
                                       updateFeatureAccessMutation.mutate({

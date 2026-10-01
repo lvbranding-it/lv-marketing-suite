@@ -43,7 +43,7 @@ export default function CampaignDetail() {
     if (!id) return;
     try {
       const result = await sendCampaign.mutateAsync(id);
-      toast({ description: `✅ Sent to ${result.sent} contacts.` });
+      toast({ description: `Sent to ${result.sent} contacts.` });
     } catch (e: unknown) {
       toast({ variant: "destructive", description: "Send failed. Check console." });
     }
@@ -99,7 +99,7 @@ export default function CampaignDetail() {
   const handleApprove = async () => {
     try {
       const result = await sendCampaign.mutateAsync(campaign.id);
-      toast({ description: `✅ Approved & sent to ${result.sent} contacts.` });
+      toast({ description: `Approved & sent to ${result.sent} contacts.` });
     } catch {
       toast({ variant: "destructive", description: "Send failed." });
     }

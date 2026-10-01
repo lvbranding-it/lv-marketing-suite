@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive, RotateCcw } from "lucide-react";
+import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive, RotateCcw, Link2Off, Camera, Expand, CircleCheck, MessageCircle, Target } from "lucide-react";
 import JSZip from "jszip";
 import LVLogo from "@/components/LVLogo";
 import ClientPhotoCard from "@/components/photo-sessions/ClientPhotoCard";
@@ -273,7 +273,7 @@ export default function ClientPhotoSelection() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center p-6">
         <LVLogo size={32} />
-        <p className="text-4xl mt-8 mb-3">🔗</p>
+        <span className="mx-auto mt-8 mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Link2Off size={22} aria-hidden /></span>
         <p className="text-lg font-semibold mb-1">Session Not Found</p>
         <p className="text-muted-foreground text-sm">
           This link may have expired or is no longer available. Please contact us if you believe this is an error.
@@ -497,14 +497,17 @@ export default function ClientPhotoSelection() {
           <div className="bg-muted rounded-xl p-4 text-sm space-y-1">
             <p className="font-medium text-foreground">How to select your photos:</p>
             <ul className="text-muted-foreground space-y-0.5 text-xs list-none">
-              <li>📷 <strong className="text-foreground">Tap a photo</strong> to open it full-size</li>
-              <li>✅ <strong className="text-foreground">Tap "Select"</strong> inside the photo to add it to your selection</li>
-              <li>💬 <strong className="text-foreground">Tap the chat icon</strong> to leave a comment on any photo</li>
+              <li className="flex items-start gap-1.5"><Expand size={12} className="mt-0.5 shrink-0" aria-hidden /><span><strong className="text-foreground">Tap a photo</strong> to open it full-size</span></li>
+              <li className="flex items-start gap-1.5"><CircleCheck size={12} className="mt-0.5 shrink-0" aria-hidden /><span><strong className="text-foreground">Tap "Select"</strong> inside the photo to add it to your selection</span></li>
+              <li className="flex items-start gap-1.5"><MessageCircle size={12} className="mt-0.5 shrink-0" aria-hidden /><span><strong className="text-foreground">Tap the chat icon</strong> to leave a comment on any photo</span></li>
               {photoLimit > 0 && (
-                <li>
-                  🎯 Your package includes{" "}
+                <li className="flex items-start gap-1.5">
+                  <Target size={12} className="mt-0.5 shrink-0" aria-hidden />
+                  <span>
+                  Your package includes{" "}
                   <strong className="text-foreground">{photoLimit} photos</strong>
                   {extraPrice > 0 && `. You can select more — extra photos are $${extraPrice.toFixed(2)} each and will be invoiced.`}
+                  </span>
                 </li>
               )}
             </ul>
@@ -564,7 +567,7 @@ export default function ClientPhotoSelection() {
             </div>
           ) : roundPhotos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
-              <p className="text-4xl mb-3">📷</p>
+              <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Camera size={22} aria-hidden /></span>
               <p className="text-muted-foreground text-sm">No images are available for this session yet. Please check back shortly.</p>
             </div>
           ) : (

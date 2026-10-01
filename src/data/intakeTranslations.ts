@@ -11,7 +11,7 @@ export const OPTION_VALUES = {
 
 export const intakeTranslations = {
   en: {
-    langToggle: "🇪🇸 Español",
+    langToggle: "Español",
     footer: "Developed with Love by LV Branding",
     stepIndicator: (n: number) => `Step ${n} of 4`,
 
@@ -26,10 +26,10 @@ export const intakeTranslations = {
     },
 
     steps: [
-      { label: "About You",        emoji: "👋", hint: "Let's start with who you are" },
-      { label: "Your Business",    emoji: "🏢", hint: "Tell us about what you do" },
-      { label: "Goals & Audience", emoji: "🎯", hint: "What success looks like" },
-      { label: "Brand & Fit",      emoji: "✨", hint: "How you want to be seen" },
+      { label: "About You", hint: "Let's start with who you are" },
+      { label: "Your Business", hint: "Tell us about what you do" },
+      { label: "Goals & Audience", hint: "What success looks like" },
+      { label: "Brand & Fit", hint: "How you want to be seen" },
     ],
 
     fields: {
@@ -68,7 +68,7 @@ export const intakeTranslations = {
     },
 
     success: {
-      title:           "You're all set! 🎊",
+      title:           "You're all set!",
       thankYouBefore:  "Thank you, ",
       thankYouAfter:   "! We've received everything we need to hit the ground running.",
       followUpBefore:  "Our team will review your brief and reach out to ",
@@ -85,7 +85,7 @@ export const intakeTranslations = {
   },
 
   es: {
-    langToggle: "🇺🇸 English",
+    langToggle: "English",
     footer: "Desarrollado con Amor por LV Branding",
     stepIndicator: (n: number) => `Paso ${n} de 4`,
 
@@ -100,10 +100,10 @@ export const intakeTranslations = {
     },
 
     steps: [
-      { label: "Sobre Ti",                emoji: "👋", hint: "Empecemos con quién eres" },
-      { label: "Tu Negocio",              emoji: "🏢", hint: "Cuéntanos qué haces" },
-      { label: "Metas y Audiencia",       emoji: "🎯", hint: "Cómo luce el éxito para ti" },
-      { label: "Marca y Compatibilidad",  emoji: "✨", hint: "Cómo quieres ser percibido" },
+      { label: "Sobre Ti", hint: "Empecemos con quién eres" },
+      { label: "Tu Negocio", hint: "Cuéntanos qué haces" },
+      { label: "Metas y Audiencia", hint: "Cómo luce el éxito para ti" },
+      { label: "Marca y Compatibilidad", hint: "Cómo quieres ser percibido" },
     ],
 
     fields: {
@@ -142,7 +142,7 @@ export const intakeTranslations = {
     },
 
     success: {
-      title:           "¡Todo listo! 🎊",
+      title:           "¡Todo listo!",
       thankYouBefore:  "¡Gracias, ",
       thankYouAfter:   "! Hemos recibido todo lo que necesitamos para arrancar de inmediato.",
       followUpBefore:  "Nuestro equipo revisará tu brief y se pondrá en contacto a ",

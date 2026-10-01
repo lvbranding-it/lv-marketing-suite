@@ -193,7 +193,7 @@ export default function CampaignComposer() {
         });
       }
       const result = await sendCampaign.mutateAsync(campaignToSend.id);
-      toast({ description: `✅ Campaign sent to ${result.sent} contacts!` });
+      toast({ description: `Campaign sent to ${result.sent} contacts.` });
       navigate(`/campaigns/${campaignToSend.id}`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Send failed";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, ChevronLeft, History, Search, X } from "lucide-react";
+import { Bot, ChevronLeft, History, Search, Undo2, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/hooks/useProjects";
@@ -214,7 +214,11 @@ export default function AgentProjectSidebar({
                               <span className={cn("shrink-0 rounded border px-1.5 text-[10px] font-medium leading-4", catColor)}>
                                 {agent?.shortName ?? run.agent_id}
                               </span>
-                              {run.mode === "revise" && <span className="text-[10px] text-gray-400">↩ revision</span>}
+                              {run.mode === "revise" && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                  <Undo2 size={10} /> revision
+                                </span>
+                              )}
                               <span className="ml-auto shrink-0 text-[10px] tabular-nums text-gray-400">{runDateLabel(run.created_at)}</span>
                             </span>
                             {text && <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-600 [overflow-wrap:anywhere]">{text}</span>}

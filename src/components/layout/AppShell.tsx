@@ -497,7 +497,10 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    // dvh, not vh: on a phone, 100vh includes the strip behind the browser's
+    // own toolbar, so anything pinned to the bottom of a page (a chat's Send
+    // button) sat underneath it. dvh is the height actually visible.
+    <div className="flex h-dvh overflow-hidden">
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -521,6 +524,7 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Open menu"
             className="md:hidden fixed top-3 left-3 z-50 bg-background shadow-md p-2"
           >
             <Menu size={20} />

@@ -4,6 +4,7 @@ import {
   ArrowLeft, CheckCircle2, AlertCircle, Settings2, Zap,
   FileText, Sparkles, ClipboardList, Mail, Building2,
   Globe, Users, Target, Award, MessageSquare,
+  SearchX,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import SkillOutputCard from "@/components/skills/SkillOutputCard";
@@ -86,7 +87,7 @@ export default function ProjectDetail() {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-          <p className="text-4xl mb-3">❓</p>
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><SearchX size={22} aria-hidden /></span>
           <p className="text-muted-foreground text-sm mb-4">Project not found.</p>
           <Link to="/projects" className="text-primary text-sm underline">Back to Projects</Link>
         </div>
@@ -286,7 +287,7 @@ export default function ProjectDetail() {
               </div>
             ) : outputs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-3xl mb-3">📄</p>
+                <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><FileText size={18} aria-hidden /></span>
                 <p className="text-sm text-muted-foreground mb-4">
                   No outputs saved for this project yet.
                 </p>

@@ -41,6 +41,12 @@ function FitPill({ score }: { score: number | null }) {
   );
 }
 
+/** The current stage as a small icon between the move-back and move-forward arrows. */
+function StageGlyph({ index }: { index: number }) {
+  const Icon = PIPELINE_STAGES[index]?.icon;
+  return Icon ? <Icon size={11} aria-hidden /> : null;
+}
+
 export default function PipelineView({ contacts, onSelect }: Props) {
   const updateStage = useUpdatePipelineStage();
 
@@ -92,7 +98,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
               >
                 <div className={cn("flex items-center justify-between", stage.color)}>
                   <span className="text-sm font-semibold flex items-center gap-1.5">
-                    <span>{stage.emoji}</span>
+                    <stage.icon size={14} aria-hidden />
                     <span>{stage.label}</span>
                   </span>
                   <span className="text-[10px] bg-white/60 border border-current/20 px-1.5 py-0.5 rounded-full font-medium">
@@ -199,7 +205,7 @@ export default function PipelineView({ contacts, onSelect }: Props) {
                             <ChevronLeft size={12} />
                           </button>
                           <span className="text-[9px] text-muted-foreground">
-                            {PIPELINE_STAGES[stageIdx]?.emoji}
+                            <StageGlyph index={stageIdx} />
                           </span>
                           <button
                             onClick={(e) => moveStage(c, "next", e)}

@@ -20,7 +20,7 @@ export const portalTranslations = {
     "portal.noSessionChats": "Your conversations will appear here.",
     "portal.sessionOnly":
       "Your conversations are saved to your account and stay private to you. The 30 most recent are kept.",
-    "portal.chatWelcome": "Welcome aboard 🚀",
+    "portal.chatWelcome": "Welcome aboard",
     "portal.chatQuestion": "What do you want to build today?",
 
     "portal.readAloud": "Read aloud",
@@ -307,7 +307,7 @@ export const portalTranslations = {
     "portal.noSessionChats": "Tus conversaciones aparecerán aquí.",
     "portal.sessionOnly":
       "Tus conversaciones se guardan en tu cuenta y solo tú puedes verlas. Se conservan las 30 más recientes.",
-    "portal.chatWelcome": "Te damos la bienvenida 🚀",
+    "portal.chatWelcome": "Te damos la bienvenida",
     "portal.chatQuestion": "¿Qué quieres construir hoy?",
 
     "portal.readAloud": "Leer en voz alta",

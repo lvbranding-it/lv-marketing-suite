@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Check, ExternalLink, Inbox, TrendingUp, Clock, Eye, Percent, Languages } from "lucide-react";
+import {
+  Copy, Check, ExternalLink, Inbox, TrendingUp, Clock, Eye, Percent, Languages,
+  Video, MonitorSmartphone, PenTool, Brush, Camera, Compass, Calculator, SearchCheck, type LucideIcon,
+} from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -15,7 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface FormMeta {
   source: string;
-  emoji:  string;
+  icon:   LucideIcon;
   title:  string;
   desc:   string;
   path:   string;
@@ -28,56 +31,56 @@ interface FormMeta {
 const FORMS: FormMeta[] = [
   {
     source: "av-landing",
-    emoji:  "🎥",
+    icon:   Video,
     title:  "AV Event Production",
     desc:   "LED screens, multi-camera coverage, and live broadcasting for festivals, conferences, and corporate events.",
     path:   "/av-event-production-houston",
   },
   {
     source: "web-solutions",
-    emoji:  "💻",
+    icon:   MonitorSmartphone,
     title:  "Industry Web Solutions",
     desc:   "Custom web apps, portals, e-commerce, and booking systems built around industry workflows.",
     path:   "/industry-web-solutions-web-app-development",
   },
   {
     source: "ux-ui-design",
-    emoji:  "🎨",
+    icon:   PenTool,
     title:  "UX/UI Web Design",
     desc:   "UX research, UI design, prototyping, and design systems for websites and digital products.",
     path:   "/ux-ui-web-design-user-experiences-web-development",
   },
   {
     source: "creative-content",
-    emoji:  "🖌️",
+    icon:   Brush,
     title:  "Creative Strategy & Content Design",
     desc:   "Creative direction, content systems, collateral, campaign creative, and brand activations.",
     path:   "/creative-strategy-content-design-houston",
   },
   {
     source: "photo-video",
-    emoji:  "📸",
+    icon:   Camera,
     title:  "Photography & Video Production",
     desc:   "Commercial photography and video rooted in brand strategy — products, events, corporate, sports.",
     path:   "/commercial-photography-video-production-houston",
   },
   {
     source: "brand-strategy",
-    emoji:  "🧭",
+    icon:   Compass,
     title:  "Brand Strategy & Identity",
     desc:   "Brand positioning, messaging architecture, logo design, visual identity, and brand guidelines.",
     path:   "/brand-strategy-identity-houston",
   },
   {
     source: "digital-marketing",
-    emoji:  "📈",
+    icon:   TrendingUp,
     title:  "Digital Marketing & Paid Media",
     desc:   "Paid search, paid social, SEO, email marketing, and full-funnel campaign strategy.",
     path:   "/digital-marketing-paid-media-houston",
   },
   {
     source: "campaign-calculator",
-    emoji:  "🧮",
+    icon:   Calculator,
     title:  "Campaign Investment Calculator",
     desc:   "A free planning tool: it builds a campaign investment plan, then invites the visitor to send it over. Leads arrive with the full plan attached.",
     path:   "/campaign-investment-calculator",
@@ -87,7 +90,7 @@ const FORMS: FormMeta[] = [
   },
   {
     source: "website-audit",
-    emoji:  "🧭",
+    icon:   SearchCheck,
     title:  "Website Opportunity Audit",
     desc:   "A bilingual public audit that turns representative website evidence into a prioritized opportunity plan and qualified follow-up.",
     path:   "/en/tools/website-opportunity-audit",
@@ -213,8 +216,8 @@ export default function LeadForms() {
                 {/* Title + actions */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-xl shrink-0">
-                      {f.emoji}
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+                      <f.icon size={18} aria-hidden />
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-semibold">

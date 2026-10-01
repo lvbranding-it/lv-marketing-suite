@@ -168,7 +168,7 @@ export default function Campaigns() {
   const handleApprove = async (campaign: EmailCampaign) => {
     try {
       const result = await sendCampaign.mutateAsync(campaign.id);
-      toast({ description: `✅ Approved & sent to ${result.sent} contacts.` });
+      toast({ description: `Approved & sent to ${result.sent} contacts.` });
     } catch {
       toast({ variant: "destructive", description: "Send failed." });
     }
@@ -233,7 +233,7 @@ export default function Campaigns() {
         .from("contacts")
         .upsert(rows, { onConflict: "org_id,email" });
       if (error) throw error;
-      toast({ description: `✅ ${contacts.length} contact${contacts.length !== 1 ? "s" : ""} imported successfully.` });
+      toast({ description: `${contacts.length} contact${contacts.length !== 1 ? "s" : ""} imported successfully.` });
     } catch (err) {
       toast({ variant: "destructive", description: err instanceof Error ? err.message : "Import failed." });
     } finally {

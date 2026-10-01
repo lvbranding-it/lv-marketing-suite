@@ -16,6 +16,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { localizeSkill } from "@/data/skillTranslations";
 import type { SkillOutputRow } from "@/integrations/supabase/types";
 import { formatDistanceToNow } from "date-fns";
+import SkillIcon from "@/components/skills/SkillIcon";
 import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,7 +63,7 @@ export default function OutputDetailModal({ output, open, onClose }: OutputDetai
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1 flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg">{skill?.icon ?? "📄"}</span>
+                <SkillIcon skill={skill} size="sm" />
                 {categoryMeta && (
                   <Badge
                     variant="outline"

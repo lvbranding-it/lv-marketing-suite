@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ChevronRight, Settings2, Camera, CheckCircle2,
   Send, Loader2, RotateCcw,
+  SearchX, FolderOpen,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import {
@@ -115,7 +116,7 @@ export default function PhotoSessionDetail() {
     return (
       <AppShell>
         <div className="p-3 sm:p-6 max-w-5xl mx-auto flex flex-col items-center justify-center py-24 text-center">
-          <p className="text-4xl mb-3">🔍</p>
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><SearchX size={22} aria-hidden /></span>
           <p className="text-muted-foreground mb-4">Session not found.</p>
           <Button onClick={() => navigate("/photo-sessions")}>Back to Sessions</Button>
         </div>
@@ -332,7 +333,7 @@ export default function PhotoSessionDetail() {
 
             {!hasDeliverables && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-3xl mb-2">🗂️</p>
+                <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><FolderOpen size={18} aria-hidden /></span>
                 <p className="text-sm text-muted-foreground">
                   No edited files uploaded yet. Upload HD and LR versions above, then publish to notify the client.
                 </p>

@@ -1,3 +1,39 @@
+import {
+  BadgeDollarSign,
+  BarChart3,
+  Brain,
+  Code2,
+  Cog,
+  CreditCard,
+  FlaskConical,
+  FormInput,
+  Handshake,
+  Layers,
+  LayoutTemplate,
+  Lightbulb,
+  Magnet,
+  Mail,
+  MailPlus,
+  Megaphone,
+  MessageSquareMore,
+  Network,
+  Newspaper,
+  Palette,
+  PenLine,
+  Rocket,
+  SearchCheck,
+  Share2,
+  ShieldCheck,
+  Sparkles,
+  SpellCheck,
+  Swords,
+  Target,
+  UserPlus,
+  Waypoints,
+  Workflow,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import { SKILL_SYSTEM_PROMPTS } from './skillPrompts';
 
 export type SkillCategory =
@@ -29,7 +65,8 @@ export interface Skill {
   isFoundation?: boolean;
   systemPrompt: string;
   contextFields: ContextField[];
-  icon: string; // emoji
+  /** Shown next to the skill name wherever it appears. */
+  icon: LucideIcon;
 }
 
 export const SKILL_CATEGORIES: Record<SkillCategory, { label: string; color: string }> = {
@@ -97,7 +134,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     description: 'Build the foundational context document that powers all other marketing skills.',
     category: 'foundation',
     isFoundation: true,
-    icon: '🏗️',
+    icon: Layers,
     contextFields: [
       { key: 'product_name', label: 'Product / Company Name', type: 'text', required: true },
       { key: 'website', label: 'Website URL', type: 'url', required: false, placeholder: 'https://...' },
@@ -112,7 +149,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Page CRO',
     description: 'Optimize any marketing page for higher conversions with a structured audit and recommendations.',
     category: 'conversion',
-    icon: '📈',
+    icon: LayoutTemplate,
     contextFields: [
       { key: 'page_url', label: 'Page URL', type: 'url', required: false, placeholder: 'https://...' },
       { key: 'page_content', label: 'Page copy or description', type: 'textarea', required: true, placeholder: 'Paste the page content or describe it...' },
@@ -125,7 +162,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Signup Flow CRO',
     description: 'Reduce friction and drop-off in your signup or registration flow.',
     category: 'conversion',
-    icon: '✍️',
+    icon: UserPlus,
     contextFields: [
       { key: 'flow_description', label: 'Describe your current signup flow', type: 'textarea', required: true },
       { key: 'current_dropoff', label: 'Where do users drop off?', type: 'text', required: false },
@@ -137,7 +174,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Onboarding CRO',
     description: 'Improve activation rates and time-to-value in your user onboarding experience.',
     category: 'conversion',
-    icon: '🚀',
+    icon: Waypoints,
     contextFields: [
       { key: 'onboarding_steps', label: 'Describe your current onboarding steps', type: 'textarea', required: true },
       { key: 'activation_event', label: 'What is your activation event?', type: 'text', required: true, placeholder: 'e.g. first project created, first import' },
@@ -149,7 +186,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Form CRO',
     description: 'Optimize lead capture, checkout, and contact forms for maximum completion.',
     category: 'conversion',
-    icon: '📋',
+    icon: FormInput,
     contextFields: [
       { key: 'form_purpose', label: 'What is this form for?', type: 'text', required: true, placeholder: 'e.g. lead capture, checkout, contact' },
       { key: 'form_fields', label: 'List current form fields', type: 'textarea', required: true },
@@ -161,7 +198,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Popup CRO',
     description: 'Design high-converting popups and overlays that capture leads without destroying UX.',
     category: 'conversion',
-    icon: '💬',
+    icon: MessageSquareMore,
     contextFields: [
       { key: 'popup_goal', label: 'What should the popup achieve?', type: 'text', required: true, placeholder: 'e.g. email capture, discount offer, exit intent' },
       { key: 'trigger', label: 'When does it trigger?', type: 'text', required: false, placeholder: 'e.g. exit intent, 30s timer, scroll 50%' },
@@ -173,7 +210,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Paywall & Upgrade CRO',
     description: 'Increase free-to-paid conversion with better paywall and upgrade prompts.',
     category: 'conversion',
-    icon: '💳',
+    icon: CreditCard,
     contextFields: [
       { key: 'current_paywall', label: 'Describe your current paywall or upgrade prompt', type: 'textarea', required: true },
       { key: 'free_tier_limits', label: 'What are the free tier limits?', type: 'textarea', required: false },
@@ -187,7 +224,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Copywriting',
     description: 'Write or rewrite high-converting marketing copy for any page, ad, or email.',
     category: 'content',
-    icon: '✏️',
+    icon: PenLine,
     contextFields: [
       { key: 'page_type', label: 'Type of copy needed', type: 'select', required: true, options: ['Homepage', 'Landing Page', 'Pricing Page', 'Feature Page', 'About Page', 'Email', 'Ad', 'Other'] },
       { key: 'existing_copy', label: 'Existing copy to rewrite (or leave blank for fresh copy)', type: 'textarea', required: false },
@@ -200,7 +237,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Copy Editing',
     description: 'Polish and improve existing marketing copy for clarity, tone, and persuasiveness.',
     category: 'content',
-    icon: '🔍',
+    icon: SpellCheck,
     contextFields: [
       { key: 'copy_to_edit', label: 'Copy to edit', type: 'textarea', required: true },
       { key: 'issues', label: 'What issues have been noted?', type: 'text', required: false, placeholder: 'e.g. too long, jargon-heavy, off-brand' },
@@ -212,7 +249,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Cold Email',
     description: 'Write personalized cold outreach emails that get replies.',
     category: 'content',
-    icon: '📧',
+    icon: Mail,
     contextFields: [
       { key: 'prospect_role', label: 'Prospect job title / role', type: 'text', required: true },
       { key: 'prospect_company', label: 'Prospect company type or name', type: 'text', required: false },
@@ -225,7 +262,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Email Sequence',
     description: 'Build automated email sequences for onboarding, nurture, or re-engagement.',
     category: 'content',
-    icon: '📨',
+    icon: MailPlus,
     contextFields: [
       { key: 'sequence_type', label: 'Sequence type', type: 'select', required: true, options: ['Onboarding', 'Welcome', 'Nurture', 'Re-engagement', 'Post-purchase', 'Trial Expiry', 'Other'] },
       { key: 'audience_segment', label: 'Who receives this sequence?', type: 'text', required: true },
@@ -238,7 +275,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Social Content',
     description: 'Create scroll-stopping social media posts, captions, and content calendars.',
     category: 'content',
-    icon: '📱',
+    icon: Share2,
     contextFields: [
       { key: 'platform', label: 'Platform', type: 'select', required: true, options: ['LinkedIn', 'Instagram', 'Twitter/X', 'TikTok', 'Facebook', 'Multiple'] },
       { key: 'content_goal', label: 'Content goal', type: 'text', required: true, placeholder: 'e.g. brand awareness, lead gen, engagement' },
@@ -253,7 +290,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'SEO Audit',
     description: 'Diagnose technical and on-page SEO issues with prioritized fix recommendations.',
     category: 'seo',
-    icon: '🔎',
+    icon: SearchCheck,
     contextFields: [
       { key: 'website_url', label: 'Website URL', type: 'url', required: true, placeholder: 'https://...' },
       { key: 'target_keywords', label: 'Target keywords (if known)', type: 'text', required: false },
@@ -265,7 +302,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'AI SEO',
     description: 'Optimize content to rank in AI-powered search results (ChatGPT, Perplexity, Google SGE).',
     category: 'seo',
-    icon: '🤖',
+    icon: Sparkles,
     contextFields: [
       { key: 'target_topic', label: 'Topic to optimize for', type: 'text', required: true },
       { key: 'existing_content', label: 'Existing content or URL', type: 'textarea', required: false },
@@ -277,7 +314,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Programmatic SEO',
     description: 'Design and build programmatic SEO pages at scale using data-driven templates.',
     category: 'seo',
-    icon: '⚙️',
+    icon: Cog,
     contextFields: [
       { key: 'website_type', label: 'Website type', type: 'select', required: true, options: ['SaaS', 'Marketplace', 'E-commerce', 'Directory', 'Content Site', 'Other'] },
       { key: 'target_keywords_pattern', label: 'Keyword pattern to target', type: 'text', required: true, placeholder: 'e.g. "best [tool] for [industry]"' },
@@ -289,7 +326,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Site Architecture',
     description: 'Structure your site for maximum SEO crawlability and user navigation clarity.',
     category: 'seo',
-    icon: '🗺️',
+    icon: Network,
     contextFields: [
       { key: 'site_type', label: 'Site type', type: 'select', required: true, options: ['SaaS', 'E-commerce', 'Content Site', 'Agency', 'Startup', 'Other'] },
       { key: 'current_pages', label: 'List current main pages', type: 'textarea', required: false },
@@ -301,7 +338,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Competitor Alternatives',
     description: 'Create "alternative to [competitor]" landing pages to capture high-intent traffic.',
     category: 'seo',
-    icon: '⚔️',
+    icon: Swords,
     contextFields: [
       { key: 'competitor_name', label: 'Competitor name', type: 'text', required: true },
       { key: 'competitor_url', label: 'Competitor URL', type: 'url', required: false },
@@ -313,7 +350,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Schema Markup',
     description: 'Add structured data markup to improve rich results and search visibility.',
     category: 'seo',
-    icon: '🏷️',
+    icon: Code2,
     contextFields: [
       { key: 'page_type', label: 'Page type', type: 'select', required: true, options: ['Homepage', 'Product/Service', 'Blog Post', 'FAQ', 'Pricing', 'About', 'Review', 'Other'] },
       { key: 'page_content', label: 'Page content or description', type: 'textarea', required: true },
@@ -327,7 +364,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Paid Ads',
     description: 'Build and optimize paid advertising campaigns across Google, Meta, and LinkedIn.',
     category: 'paid',
-    icon: '💰',
+    icon: Megaphone,
     contextFields: [
       { key: 'platform', label: 'Ad platform', type: 'select', required: true, options: ['Google Ads', 'Meta Ads', 'LinkedIn Ads', 'TikTok Ads', 'Multiple'] },
       { key: 'campaign_goal', label: 'Campaign goal', type: 'select', required: true, options: ['Lead Generation', 'Brand Awareness', 'Conversions', 'App Installs', 'Retargeting'] },
@@ -340,7 +377,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Ad Creative',
     description: 'Write high-converting ad copy and creative briefs for any platform.',
     category: 'paid',
-    icon: '🎨',
+    icon: Palette,
     contextFields: [
       { key: 'ad_platform', label: 'Ad platform', type: 'select', required: true, options: ['Google Search', 'Google Display', 'Meta/Instagram', 'LinkedIn', 'TikTok', 'Other'] },
       { key: 'ad_format', label: 'Ad format', type: 'text', required: false, placeholder: 'e.g. single image, carousel, video' },
@@ -355,7 +392,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Analytics Tracking',
     description: 'Set up proper analytics tracking to measure what matters for your business.',
     category: 'measurement',
-    icon: '📊',
+    icon: BarChart3,
     contextFields: [
       { key: 'analytics_tool', label: 'Analytics tool', type: 'select', required: true, options: ['Google Analytics 4', 'Mixpanel', 'Amplitude', 'Heap', 'PostHog', 'Other'] },
       { key: 'business_goals', label: 'Key business goals to track', type: 'textarea', required: true },
@@ -367,7 +404,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'A/B Test Setup',
     description: 'Design statistically sound A/B tests with clear hypotheses and success metrics.',
     category: 'measurement',
-    icon: '🧪',
+    icon: FlaskConical,
     contextFields: [
       { key: 'element_to_test', label: 'What element are you testing?', type: 'text', required: true, placeholder: 'e.g. headline, CTA button, pricing' },
       { key: 'hypothesis', label: 'Your hypothesis', type: 'textarea', required: true, placeholder: 'If we change X, we expect Y because...' },
@@ -382,7 +419,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Churn Prevention',
     description: 'Identify at-risk users and build interventions to reduce churn.',
     category: 'retention',
-    icon: '🔒',
+    icon: ShieldCheck,
     contextFields: [
       { key: 'churn_rate', label: 'Current churn rate', type: 'text', required: false, placeholder: 'e.g. 5% monthly' },
       { key: 'churn_signals', label: 'Known churn signals or patterns', type: 'textarea', required: false },
@@ -397,7 +434,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Free Tool Strategy',
     description: 'Design free tools that generate SEO traffic and top-of-funnel leads.',
     category: 'growth',
-    icon: '🛠️',
+    icon: Wrench,
     contextFields: [
       { key: 'business_category', label: 'Business / industry', type: 'text', required: true },
       { key: 'target_audience', label: 'Target audience', type: 'textarea', required: true },
@@ -409,7 +446,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Referral Program',
     description: 'Design a referral program that turns customers into your best growth channel.',
     category: 'growth',
-    icon: '🤝',
+    icon: Handshake,
     contextFields: [
       { key: 'product_type', label: 'Product type', type: 'select', required: true, options: ['SaaS', 'E-commerce', 'Consumer App', 'Marketplace', 'Service', 'Other'] },
       { key: 'current_nps', label: 'Current NPS or satisfaction score', type: 'text', required: false },
@@ -423,7 +460,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Marketing Ideas',
     description: 'Generate 10–20 actionable marketing ideas tailored to your product and stage.',
     category: 'strategy',
-    icon: '💡',
+    icon: Lightbulb,
     contextFields: [
       { key: 'growth_stage', label: 'Growth stage', type: 'select', required: true, options: ['Pre-launch', 'Early (0–100 customers)', 'Growth (100–1k)', 'Scale (1k+)', 'Enterprise'] },
       { key: 'biggest_challenge', label: 'Biggest marketing challenge right now', type: 'textarea', required: true },
@@ -435,7 +472,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Marketing Psychology',
     description: 'Apply proven psychological principles to increase conversions and persuasion.',
     category: 'strategy',
-    icon: '🧠',
+    icon: Brain,
     contextFields: [
       { key: 'use_case', label: 'Where to apply psychology', type: 'text', required: true, placeholder: 'e.g. homepage, pricing, checkout, email' },
       { key: 'target_behavior', label: 'Desired user behavior', type: 'text', required: true, placeholder: 'e.g. sign up, upgrade, share' },
@@ -447,7 +484,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Launch Strategy',
     description: 'Plan and execute a successful product or feature launch.',
     category: 'strategy',
-    icon: '🚀',
+    icon: Rocket,
     contextFields: [
       { key: 'launch_type', label: 'What are you launching?', type: 'text', required: true, placeholder: 'e.g. new product, feature, rebrand, market' },
       { key: 'launch_date', label: 'Target launch date', type: 'text', required: false },
@@ -460,7 +497,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Pricing Strategy',
     description: 'Design a pricing model that maximizes revenue and reduces friction.',
     category: 'strategy',
-    icon: '💵',
+    icon: BadgeDollarSign,
     contextFields: [
       { key: 'current_pricing', label: 'Current pricing model (if any)', type: 'textarea', required: false },
       { key: 'business_model', label: 'Business model', type: 'select', required: true, options: ['SaaS', 'Usage-based', 'Freemium', 'One-time', 'Subscription', 'Marketplace', 'Other'] },
@@ -473,7 +510,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Content Strategy',
     description: 'Build a content strategy that drives organic traffic, trust, and pipeline.',
     category: 'strategy',
-    icon: '📰',
+    icon: Newspaper,
     contextFields: [
       { key: 'content_goal', label: 'Primary content goal', type: 'select', required: true, options: ['SEO / Organic Traffic', 'Thought Leadership', 'Lead Generation', 'Community Building', 'All of the above'] },
       { key: 'current_content', label: 'Current content efforts', type: 'text', required: false, placeholder: 'e.g. blog 2x/week, no newsletter' },
@@ -485,7 +522,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Lead Magnets',
     description: 'Design high-value lead magnets that attract and convert your ideal customers.',
     category: 'strategy',
-    icon: '🧲',
+    icon: Magnet,
     contextFields: [
       { key: 'target_persona', label: 'Target persona', type: 'text', required: true },
       { key: 'main_pain_point', label: 'Main pain point to address', type: 'textarea', required: true },
@@ -499,7 +536,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'RevOps',
     description: 'Align marketing, sales, and customer success around unified revenue operations.',
     category: 'sales',
-    icon: '⚙️',
+    icon: Workflow,
     contextFields: [
       { key: 'current_stack', label: 'Current tech stack', type: 'textarea', required: false, placeholder: 'e.g. HubSpot CRM, Outreach, Stripe' },
       { key: 'team_size', label: 'Sales/CS team size', type: 'text', required: false },
@@ -511,7 +548,7 @@ const SKILLS_DEF: Omit<Skill, 'systemPrompt'>[] = [
     name: 'Sales Enablement',
     description: 'Build sales materials, battle cards, and playbooks that close more deals.',
     category: 'sales',
-    icon: '🎯',
+    icon: Target,
     contextFields: [
       { key: 'deliverable_type', label: 'What to create', type: 'select', required: true, options: ['Battle Card', 'Case Study', 'One-Pager', 'Demo Script', 'Objection Handling', 'Sales Playbook', 'Email Templates'] },
       { key: 'target_buyer', label: 'Target buyer / persona', type: 'text', required: true },

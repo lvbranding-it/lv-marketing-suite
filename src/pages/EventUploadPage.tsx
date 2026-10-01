@@ -274,7 +274,7 @@ function PreviewStage({
         >
           {submitting
             ? <><Loader2 size={20} className="animate-spin" /> Sending…</>
-            : "Submit Photo 🎉"
+            : "Submit Photo"
           }
         </button>
       </div>
@@ -300,7 +300,7 @@ function DoneStage({ event }: { event: LVEvent }) {
 
       <div className="space-y-2">
         <h2 className="text-2xl font-extrabold" style={{ color: primary_color }}>
-          {auto_approve ? "You're on the big screen! 🎉" : "Photo received! 🎉"}
+          {auto_approve ? "You're on the big screen!" : "Photo received!"}
         </h2>
         <p className="text-gray-400 text-base leading-relaxed max-w-xs mx-auto">
           {confirmation_message ??

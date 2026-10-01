@@ -4,7 +4,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import confetti from "canvas-confetti";
-import { ChevronRight, ChevronLeft, Loader2, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
+import {
+  ChevronRight, ChevronLeft, Loader2, CheckCircle2, ArrowRight, Sparkles, PartyPopper, UserRound, Building2, Target,
+  Languages, type LucideIcon,
+} from "lucide-react";
+
+/** One per step, in order: about you, your business, goals and audience, brand and fit. */
+const STEP_ICONS: LucideIcon[] = [UserRound, Building2, Target, Sparkles];
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -233,8 +239,9 @@ export default function IntakeForm() {
   const LangToggle = (
     <button
       onClick={() => setLang(l => l === "en" ? "es" : "en")}
-      className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 hover:bg-gray-100 transition-colors text-gray-500 whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 hover:bg-gray-100 transition-colors text-gray-500 whitespace-nowrap"
     >
+      <Languages size={12} className="shrink-0" />
       {t.langToggle}
     </button>
   );
@@ -286,7 +293,9 @@ export default function IntakeForm() {
           {/* ── Welcome ── */}
           {step === 0 && !isPersonalized && (
             <div className="p-10 text-center">
-              <div className="text-6xl mb-5">🎉</div>
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+                <PartyPopper size={30} strokeWidth={1.75} />
+              </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-3 leading-tight">{t.welcome.title}</h1>
               <p className="text-gray-500 text-base leading-relaxed mb-2">{t.welcome.body1}</p>
               <p className="text-gray-400 text-sm mb-8">
@@ -303,11 +312,13 @@ export default function IntakeForm() {
           {/* ── Personalized Welcome (CRM link) ── */}
           {step === 0 && isPersonalized && (
             <div className="p-10 text-center">
-              <div className="text-6xl mb-5">✨</div>
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+                <Sparkles size={30} strokeWidth={1.75} />
+              </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-3 leading-tight">
                 {lang === "es"
-                  ? `¡Hola, ${prefillFirstName}! 👋`
-                  : `Hey, ${prefillFirstName}! 👋`}
+                  ? `¡Hola, ${prefillFirstName}!`
+                  : `Hey, ${prefillFirstName}!`}
               </h1>
               <p className="text-gray-600 text-base leading-relaxed mb-2 font-medium">
                 {lang === "es"
@@ -338,7 +349,14 @@ export default function IntakeForm() {
           {step >= 1 && step <= 4 && (
             <div className="bg-gradient-to-r from-rose-50 to-amber-50 border-b border-rose-100/60 px-8 pt-6 pb-5">
               <div className="flex items-center gap-3">
-                <span className="text-3xl leading-none">{t.steps[step - 1].emoji}</span>
+                {(() => {
+                  const StepIcon = STEP_ICONS[step - 1];
+                  return (
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-rose-500 shadow-sm">
+                      <StepIcon size={22} />
+                    </span>
+                  );
+                })()}
                 <div>
                   <p className="text-[11px] font-semibold text-rose-500 uppercase tracking-widest mb-0.5">{t.steps[step - 1].hint}</p>
                   <h2 className="text-[22px] font-bold text-gray-900 leading-tight">{t.steps[step - 1].label}</h2>

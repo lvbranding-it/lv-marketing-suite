@@ -400,7 +400,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                     {PIPELINE_STAGES.map((s) => (
                       <SelectItem key={s.key} value={s.key}>
                         <span className={cn("flex items-center gap-1.5 text-sm", s.color)}>
-                          <span>{s.emoji}</span>
+                          <s.icon size={13} aria-hidden />
                           <span>{s.label}</span>
                         </span>
                       </SelectItem>
@@ -626,7 +626,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                           : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                       )}
                     >
-                      <span>{m.icon}</span>
+                      <m.icon size={12} aria-hidden />
                       <span>{m.label}</span>
                     </button>
                   ))}
@@ -670,7 +670,7 @@ export default function ContactSlideOver({ contact, onClose, onUpdate }: Props) 
                             meta.bg
                           )}
                         >
-                          {meta.icon}
+                          <meta.icon size={13} className={meta.color} aria-hidden />
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">

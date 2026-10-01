@@ -9,6 +9,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { localizeSkill } from "@/data/skillTranslations";
 import type { SkillOutputRow } from "@/integrations/supabase/types";
 import { formatDistanceToNow } from "date-fns";
+import SkillIcon from "@/components/skills/SkillIcon";
 import { es } from "date-fns/locale";
 
 interface SkillOutputCardProps {
@@ -65,7 +66,7 @@ export default function SkillOutputCard({ output, onDownloadPdf, onDownloadWord 
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg">{skill?.icon ?? "📄"}</span>
+          <SkillIcon skill={skill} size="sm" />
           {categoryMeta && (
             <Badge
               variant="outline"

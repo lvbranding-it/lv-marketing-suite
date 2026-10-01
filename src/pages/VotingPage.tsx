@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { CheckCircle2, Loader2, Clock, Trophy, ArrowRight, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Clock, Trophy, ArrowRight, AlertCircle, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,7 +59,7 @@ function VerifyPage({ slug }: { slug: string }) {
             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 size={44} className="text-emerald-500" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Vote confirmed! 🎉</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Vote confirmed!</h1>
             <p className="text-gray-500 text-base">
               Your vote for <strong className="text-gray-800">{contestantName}</strong> has been counted.
             </p>
@@ -220,7 +220,7 @@ export default function VotingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(135deg, ${brandAccent}15 0%, white 50%, ${brandColor}10 100%)` }}>
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-10 max-w-md w-full text-center">
-          <div className="text-5xl mb-5">📬</div>
+          <span className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 text-gray-500"><MailCheck size={30} aria-hidden /></span>
           <h1 className="text-2xl font-bold text-gray-900 mb-3">Check your inbox!</h1>
           <p className="text-gray-500 mb-2">We sent a confirmation link to <strong className="text-gray-700">{email}</strong></p>
           <p className="text-gray-400 text-sm">Click the link in the email to confirm your vote. It expires in 24 hours.</p>
@@ -340,7 +340,7 @@ export default function VotingPage() {
                 <img src={winner.photo_url} alt={winner.name} className="w-16 h-16 rounded-xl object-cover shrink-0 border-2 border-amber-300" />
               )}
               <div>
-                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-0.5">🏆 Winner</p>
+                <p className="flex items-center gap-1 text-xs font-semibold text-amber-600 uppercase tracking-wider mb-0.5"><Trophy size={12} aria-hidden /> Winner</p>
                 <p className="text-xl font-bold text-gray-900">{winner.name}</p>
                 {winner.description && <p className="text-sm text-gray-600 mt-0.5">{winner.description}</p>}
               </div>

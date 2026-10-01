@@ -23,11 +23,11 @@ export default function AgentWorkspace() {
   const [loadRunId,         setLoadRunId]         = useState<string | null>(null);
   const [chatKey,           setChatKey]           = useState(0);
 
-  // On a phone both panels are overlays, and opening both at once stacked the
-  // snapshot on top of the sidebar. There the sidebar opens only when a project
-  // still has to be chosen, and the snapshot waits until it is asked for.
+  // On a phone both panels are overlays that cover the chat, so both wait until
+  // they are asked for. Choosing a project there starts from the landing's list
+  // of recent ones, with a button for the rest.
   const isPhone = typeof window !== "undefined" && window.innerWidth < 768;
-  const [leftOpen,  setLeftOpen]  = useState(() => !isPhone || !urlProjectId);
+  const [leftOpen,  setLeftOpen]  = useState(() => !isPhone);
   const [rightOpen, setRightOpen] = useState(() => !isPhone);
 
   // Resizable snapshot panel
@@ -132,41 +132,68 @@ export default function AgentWorkspace() {
               />
             </div>
           </>
-        ) : (
+        ) : !project ? (
+          // With no project open there is no header row to hold the button.
           <button
             onClick={() => setLeftOpen(true)}
-            className="absolute left-2 top-2 z-10 flex items-center justify-center w-8 h-8 bg-background border border-gray-200 rounded-md shadow-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute left-2 top-2 z-10 flex items-center justify-center w-9 h-9 bg-background border border-gray-200 rounded-md shadow-sm text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Open sidebar"
           >
-            <PanelLeftOpen size={14} />
+            <PanelLeftOpen size={15} />
           </button>
-        )}
+        ) : null}
 
         {/* ── Main chat area ── */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
 
-          {/* Project context header */}
+          {/* Project context header. The panel buttons sit in this row; floating
+              over it, they covered the start and end of the project's name. */}
           {project && (
-            <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
+            <div className="shrink-0 flex items-center gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border-b bg-muted/30">
+              {!leftOpen && (
+                <button
+                  onClick={() => setLeftOpen(true)}
+                  className="shrink-0 flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 rounded-md border border-gray-200 bg-background text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Open sidebar"
+                  title="Projects and run history"
+                >
+                  <PanelLeftOpen size={15} />
+                </button>
+              )}
               <FolderOpen size={13} className="text-rose-500 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <span className="text-sm font-semibold truncate">{project.name}</span>
+              <div className="min-w-0 flex-1 truncate">
+                <span className="text-sm font-semibold">{project.name}</span>
                 {project.client_name && (
                   <span className="text-xs text-muted-foreground ml-2">· {project.client_name}</span>
                 )}
               </div>
+              {!rightOpen && (
+                <button
+                  onClick={() => setRightOpen(true)}
+                  className="shrink-0 flex items-center justify-center w-9 h-9 sm:w-8 sm:h-8 rounded-md border border-gray-200 bg-background text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Open snapshot panel"
+                  title="Brand snapshot"
+                >
+                  <PanelRightOpen size={15} />
+                </button>
+              )}
             </div>
           )}
 
           {selectedProjectId && org ? (
-            <AgentRunChat
-              key={`${selectedProjectId}-${chatKey}`}
-              projectId={selectedProjectId}
-              projectName={project?.name ?? ""}
-              orgId={org.id}
-              onRunComplete={handleRunComplete}
-              loadRunId={loadRunId}
-            />
+            // The chat takes what the header leaves. At full height it was
+            // taller than the column by the header's height, and scrolling to a
+            // new message scrolled the column too and pushed the header off the top.
+            <div className="flex-1 min-h-0">
+              <AgentRunChat
+                key={`${selectedProjectId}-${chatKey}`}
+                projectId={selectedProjectId}
+                projectName={project?.name ?? ""}
+                orgId={org.id}
+                onRunComplete={handleRunComplete}
+                loadRunId={loadRunId}
+              />
+            </div>
           ) : (
             <div className="h-full overflow-y-auto">
               <div className="mx-auto flex min-h-full max-w-xl flex-col justify-center px-6 py-10">
@@ -202,9 +229,19 @@ export default function AgentWorkspace() {
                   </div>
                 )}
                 {allProjects.length > recentProjects.length && (
-                  <p className="mt-4 text-xs text-muted-foreground">
-                    {allProjects.length - recentProjects.length} more in the project switcher at the top of the sidebar.
-                  </p>
+                  <>
+                    <p className="mt-4 hidden text-xs text-muted-foreground md:block">
+                      {allProjects.length - recentProjects.length} more in the project switcher at the top of the sidebar.
+                    </p>
+                    {/* The sidebar starts closed on a phone, so the rest are one tap away here. */}
+                    <button
+                      onClick={() => setLeftOpen(true)}
+                      className="mt-3 flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 transition-colors hover:border-rose-300 md:hidden"
+                    >
+                      <FolderOpen size={15} className="text-rose-500" />
+                      Browse all {allProjects.length} projects
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -214,7 +251,7 @@ export default function AgentWorkspace() {
         {/* ── Right: Brand Snapshot — resizable, desktop always visible, mobile overlay ──
             Only once a project is open: a snapshot belongs to a project, and with
             none chosen the panel could only take room from the landing. */}
-        {!selectedProjectId ? null : rightOpen ? (
+        {!selectedProjectId || !rightOpen ? null : (
           <>
             {/* Mobile backdrop */}
             <div
@@ -244,14 +281,6 @@ export default function AgentWorkspace() {
               </div>
             </div>
           </>
-        ) : (
-          <button
-            onClick={() => setRightOpen(true)}
-            className="absolute right-2 top-2 z-10 flex items-center justify-center w-8 h-8 bg-background border border-gray-200 rounded-md shadow-sm text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Open snapshot panel"
-          >
-            <PanelRightOpen size={14} />
-          </button>
         )}
       </div>
     </AppShell>

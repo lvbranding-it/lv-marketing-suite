@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { FolderKanban, Loader2, Sparkles, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,16 +135,16 @@ export default function Auth() {
         <p className="text-white/60 text-lg">Marketing Suite</p>
         <div className="mt-12 space-y-4 max-w-xs w-full">
           {[
-            { icon: "🎯", text: "33 AI-powered marketing skills" },
-            { icon: "📊", text: "Organized by project and client" },
-            { icon: "⚡", text: "Real-time streaming AI output" },
-            { icon: "👥", text: "Team collaboration built in" },
-          ].map(({ icon, text }) => (
+            { icon: Sparkles, text: "33 AI-powered marketing skills" },
+            { icon: FolderKanban, text: "Organized by project and client" },
+            { icon: Zap, text: "Real-time streaming AI output" },
+            { icon: Users, text: "Team collaboration built in" },
+          ].map(({ icon: Icon, text }) => (
             <div
               key={text}
               className="flex items-center gap-3 text-white/70 text-sm"
             >
-              <span className="text-xl">{icon}</span>
+              <Icon size={18} className="shrink-0 text-white/50" aria-hidden />
               {text}
             </div>
           ))}

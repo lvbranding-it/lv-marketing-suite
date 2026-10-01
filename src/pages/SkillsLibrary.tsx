@@ -166,25 +166,29 @@ export default function SkillsLibrary() {
             </div>
           </div>
 
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {categories.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setActiveCategory(value)}
-                aria-pressed={activeCategory === value}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-xs transition-colors",
-                  activeCategory === value
-                    ? "bg-[#CB2039] font-medium text-white"
-                    : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            {/* One row that scrolls sideways on a phone; wrapped, the eleven
+                categories took three rows before the first skill. */}
+            <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+              {categories.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setActiveCategory(value)}
+                  aria-pressed={activeCategory === value}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs transition-colors sm:px-2.5 sm:py-1",
+                    activeCategory === value
+                      ? "bg-[#CB2039] font-medium text-white"
+                      : "bg-muted/60 text-muted-foreground hover:bg-muted sm:bg-transparent",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {filtering && (
-              <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground sm:ml-auto">
                 {t("skills.resultCount", { count: results.length, total: SKILLS.length })}
                 <button
                   type="button"

@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle, FileDown, FileText,
+  ArrowLeft, Star, Trash2, Copy, Send, Save, Loader2, AlertCircle, FileDown, FileText, SearchX,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { MarkdownContent } from "@/components/ui/markdown-content";
@@ -28,6 +28,7 @@ import { es } from "date-fns/locale";
 import SaveOutputDialog from "@/components/skills/SaveOutputDialog";
 import PrintableOutput, { downloadOutputWordDocument, prepareOutputPdfDownload } from "@/components/skills/PrintableOutput";
 import { useLanguage } from "@/hooks/useLanguage";
+import SkillIcon from "@/components/skills/SkillIcon";
 import { localizeContextField, localizeSkill, translateSkillOption } from "@/data/skillTranslations";
 
 export default function OutputDetail() {
@@ -181,7 +182,9 @@ export default function OutputDetail() {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-          <p className="text-4xl mb-3">❓</p>
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <SearchX size={22} />
+          </span>
           <p className="text-muted-foreground text-sm mb-4">{t("skills.outputNotFound")}</p>
           <Button variant="outline" size="sm" onClick={() => navigate("/history")}>
             <ArrowLeft size={13} className="mr-1.5" />
@@ -219,7 +222,7 @@ export default function OutputDetail() {
         <div className="px-4 sm:px-6 py-3 border-b bg-background shrink-0">
           <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-lg">{skill?.icon ?? "📄"}</span>
+              <SkillIcon skill={skill} size="sm" />
               {categoryMeta && (
                 <Badge variant="outline" className={cn("text-[10px]", categoryMeta.color)}>
                   {localizedSkill?.name ?? output.skill_name}

@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/hooks/useAuth";
 import type { Json } from "@/integrations/supabase/types";
+import {
+  BadgeCheck, CircleX, FileText, Handshake, Mail, Phone, Send, StickyNote, Target, Trophy,
+} from "lucide-react";
 
 export type PipelineStage = "lead" | "contacted" | "qualified" | "proposal" | "won" | "lost";
 
@@ -17,20 +20,21 @@ export interface ContactActivity {
   meta: Record<string, unknown>;
 }
 
+// Each stage and activity type carries an icon component, drawn next to its label.
 export const PIPELINE_STAGES = [
-  { key: "lead" as PipelineStage,      label: "Lead",      emoji: "🎯", color: "text-slate-600",   bg: "bg-slate-100",    border: "border-slate-200",  headerBg: "bg-slate-50" },
-  { key: "contacted" as PipelineStage, label: "Contacted", emoji: "📬", color: "text-blue-600",    bg: "bg-blue-50",      border: "border-blue-200",   headerBg: "bg-blue-50/60" },
-  { key: "qualified" as PipelineStage, label: "Qualified", emoji: "✅", color: "text-violet-600",  bg: "bg-violet-50",    border: "border-violet-200", headerBg: "bg-violet-50/60" },
-  { key: "proposal" as PipelineStage,  label: "Proposal",  emoji: "📄", color: "text-amber-600",   bg: "bg-amber-50",     border: "border-amber-200",  headerBg: "bg-amber-50/60" },
-  { key: "won" as PipelineStage,       label: "Won",       emoji: "🏆", color: "text-emerald-600", bg: "bg-emerald-50",   border: "border-emerald-200",headerBg: "bg-emerald-50/60" },
-  { key: "lost" as PipelineStage,      label: "Lost",      emoji: "❌", color: "text-red-500",     bg: "bg-red-50",       border: "border-red-200",    headerBg: "bg-red-50/60" },
+  { key: "lead" as PipelineStage,      label: "Lead",      icon: Target, color: "text-slate-600",   bg: "bg-slate-100",    border: "border-slate-200",  headerBg: "bg-slate-50" },
+  { key: "contacted" as PipelineStage, label: "Contacted", icon: Send, color: "text-blue-600",    bg: "bg-blue-50",      border: "border-blue-200",   headerBg: "bg-blue-50/60" },
+  { key: "qualified" as PipelineStage, label: "Qualified", icon: BadgeCheck, color: "text-violet-600",  bg: "bg-violet-50",    border: "border-violet-200", headerBg: "bg-violet-50/60" },
+  { key: "proposal" as PipelineStage,  label: "Proposal",  icon: FileText, color: "text-amber-600",   bg: "bg-amber-50",     border: "border-amber-200",  headerBg: "bg-amber-50/60" },
+  { key: "won" as PipelineStage,       label: "Won",       icon: Trophy, color: "text-emerald-600", bg: "bg-emerald-50",   border: "border-emerald-200",headerBg: "bg-emerald-50/60" },
+  { key: "lost" as PipelineStage,      label: "Lost",      icon: CircleX, color: "text-red-500",     bg: "bg-red-50",       border: "border-red-200",    headerBg: "bg-red-50/60" },
 ];
 
 export const ACTIVITY_META = [
-  { type: "note",    label: "Note",    icon: "📝", color: "text-slate-600",   bg: "bg-slate-100" },
-  { type: "call",    label: "Call",    icon: "📞", color: "text-blue-600",    bg: "bg-blue-100" },
-  { type: "email",   label: "Email",   icon: "✉️",  color: "text-violet-600",  bg: "bg-violet-100" },
-  { type: "meeting", label: "Meeting", icon: "🤝", color: "text-emerald-600", bg: "bg-emerald-100" },
+  { type: "note",    label: "Note",    icon: StickyNote, color: "text-slate-600",   bg: "bg-slate-100" },
+  { type: "call",    label: "Call",    icon: Phone, color: "text-blue-600",    bg: "bg-blue-100" },
+  { type: "email",   label: "Email",   icon: Mail, color: "text-violet-600",  bg: "bg-violet-100" },
+  { type: "meeting", label: "Meeting", icon: Handshake, color: "text-emerald-600", bg: "bg-emerald-100" },
 ] as const;
 
 export function useUpdatePipelineStage() {

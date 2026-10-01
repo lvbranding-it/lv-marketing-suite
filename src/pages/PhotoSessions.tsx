@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Camera } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import SessionCard from "@/components/photo-sessions/SessionCard";
@@ -62,7 +62,7 @@ export default function PhotoSessions() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-4xl mb-3">📸</p>
+            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Camera size={22} aria-hidden /></span>
             <p className="text-muted-foreground text-sm mb-4">
               {statusFilter === "all"
                 ? "No photo sessions yet."

@@ -45,7 +45,8 @@ export default function QuickFieldChips({ fields, onSubmit }: Props) {
   return (
     <div className="flex gap-2 flex-wrap mb-2">
       {fields.map((field) => (
-        <div key={field} className="flex items-center gap-1.5">
+        // A row each on a phone; side by side from sm up.
+        <div key={field} className="flex w-full items-center gap-1.5 sm:w-auto">
           <Badge variant="outline" className="text-[10px] shrink-0 h-6 text-gray-600 border-gray-300">
             {FIELD_LABELS[field] || field}
           </Badge>
@@ -54,7 +55,8 @@ export default function QuickFieldChips({ fields, onSubmit }: Props) {
             onChange={(e) => handleChange(field, e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={FIELD_LABELS[field] || field}
-            className="h-7 text-xs w-[140px]"
+            // 16px on a phone so iPhones do not zoom in on focus.
+            className="h-9 min-w-0 flex-1 text-base sm:h-7 sm:w-[140px] sm:flex-none sm:text-xs"
           />
         </div>
       ))}

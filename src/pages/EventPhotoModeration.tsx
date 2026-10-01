@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, X, Star, Trash2, Clock, Loader2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, X, Star, Trash2, Clock, Loader2, ExternalLink, Camera } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -216,7 +216,7 @@ export default function EventPhotoModeration() {
           </div>
         ) : photos.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
-            <p className="text-4xl">📸</p>
+            <span className="mx-auto  flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Camera size={22} aria-hidden /></span>
             <p className="text-muted-foreground text-sm">No {tab !== "all" ? tab : ""} photos yet.</p>
           </div>
         ) : (

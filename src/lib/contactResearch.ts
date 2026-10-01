@@ -58,15 +58,15 @@ function formatVerification(v: VerifyResult): string {
 
   // Website
   if (!v.website.url) {
-    lines.push("**Website:** ⚠️ Not provided");
+    lines.push("**Website:** Not provided");
   } else if (v.website.live) {
     lines.push(
-      `**Website (${v.website.url}):** ✅ Responding — HTTP ${v.website.status}` +
+      `**Website (${v.website.url}):** Responding — HTTP ${v.website.status}` +
       (v.website.redirected_to ? ` (redirects to ${v.website.redirected_to})` : "")
     );
   } else {
     lines.push(
-      `**Website (${v.website.url}):** ❌ Not responding — ${
+      `**Website (${v.website.url}):** Not responding — ${
         v.website.error ?? `HTTP ${v.website.status ?? "timeout"}`
       }`
     );
@@ -74,27 +74,27 @@ function formatVerification(v: VerifyResult): string {
 
   // Email domain
   if (!v.email.address) {
-    lines.push("**Email:** ⚠️ Not provided");
+    lines.push("**Email:** Not provided");
   } else if (!v.email.format_valid) {
-    lines.push(`**Email (${v.email.address}):** ❌ Invalid format`);
+    lines.push(`**Email (${v.email.address}):** Invalid format`);
   } else if (v.email.mx_valid) {
     lines.push(
-      `**Email domain (@${v.email.domain}):** ✅ Valid — MX records confirmed` +
+      `**Email domain (@${v.email.domain}):** Valid — MX records confirmed` +
       (v.email.mx_records.length ? ` (${v.email.mx_records[0]})` : "")
     );
   } else {
     lines.push(
-      `**Email domain (@${v.email.domain}):** ❌ No MX records found — domain likely cannot receive email`
+      `**Email domain (@${v.email.domain}):** No MX records found — domain likely cannot receive email`
     );
   }
 
   // LinkedIn
   if (!v.linkedin.url) {
-    lines.push("**LinkedIn:** ⚠️ Not provided");
+    lines.push("**LinkedIn:** Not provided");
   } else if (v.linkedin.format_valid) {
-    lines.push(`**LinkedIn:** ✅ Valid format — linkedin.com/in/${v.linkedin.username}`);
+    lines.push(`**LinkedIn:** Valid format — linkedin.com/in/${v.linkedin.username}`);
   } else {
-    lines.push(`**LinkedIn (${v.linkedin.url}):** ❌ Not a valid LinkedIn profile URL`);
+    lines.push(`**LinkedIn (${v.linkedin.url}):** Not a valid LinkedIn profile URL`);
   }
 
   return lines.join("\n");
@@ -120,10 +120,10 @@ Why this person's role makes them worth approaching. Be specific about their dec
 Cite any specific concerns from the verification data (dead website, bad email domain, missing LinkedIn, etc.). Write "None detected" only if all checks passed.
 
 ## Verdict
-Choose exactly one: 🟢 **Strong Lead** / 🟡 **Needs More Research** / 🔴 **Likely Invalid**
+Choose exactly one: **Strong Lead** / **Needs More Research** / **Likely Invalid**
 One sentence. Reference the most decisive verification result.
 
-Be direct and concise — 2 sentences max per section.`;
+Be direct and concise — 2 sentences max per section. Do not use emoji.`;
 
 // ── Build the user message with real verification data ────────────────────────
 export function buildResearchPrompt(c: ImportedContact, verification: VerifyResult | null): string {
@@ -142,7 +142,7 @@ export function buildResearchPrompt(c: ImportedContact, verification: VerifyResu
 
   const verificationSection = verification
     ? formatVerification(verification)
-    : "\n## Pre-Verification Results\n⚠️ Verification checks could not be completed — use caution.";
+    : "\n## Pre-Verification Results\nVerification checks could not be completed — use caution.";
 
   return (
     `Please research and assess this B2B contact:\n\n${contactLines.join("\n")}` +

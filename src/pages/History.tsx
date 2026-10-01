@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Inbox, Search } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import SkillOutputCard from "@/components/skills/SkillOutputCard";
@@ -97,7 +97,10 @@ export default function History() {
               <SelectItem value="all">{t("history.allSkills")}</SelectItem>
               {SKILLS.filter((s) => !s.isFoundation).map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.icon} {localizeSkill(s, language).name}
+                  <span className="flex items-center gap-2">
+                    <s.icon size={13} className="shrink-0 text-muted-foreground" />
+                    {localizeSkill(s, language).name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -111,7 +114,9 @@ export default function History() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-4xl mb-3">📭</p>
+            <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Inbox size={22} />
+            </span>
             <p className="text-muted-foreground text-sm">
               {searchQuery || projectFilter !== "all" || skillFilter !== "all"
                 ? t("history.noFilterMatch")

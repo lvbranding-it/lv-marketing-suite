@@ -3,6 +3,8 @@ import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
 import {
   Search, Trash2, Pencil, UserPlus, CheckSquare, Square, X, PlusCircle,
   ChevronRight, Tag, Plus, Upload, Loader2, CalendarClock, CheckCircle2, DollarSign,
+  type LucideIcon,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
@@ -235,8 +237,9 @@ export default function Contacts() {
     else { setSortKey(key); setSortDir(1); }
   }
   function sortArrow(key: SortKey) {
-    if (sortKey !== key) return <span className="text-muted-foreground/30 ml-0.5">↕</span>;
-    return <span className="text-primary ml-0.5">{sortDir === 1 ? "↑" : "↓"}</span>;
+    if (sortKey !== key) return <ArrowUpDown size={11} className="ml-0.5 inline text-muted-foreground/40" aria-hidden />;
+    const Arrow = sortDir === 1 ? ArrowUp : ArrowDown;
+    return <Arrow size={11} className="ml-0.5 inline text-primary" aria-hidden />;
   }
 
   // ── Selection ───────────────────────────────────────────────────────────
@@ -482,7 +485,8 @@ export default function Contacts() {
                         key={s.key}
                         active={stageFilter === s.key}
                         onClick={() => setStageFilter(stageFilter === s.key ? "all" : s.key)}
-                        label={`${s.emoji} ${s.label}`}
+                        icon={s.icon}
+                        label={s.label}
                       />
                     ))}
                     <StageChip active={stageFilter === "none"} onClick={() => setStageFilter(stageFilter === "none" ? "all" : "none")} label="Not in pipeline" />
@@ -617,8 +621,9 @@ export default function Contacts() {
                               {/* Stage */}
                               <div className="px-3 py-2.5 flex items-center border-l border-border">
                                 {stage ? (
-                                  <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap", stage.bg, stage.color)}>
-                                    {stage.emoji} {stage.label}
+                                  <span className={cn("inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap", stage.bg, stage.color)}>
+                                    <stage.icon size={10} aria-hidden />
+                                    {stage.label}
                                   </span>
                                 ) : (
                                   <span className="text-[10px] text-muted-foreground/40">—</span>
@@ -789,8 +794,9 @@ export default function Contacts() {
                                   </p>
                                   <div className="flex items-center gap-1.5 mt-0.5">
                                     {stage && (
-                                      <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded-full", stage.bg, stage.color)}>
-                                        {stage.emoji} {stage.label}
+                                      <span className={cn("inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full", stage.bg, stage.color)}>
+                                        <stage.icon size={10} aria-hidden />
+                                        {stage.label}
                                       </span>
                                     )}
                                     {overdue && (
@@ -875,17 +881,18 @@ export default function Contacts() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function StageChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function StageChip({ active, onClick, label, icon: Icon }: { active: boolean; onClick: () => void; label: string; icon?: LucideIcon }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "px-3 py-1 text-xs rounded-full border transition-colors font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border transition-colors font-medium whitespace-nowrap",
         active
           ? "bg-primary border-primary text-primary-foreground"
           : "bg-transparent border-border text-muted-foreground hover:border-primary hover:text-primary"
       )}
     >
+      {Icon && <Icon size={12} aria-hidden />}
       {label}
     </button>
   );
@@ -933,8 +940,9 @@ function FollowUpSection({
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     {c.company && <span className="text-xs text-sky-600 truncate">{c.company}</span>}
                     {stage && (
-                      <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded-full", stage.bg, stage.color)}>
-                        {stage.emoji} {stage.label}
+                      <span className={cn("inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full", stage.bg, stage.color)}>
+                        <stage.icon size={10} aria-hidden />
+                        {stage.label}
                       </span>
                     )}
                     {(c.tags ?? []).slice(0, 2).map((t) => (

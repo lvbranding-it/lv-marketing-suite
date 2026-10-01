@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { Upload, X, CheckCircle2, AlertCircle, Loader2, FileIcon, Film } from "lucide-react";
+import { Upload, X, CheckCircle2, AlertCircle, Loader2, FileIcon, Film, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFileRequest } from "@/hooks/useFileRequests";
 import { isVideoFile } from "@/lib/media/fileTypes";
@@ -66,7 +66,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
 
       {/* Footer */}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "1.5rem 1rem", color: "rgba(255,255,255,0.35)", fontSize: "0.75rem" }}>
-        Made With Love ❤️ by LV Branding
+        Made with <Heart size={11} fill="#cb2039" stroke="#cb2039" aria-label="love" style={{ display: "inline", verticalAlign: "-1px" }} /> by LV Branding
       </div>
     </div>
   );

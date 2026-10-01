@@ -48,14 +48,15 @@ export default function DiscoveryForm({ questions, onSubmit, disabled }: Props) 
             value={answers[i]}
             onChange={(e) => handleChange(i, e.target.value)}
             placeholder="Your answer…"
-            className="h-8 text-sm"
+            // The input's own size: 16px on a phone (smaller makes iPhones zoom in on focus), 14px from md up.
+            className="h-10 md:h-8"
             disabled={disabled}
           />
         </div>
       ))}
       <Button
         size="sm"
-        className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
+        className="h-10 w-full gap-1.5 bg-rose-600 hover:bg-rose-700 text-white sm:h-9 sm:w-auto"
         onClick={handleSubmit}
         disabled={disabled || !hasAnyAnswer}
       >

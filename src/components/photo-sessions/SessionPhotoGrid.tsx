@@ -1,4 +1,5 @@
 import PhotoThumbnail from "./PhotoThumbnail";
+import { Images } from "lucide-react";
 import { useSessionComments } from "@/hooks/usePhotoSessions";
 import type { SessionPhoto } from "@/integrations/supabase/types";
 
@@ -24,7 +25,7 @@ export default function SessionPhotoGrid({ photos, sessionId, onPhotoClick }: Se
   if (photos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-4xl mb-3">🖼️</p>
+        <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground"><Images size={22} aria-hidden /></span>
         <p className="text-muted-foreground text-sm">No photos in this view.</p>
       </div>
     );

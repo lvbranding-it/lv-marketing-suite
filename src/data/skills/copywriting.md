@@ -86,9 +86,9 @@ For thorough line-by-line review, use the **copy-editing** skill after your draf
 ### Be Direct
 Get to the point. Don't bury the value in qualifications.
 
-❌ Slack lets you share files instantly, from documents to images, directly in your conversations
+Weak: Slack lets you share files instantly, from documents to images, directly in your conversations
 
-✅ Need to share a screenshot? Send as many documents, images, and audio files as your heart desires.
+Better: Need to share a screenshot? Send as many documents, images, and audio files as your heart desires.
 
 ### Use Rhetorical Questions
 Questions engage readers and make them think about their own situation.
