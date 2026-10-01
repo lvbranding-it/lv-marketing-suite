@@ -4,6 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import LVLogo from "@/components/LVLogo";
 import type { ClientPhoto } from "@/hooks/usePhotoSessions";
 
+/** Further tries for a photo that fails to load, before it shows its file name. */
+const IMAGE_RETRIES = 2;
+
 interface ClientPhotoCardProps {
   photo: ClientPhoto;
   onToggle: (photo: ClientPhoto) => void;
@@ -26,8 +29,18 @@ export default function ClientPhotoCard({
   protectImages = false,
 }: ClientPhotoCardProps) {
   const isSelected = photo.status === "selected";
-  const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  // Failed tries count against one link: a renewed link starts again. One
+  // failure used to leave the photo as its file name until a reload.
+  const [failure, setFailure] = useState<{ url: string; tries: number } | null>(null);
+  const tries = signedUrl && failure?.url === signedUrl ? failure.tries : 0;
+  const imgError = tries > IMAGE_RETRIES;
+  const handleImageError = () => {
+    if (!signedUrl) return;
+    const next = { url: signedUrl, tries: tries + 1 };
+    if (next.tries > IMAGE_RETRIES) setFailure(next);
+    else window.setTimeout(() => setFailure(next), 1500 * next.tries);
+  };
 
   return (
     <div
@@ -55,6 +68,7 @@ export default function ClientPhotoCard({
         {!signedUrl ? null : !imgError ? (
           <>
             <img
+              key={`${signedUrl}#${tries}`}
               src={signedUrl}
               alt={photo.file_name}
               loading="lazy"
@@ -62,7 +76,7 @@ export default function ClientPhotoCard({
               className={`w-full h-full object-cover transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
               draggable={false}
               onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
+              onError={handleImageError}
               onContextMenu={(e) => { if (protectImages) e.preventDefault(); }}
               style={protectImages ? {
                 WebkitTouchCallout: "none",

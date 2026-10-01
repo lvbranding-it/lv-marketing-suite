@@ -11,6 +11,7 @@ import type {
   DeliverableQuality,
 } from "@/integrations/supabase/types";
 import { splitName, type SessionClient } from "@/lib/photo-sessions/clients";
+import { CLIENT_QUERY_RETRY, isShareToken } from "@/lib/photo-sessions/retry";
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -95,16 +96,20 @@ export type ClientComment = Pick<PhotoComment, "id" | "photo_id" | "body" | "aut
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rpc = (fn: string, args: Record<string, unknown>) => (supabase as any).rpc(fn, args);
 
+// The client's page tries a failed request again for about 15 seconds
+// (CLIENT_QUERY_RETRY) before it shows a problem. A token that cannot be a
+// session's is a link that does not exist, so nothing is asked for it.
 export function useSessionByShareToken(shareToken: string | undefined) {
   return useQuery({
     queryKey: ["session-share", shareToken],
     queryFn: async () => {
-      if (!shareToken) return null;
+      if (!isShareToken(shareToken)) return null;
       const { data, error } = await rpc("get_photo_session_by_token", { p_token: shareToken }).maybeSingle();
       if (error) throw error;
       return (data ?? null) as ClientSession | null;
     },
-    enabled: !!shareToken,
+    enabled: isShareToken(shareToken),
+    ...CLIENT_QUERY_RETRY,
   });
 }
 
@@ -118,6 +123,7 @@ export function useClientSessionPhotos(shareToken: string | undefined) {
       return (data ?? []) as ClientPhoto[];
     },
     enabled: !!shareToken,
+    ...CLIENT_QUERY_RETRY,
   });
 }
 
@@ -131,6 +137,7 @@ export function useClientSessionComments(shareToken: string | undefined) {
       return (data ?? []) as ClientComment[];
     },
     enabled: !!shareToken,
+    ...CLIENT_QUERY_RETRY,
   });
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive, RotateCcw, Link2Off, Camera, Expand, CircleCheck, MessageCircle, Target } from "lucide-react";
+import { CheckCircle2, Loader2, Receipt, ExternalLink, Download, Archive, RotateCcw, Link2Off, Camera, WifiOff, Expand, CircleCheck, MessageCircle, Target } from "lucide-react";
 import JSZip from "jszip";
 import LVLogo from "@/components/LVLogo";
 import ClientPhotoCard from "@/components/photo-sessions/ClientPhotoCard";
@@ -26,6 +26,7 @@ import {
   type ClientPhoto,
 } from "@/hooks/usePhotoSessions";
 import { toast } from "@/hooks/use-toast";
+import { withRetries } from "@/lib/photo-sessions/retry";
 
 /** Image links last an hour; they are renewed before that, so a long visit keeps its pictures. */
 const LINK_REFRESH_MS = 45 * 60 * 1000;
@@ -71,20 +72,33 @@ async function fetchSignedUrls(
     body: JSON.stringify({ share_token: shareToken, photo_ids: photoIds, size }),
   });
 
-  if (!res.ok) return {};
+  if (!res.ok) throw new Error(`Photo links failed (${res.status})`);
   const json = (await res.json()) as {
     urls: { photo_id: string; signed_url: string | null }[];
   };
+  if (!json.urls?.length) throw new Error("No photo links came back");
   return Object.fromEntries(
-    (json.urls ?? []).map((u) => [u.photo_id, u.signed_url ?? ""])
+    json.urls.map((u) => [u.photo_id, u.signed_url ?? ""])
   );
 }
 
 export default function ClientPhotoSelection() {
   const { shareToken } = useParams<{ shareToken: string }>();
 
-  const { data: session, isLoading: sessionLoading } = useSessionByShareToken(shareToken);
-  const { data: photos = [], isLoading: photosLoading } = useClientSessionPhotos(session ? shareToken : undefined);
+  const {
+    data: session,
+    isLoading: sessionLoading,
+    isError: sessionFailed,
+    isFetching: sessionRetrying,
+    refetch: retrySession,
+  } = useSessionByShareToken(shareToken);
+  const {
+    data: photos = [],
+    isLoading: photosLoading,
+    isError: photosFailed,
+    isFetching: photosRetrying,
+    refetch: retryPhotos,
+  } = useClientSessionPhotos(session ? shareToken : undefined);
   const { data: allComments = [] } = useClientSessionComments(session ? shareToken : undefined);
   const setSelection = useSetClientPhotoSelection(shareToken);
   const finalizeSession = useFinalizeSession();
@@ -120,38 +134,59 @@ export default function ClientPhotoSelection() {
   // Fetch signed URLs once photos load, and renew them before they expire.
   // They last an hour; choosing from a large session can take longer, and a
   // tab left open would otherwise come back to a page of broken pictures.
+  // A fetch that fails is tried again for about 15 seconds. After that the
+  // page offers Try again, and tries by itself when the connection or the
+  // tab comes back: one failure used to leave the photos blank until a reload.
   const [linksFetchedAt, setLinksFetchedAt] = useState(0);
+  const [linksFailed, setLinksFailed] = useState(false);
+  const [linksAttempt, setLinksAttempt] = useState(0);
   const roundPhotoIds = roundPhotos.map((p) => p.id).join(",");
   useEffect(() => {
     if (!shareToken || !roundPhotoIds) return;
     let cancelled = false;
+    let renewAgain: number | undefined;
     const load = (quiet: boolean) => {
-      if (!quiet) setUrlsLoading(true);
-      fetchSignedUrls(shareToken, roundPhotoIds.split(","))
+      if (!quiet) { setUrlsLoading(true); setLinksFailed(false); }
+      withRetries(() => fetchSignedUrls(shareToken, roundPhotoIds.split(",")))
         .then((urls) => {
-          if (cancelled || !Object.keys(urls).length) return;
+          if (cancelled) return;
           setSignedUrls(urls);
           setLinksFetchedAt(Date.now());
+          setLinksFailed(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // A renewal that fails leaves the links on screen, which still
+          // have a quarter of an hour, and tries again in two minutes.
+          if (quiet) renewAgain = window.setTimeout(() => load(true), 2 * 60 * 1000);
+          else setLinksFailed(true);
         })
         .finally(() => { if (!quiet && !cancelled) setUrlsLoading(false); });
     };
     load(false);
     const timer = window.setInterval(() => load(true), LINK_REFRESH_MS);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [shareToken, roundPhotoIds, currentRound]);
+    return () => { cancelled = true; window.clearInterval(timer); window.clearTimeout(renewAgain); };
+  }, [shareToken, roundPhotoIds, currentRound, linksAttempt]);
 
-  // A laptop that slept through the renewal comes back with expired links.
+  // A laptop that slept through the renewal comes back with expired links,
+  // and a phone that lost its connection comes back to photos that failed.
   useEffect(() => {
     if (!shareToken || !roundPhotoIds) return;
-    const onVisible = () => {
-      if (document.visibilityState !== "visible" || Date.now() - linksFetchedAt < LINK_REFRESH_MS) return;
-      fetchSignedUrls(shareToken, roundPhotoIds.split(",")).then((urls) => {
-        if (Object.keys(urls).length) { setSignedUrls(urls); setLinksFetchedAt(Date.now()); }
-      });
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (linksFailed) { setLinksAttempt((n) => n + 1); return; }
+      if (Date.now() - linksFetchedAt < LINK_REFRESH_MS) return;
+      fetchSignedUrls(shareToken, roundPhotoIds.split(","))
+        .then((urls) => { setSignedUrls(urls); setLinksFetchedAt(Date.now()); })
+        .catch(() => {});
     };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [shareToken, roundPhotoIds, linksFetchedAt]);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("online", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("online", onReturn);
+    };
+  }, [shareToken, roundPhotoIds, linksFetchedAt, linksFailed]);
 
   // The opened photo in its large size, with the next few and the one before
   // fetched and loaded alongside it, so moving through them does not wait.
@@ -164,13 +199,16 @@ export default function ClientPhotoSelection() {
       .filter((id) => !largeLinks[id] || Date.now() - largeLinks[id].at > LINK_REFRESH_MS);
     if (!missing.length) return;
     let cancelled = false;
-    fetchSignedUrls(shareToken, missing, "large").then((urls) => {
-      if (cancelled) return;
-      const at = Date.now();
-      const fetched = Object.entries(urls).filter(([, url]) => url);
-      fetched.forEach(([, url]) => { new Image().src = url; });
-      setLargeLinks((links) => ({ ...links, ...Object.fromEntries(fetched.map(([id, url]) => [id, { url, at }])) }));
-    });
+    fetchSignedUrls(shareToken, missing, "large")
+      .then((urls) => {
+        if (cancelled) return;
+        const at = Date.now();
+        const fetched = Object.entries(urls).filter(([, url]) => url);
+        fetched.forEach(([, url]) => { new Image().src = url; });
+        setLargeLinks((links) => ({ ...links, ...Object.fromEntries(fetched.map(([id, url]) => [id, { url, at }])) }));
+      })
+      // Without the large version the opened photo shows its grid preview.
+      .catch(() => {});
     return () => { cancelled = true; };
     // Only a move to another photo asks for more; largeLinks changing does not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,6 +400,23 @@ export default function ClientPhotoSelection() {
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ── Could not load ─────────────────────────────────────────────────────────
+  // Only after about 15 seconds of tries. This used to say the link had
+  // expired, though the link was fine and the connection was the problem.
+  if (!session && sessionFailed) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center p-6">
+        <LVLogo size={32} />
+        <LoadProblem
+          className="mt-8"
+          title="We couldn't open your gallery"
+          retrying={sessionRetrying}
+          onRetry={() => retrySession()}
+        />
       </div>
     );
   }
@@ -651,7 +706,14 @@ export default function ClientPhotoSelection() {
           )}
 
           {/* Photo grid */}
-          {photosLoading || urlsLoading ? (
+          {photosFailed && !photos.length ? (
+            <LoadProblem
+              className="py-16"
+              title="We couldn't load your photos"
+              retrying={photosRetrying}
+              onRetry={() => retryPhotos()}
+            />
+          ) : photosLoading || urlsLoading ? (
             <div className="space-y-4">
               <div className="flex flex-col items-center justify-center py-6 gap-2">
                 <LVLogo size={40} className="animate-pulse" />
@@ -669,6 +731,15 @@ export default function ClientPhotoSelection() {
               <p className="text-muted-foreground text-sm">No images are available for this session yet. Please check back shortly.</p>
             </div>
           ) : (
+            <>
+            {linksFailed && (
+              <LoadProblem
+                className="mb-4 rounded-xl border bg-muted/40 py-6"
+                title="Your photos didn't load"
+                retrying={urlsLoading}
+                onRetry={() => setLinksAttempt((n) => n + 1)}
+              />
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
               {roundPhotos.map((photo) => (
                 <ClientPhotoCard
@@ -687,6 +758,7 @@ export default function ClientPhotoSelection() {
                 />
               ))}
             </div>
+            </>
           )}
         </div>
 
@@ -794,5 +866,34 @@ export default function ClientPhotoSelection() {
         onClose={() => setCommentPhoto(null)}
       />
     </>
+  );
+}
+
+/** A request that kept failing: what happened, and a way to try again. */
+function LoadProblem({
+  title,
+  retrying,
+  onRetry,
+  className = "",
+}: {
+  title: string;
+  retrying: boolean;
+  onRetry: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-col items-center justify-center text-center ${className}`} role="alert">
+      <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <WifiOff size={22} aria-hidden />
+      </span>
+      <p className="text-lg font-semibold mb-1">{title}</p>
+      <p className="text-muted-foreground text-sm max-w-sm">
+        Your link is fine. This is usually a short connection problem; the page tries again when your connection comes back.
+      </p>
+      <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={onRetry} disabled={retrying}>
+        {retrying ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+        {retrying ? "Trying again…" : "Try again"}
+      </Button>
+    </div>
   );
 }
