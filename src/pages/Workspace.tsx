@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -253,6 +254,8 @@ export default function Workspace() {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [pageToDelete, setPageToDelete] = useState<WorkspacePageSummary | null>(null);
+  // The page list on a phone, where it is a drawer rather than a column.
+  const [pagesOpen, setPagesOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), 250);
 
   const { data: pages = [], isLoading: pagesLoading } = useWorkspacePages();
@@ -294,7 +297,10 @@ export default function Workspace() {
     }
   }, [selectedPage?.parent_id]);
 
-  const selectPage = (pageId: string) => setSearchParams({ page: pageId });
+  const selectPage = (pageId: string) => {
+    setSearchParams({ page: pageId });
+    setPagesOpen(false);
+  };
 
   const handleCreatePage = async (parentId?: string | null) => {
     try {
@@ -380,149 +386,191 @@ export default function Workspace() {
     }
   };
 
-  return (
-    <AppShell>
-      <Header
-        title="Workspace"
-        subtitle="Pages, notes, drafts, and operating docs"
-        actions={
+  const pageList = (
+    <>
+      <div className="space-y-3 border-b border-border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Workspace</p>
+            <p className="text-sm font-semibold text-foreground">{pages.length} page{pages.length === 1 ? "" : "s"}</p>
+          </div>
           <NewPageMenu
+            compact
             isPending={createPage.isPending}
             onBlank={() => handleCreatePage(null)}
             onTemplate={(templateId) => handleCreateFromTemplate(templateId, null)}
           />
-        }
-      />
+        </div>
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search workspace"
+            className="h-10 w-full rounded-md border border-input bg-background pl-8 pr-8 text-base outline-none transition-shadow focus:ring-2 focus:ring-ring/20 md:h-9 md:text-sm"
+          />
+          {search ? (
+            <button
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
+        </div>
+      </div>
 
-      <div className="flex h-[calc(100vh-73px)] flex-col border-t border-border bg-background md:flex-row">
-        <aside className="flex max-h-72 w-full shrink-0 flex-col border-b border-border bg-muted/20 md:max-h-none md:w-80 md:border-b-0 md:border-r">
-          <div className="space-y-3 border-b border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Workspace</p>
-                <p className="text-sm font-semibold text-foreground">{pages.length} page{pages.length === 1 ? "" : "s"}</p>
+      <div className="flex-1 overflow-y-auto p-2">
+        {pagesLoading ? (
+          <div className="space-y-2 p-2">
+            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-8 w-full" />)}
+          </div>
+        ) : pages.length === 0 ? (
+          <WorkspaceEmptySidebar
+            onBlank={() => handleCreatePage(null)}
+            onTemplate={(templateId) => handleCreateFromTemplate(templateId, null)}
+          />
+        ) : debouncedSearch.length >= 2 ? (
+          <div className="space-y-1">
+            {searchLoading ? (
+              <div className="space-y-2 p-2">
+                {[1, 2, 3].map((item) => <Skeleton key={item} className="h-10 w-full" />)}
               </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-3 py-10 text-center">
+                <Search size={18} className="mx-auto mb-2 text-muted-foreground/70" />
+                <p className="text-sm font-medium">No matching pages</p>
+                <p className="mt-1 text-xs text-muted-foreground">Try a campaign name, client, SOP, or deliverable.</p>
+              </div>
+            ) : (
+              searchResults.map((page) => (
+                <SearchResultRow
+                  key={page.id}
+                  page={page}
+                  snippet={searchHits.find((hit) => hit.pageId === page.id)?.snippet}
+                  selected={selectedPage?.id === page.id}
+                  onSelect={() => selectPage(page.id)}
+                />
+              ))
+            )}
+          </div>
+        ) : (
+          <PageTree
+            nodes={pageTree}
+            selectedPageId={selectedPage?.id ?? null}
+            expanded={expanded}
+            onToggle={(pageId) =>
+              setExpanded((current) => {
+                const next = new Set(current);
+                if (next.has(pageId)) next.delete(pageId);
+                else next.add(pageId);
+                return next;
+              })
+            }
+            onSelect={selectPage}
+            onCreatePage={handleCreatePage}
+            onMovePage={handleMovePage}
+            onDeletePage={setPageToDelete}
+            allPages={pages}
+          />
+        )}
+      </div>
+      {pages.length > 0 && (
+        <div className="border-t border-border p-3 text-xs text-muted-foreground">
+          Use pages for plans, briefs, SOPs, meeting summaries, and reusable team context.
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <AppShell>
+      <div className="flex h-full flex-col">
+        {/* On a phone the page header gives way to the bar below, so the document gets the screen. */}
+        <div className="hidden shrink-0 md:block">
+          <Header
+            title="Workspace"
+            subtitle="Pages, notes, drafts, and operating docs"
+            actions={
               <NewPageMenu
-                compact
                 isPending={createPage.isPending}
                 onBlank={() => handleCreatePage(null)}
                 onTemplate={(templateId) => handleCreateFromTemplate(templateId, null)}
               />
-            </div>
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search workspace"
-                className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-8 text-sm outline-none transition-shadow focus:ring-2 focus:ring-ring/20"
-              />
-              {search ? (
-                <button
-                  aria-label="Clear search"
-                  onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <X size={13} />
-                </button>
-              ) : null}
-            </div>
+            }
+          />
+        </div>
+  
+        {/* One scrolling area at every size: the workspace takes whatever height
+            the header leaves. It used to be 100vh-73px, which assumed a 73px
+            header; the header is 83px on a desktop and taller on a phone, so the
+            page scrolled inside the page. */}
+        <div className="flex min-h-0 flex-1 flex-col bg-background md:flex-row md:border-t md:border-border">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 md:hidden">
+            <Button
+              variant="outline"
+              className="h-10 min-w-0 flex-1 justify-start gap-2 px-3"
+              onClick={() => setPagesOpen(true)}
+              aria-label={`Pages. Open: ${selectedPage?.title || "none"}`}
+            >
+              <FolderTree size={15} className="shrink-0 text-muted-foreground" />
+              <span className="truncate text-sm font-medium">{selectedPage?.title || (pagesLoading ? "Loading pages…" : "Pages")}</span>
+              <ChevronDown size={14} className="ml-auto shrink-0 text-muted-foreground" />
+            </Button>
+            <NewPageMenu
+              compact
+              className="h-10 w-10"
+              isPending={createPage.isPending}
+              onBlank={() => handleCreatePage(null)}
+              onTemplate={(templateId) => handleCreateFromTemplate(templateId, null)}
+            />
           </div>
-
-          <div className="flex-1 overflow-y-auto p-2">
-            {pagesLoading ? (
-              <div className="space-y-2 p-2">
-                {[1, 2, 3].map((item) => <Skeleton key={item} className="h-8 w-full" />)}
-              </div>
-            ) : pages.length === 0 ? (
-              <WorkspaceEmptySidebar
-                onBlank={() => handleCreatePage(null)}
-                onTemplate={(templateId) => handleCreateFromTemplate(templateId, null)}
-              />
-            ) : debouncedSearch.length >= 2 ? (
-              <div className="space-y-1">
-                {searchLoading ? (
-                  <div className="space-y-2 p-2">
-                    {[1, 2, 3].map((item) => <Skeleton key={item} className="h-10 w-full" />)}
-                  </div>
-                ) : searchResults.length === 0 ? (
-                  <div className="px-3 py-10 text-center">
-                    <Search size={18} className="mx-auto mb-2 text-muted-foreground/70" />
-                    <p className="text-sm font-medium">No matching pages</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Try a campaign name, client, SOP, or deliverable.</p>
-                  </div>
-                ) : (
-                  searchResults.map((page) => (
-                    <SearchResultRow
-                      key={page.id}
-                      page={page}
-                      snippet={searchHits.find((hit) => hit.pageId === page.id)?.snippet}
-                      selected={selectedPage?.id === page.id}
-                      onSelect={() => selectPage(page.id)}
-                    />
-                  ))
-                )}
+          <Sheet open={pagesOpen} onOpenChange={setPagesOpen}>
+            <SheetContent side="left" className="flex w-[88vw] max-w-sm flex-col gap-0 p-0">
+              <SheetTitle className="sr-only">Workspace pages</SheetTitle>
+              <SheetDescription className="sr-only">Search the workspace or choose a page to open.</SheetDescription>
+              {pageList}
+            </SheetContent>
+          </Sheet>
+  
+          <aside className="hidden w-80 shrink-0 flex-col border-r border-border bg-muted/20 md:flex">
+            {pageList}
+          </aside>
+  
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            {!selectedPage ? (
+              <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <BookOpen size={22} />
+                </div>
+                <h2 className="text-xl font-semibold">Build your team knowledge base</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Start with a page for SOPs, campaign notes, client playbooks, or branch operating docs.
+                </p>
+                <Button className="mt-5" onClick={() => handleCreatePage(null)}>
+                  <Plus size={14} />
+                  Create First Page
+                </Button>
               </div>
             ) : (
-              <PageTree
-                nodes={pageTree}
-                selectedPageId={selectedPage?.id ?? null}
-                expanded={expanded}
-                onToggle={(pageId) =>
-                  setExpanded((current) => {
-                    const next = new Set(current);
-                    if (next.has(pageId)) next.delete(pageId);
-                    else next.add(pageId);
-                    return next;
-                  })
-                }
-                onSelect={selectPage}
-                onCreatePage={handleCreatePage}
-                onMovePage={handleMovePage}
-                onDeletePage={setPageToDelete}
-                allPages={pages}
+              <DocumentEditor
+                key={selectedPage.id}
+                page={selectedPage}
+                pages={pages}
+                ancestors={selectedAncestors}
+                titleSaving={updatePage.isPending}
+                titleError={updatePage.error}
+                onTitleChange={(title) => updatePage.mutate({ id: selectedPage.id, title })}
+                onCreateSubpage={() => handleCreatePage(selectedPage.id)}
+                onCreateTemplateSubpage={(templateId) => handleCreateFromTemplate(templateId, selectedPage.id)}
+                onMovePage={(parentId) => handleMovePage(selectedPage, parentId)}
+                onDeletePage={() => setPageToDelete(selectedPage)}
+                onSelectPage={selectPage}
               />
             )}
-          </div>
-          {pages.length > 0 && (
-            <div className="border-t border-border p-3 text-xs text-muted-foreground">
-              Use pages for plans, briefs, SOPs, meeting summaries, and reusable team context.
-            </div>
-          )}
-        </aside>
-
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          {!selectedPage ? (
-            <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <BookOpen size={22} />
-              </div>
-              <h2 className="text-xl font-semibold">Build your team knowledge base</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Start with a page for SOPs, campaign notes, client playbooks, or branch operating docs.
-              </p>
-              <Button className="mt-5" onClick={() => handleCreatePage(null)}>
-                <Plus size={14} />
-                Create First Page
-              </Button>
-            </div>
-          ) : (
-            <DocumentEditor
-              key={selectedPage.id}
-              page={selectedPage}
-              pages={pages}
-              ancestors={selectedAncestors}
-              titleSaving={updatePage.isPending}
-              titleError={updatePage.error}
-              onTitleChange={(title) => updatePage.mutate({ id: selectedPage.id, title })}
-              onCreateSubpage={() => handleCreatePage(selectedPage.id)}
-              onCreateTemplateSubpage={(templateId) => handleCreateFromTemplate(templateId, selectedPage.id)}
-              onMovePage={(parentId) => handleMovePage(selectedPage, parentId)}
-              onDeletePage={() => setPageToDelete(selectedPage)}
-              onSelectPage={selectPage}
-            />
-          )}
-        </main>
+          </main>
+        </div>
       </div>
 
       <AlertDialog open={!!pageToDelete} onOpenChange={(open) => !open && setPageToDelete(null)}>
@@ -556,12 +604,14 @@ export default function Workspace() {
 function NewPageMenu({
   compact = false,
   label = "New Page",
+  className,
   isPending,
   onBlank,
   onTemplate,
 }: {
   compact?: boolean;
   label?: string;
+  className?: string;
   isPending: boolean;
   onBlank: () => void;
   onTemplate: (templateId: string) => void;
@@ -571,7 +621,7 @@ function NewPageMenu({
       <DropdownMenuTrigger asChild>
         <Button
           size={compact ? "icon" : "sm"}
-          className={cn(compact && "h-8 w-8")}
+          className={cn(compact && "h-8 w-8", className)}
           disabled={isPending}
           aria-label={compact ? label : undefined}
         >
@@ -768,7 +818,7 @@ function PageTree({
           <div key={node.id}>
             <div
               className={cn(
-                "group flex h-8 items-center gap-1 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                "group flex h-10 items-center gap-1 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:h-8",
                 isSelected && "bg-background text-foreground shadow-sm ring-1 ring-border/70"
               )}
               style={{ paddingLeft: 6 + depth * 14 }}
@@ -776,7 +826,7 @@ function PageTree({
               {hasChildren ? (
                 <button
                   aria-label={`${isOpen ? "Collapse" : "Expand"} ${node.title || "Untitled"}`}
-                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-background"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background md:h-5 md:w-5"
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggle(node.id);
@@ -785,9 +835,10 @@ function PageTree({
                   {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 </button>
               ) : (
-                <span className="h-5 w-5 shrink-0" />
+                <span className="h-8 w-8 shrink-0 md:h-5 md:w-5" />
               )}
-              <button onClick={() => onSelect(node.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+              {/* The whole height of the row opens the page, not just the line of text. */}
+              <button onClick={() => onSelect(node.id)} className="flex min-w-0 flex-1 items-center gap-2 self-stretch text-left">
                 <FileText size={13} className={cn("shrink-0", isSelected && "text-primary")} />
                 <span className="truncate">{node.title || "Untitled"}</span>
                 {hasChildren && (
@@ -799,7 +850,7 @@ function PageTree({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className={cn(
-                    "h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-background",
+                    "h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background md:h-6 md:w-6",
                     isSelected ? "flex" : "hidden group-hover:flex"
                   )}
                     aria-label={`Open actions for ${node.title || "Untitled"}`}
@@ -1045,6 +1096,9 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  // Folded on a phone, where the upload box alone filled the screen above the
+  // document; open on wider screens, as it always was.
+  const [open, setOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 768);
   const { data: assets = [], isLoading } = useWorkspaceAssets(pageId);
   const uploadAsset = useUploadWorkspaceAsset();
   const deleteAsset = useDeleteWorkspaceAsset();
@@ -1120,141 +1174,155 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
 
   return (
     <section className="mb-8 rounded-md border border-border bg-muted/10">
-      <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/30",
+          open && "border-b border-border",
+        )}
+      >
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Paperclip size={15} className="text-primary" />
+            <Paperclip size={15} className="shrink-0 text-primary" />
             <h3 className="text-sm font-semibold">Reference library</h3>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className={cn("mt-1 text-xs text-muted-foreground", !open && "hidden sm:block")}>
             Attach logos, photos, videos, PDFs, palettes, design systems, task calendars, and source context to this page.
           </p>
         </div>
-        <Badge variant="secondary" className="w-fit rounded-md font-medium">
+        <Badge variant="secondary" className="shrink-0 rounded-md font-medium">
           {assets.length} file{assets.length === 1 ? "" : "s"}
         </Badge>
-      </div>
+        <ChevronDown size={15} className={cn("shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
 
-      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-1.5">
-            {ASSET_CATEGORIES.map((item) => {
-              const Icon = item.icon;
-              const active = item.value === category;
-              return (
-                <button
-                  key={item.value}
-                  onClick={() => setCategory(item.value)}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-                    active
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Icon size={13} />
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {isLoading ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-24 w-full" />)}
+      {/* grid-cols-1 holds the column to the panel's width; left to size itself,
+          it grew to fit the chip row and pushed everything off the screen. */}
+      {open && (
+        <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+          <div className="min-w-0 space-y-3">
+            {/* One row that scrolls sideways on a phone instead of three wrapped rows. */}
+            <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+              {ASSET_CATEGORIES.map((item) => {
+                const Icon = item.icon;
+                const active = item.value === category;
+                return (
+                  <button
+                    key={item.value}
+                    onClick={() => setCategory(item.value)}
+                    className={cn(
+                      "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors sm:h-8",
+                      active
+                        ? "border-primary/30 bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <Icon size={13} />
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
-          ) : assets.length === 0 ? (
-            <div className="flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed border-border bg-background/70 px-4 py-8 text-center">
-              <FileUp size={20} className="mb-2 text-muted-foreground" />
-              <p className="text-sm font-medium">No reference files yet.</p>
-              <p className="mt-1 max-w-md text-xs text-muted-foreground">
-                Upload the assets this page depends on so strategy, brand, and delivery context stay together.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {grouped.map((group) => (
-                <div key={group.value} className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <group.icon size={13} />
-                    {group.label}
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{group.assets.length}</span>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {group.assets.map((asset) => (
-                      <WorkspaceAssetCard
-                        key={asset.id}
-                        asset={asset}
-                        deleting={deleteAsset.isPending}
-                        onOpen={() => setPreviewIndex(ordered.findIndex((item) => item.id === asset.id))}
-                        onDelete={() => deleteAsset.mutate(asset, {
-                          onError: (error) => toast({
-                            title: "Asset was not deleted",
-                            description: error instanceof Error ? error.message : "Please try again.",
-                            variant: "destructive",
-                          }),
-                        })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          className={cn(
-            "flex min-h-52 cursor-pointer flex-col justify-between rounded-md border border-dashed bg-background p-4 transition-colors",
-            dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
-            uploading && "pointer-events-none opacity-80"
-          )}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept={WORKSPACE_ASSET_ACCEPT}
-            className="sr-only"
-            onChange={(event) => event.target.files && handleFiles(event.target.files)}
-          />
-          <div className="space-y-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-              {uploading ? <Loader2 size={18} className="animate-spin" /> : <SelectedIcon size={18} />}
-            </div>
-            <div>
-              <p className="text-sm font-semibold">
-                {uploading ? "Uploading" : `Upload ${assetCategoryMeta(category).label.toLowerCase()}`}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {uploading
-                  ? uploading.name
-                  : "Drag files here or click to choose. Videos up to 500 MB; images, PDFs, JSON, CSS, CSV, ICS, Office docs, and ZIP files up to 50 MB."}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 space-y-2">
-            {uploading ? (
-              <>
-                <Progress value={uploading.progress} className="h-1.5" />
-                <p className="text-xs text-muted-foreground">{uploading.progress}% uploaded</p>
-              </>
+  
+            {isLoading ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-24 w-full" />)}
+              </div>
+            ) : assets.length === 0 ? (
+              <div className="flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed border-border bg-background/70 px-4 py-8 text-center">
+                <FileUp size={20} className="mb-2 text-muted-foreground" />
+                <p className="text-sm font-medium">No reference files yet.</p>
+                <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                  Upload the assets this page depends on so strategy, brand, and delivery context stay together.
+                </p>
+              </div>
             ) : (
-              <Button type="button" size="sm" variant="outline" className="pointer-events-none w-full">
-                <FileUp size={13} />
-                Choose files
-              </Button>
+              <div className="space-y-4">
+                {grouped.map((group) => (
+                  <div key={group.value} className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <group.icon size={13} />
+                      {group.label}
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{group.assets.length}</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {group.assets.map((asset) => (
+                        <WorkspaceAssetCard
+                          key={asset.id}
+                          asset={asset}
+                          deleting={deleteAsset.isPending}
+                          onOpen={() => setPreviewIndex(ordered.findIndex((item) => item.id === asset.id))}
+                          onDelete={() => deleteAsset.mutate(asset, {
+                            onError: (error) => toast({
+                              title: "Asset was not deleted",
+                              description: error instanceof Error ? error.message : "Please try again.",
+                              variant: "destructive",
+                            }),
+                          })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
+  
+          <div
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => inputRef.current?.click()}
+            className={cn(
+              "flex cursor-pointer flex-col justify-between rounded-md border border-dashed bg-background p-4 transition-colors md:min-h-52",
+              dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/30",
+              uploading && "pointer-events-none opacity-80"
+            )}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept={WORKSPACE_ASSET_ACCEPT}
+              className="sr-only"
+              onChange={(event) => event.target.files && handleFiles(event.target.files)}
+            />
+            <div className="space-y-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                {uploading ? <Loader2 size={18} className="animate-spin" /> : <SelectedIcon size={18} />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">
+                  {uploading ? "Uploading" : `Upload ${assetCategoryMeta(category).label.toLowerCase()}`}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {uploading
+                    ? uploading.name
+                    : "Drag files here or click to choose. Videos up to 500 MB; images, PDFs, JSON, CSS, CSV, ICS, Office docs, and ZIP files up to 50 MB."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {uploading ? (
+                <>
+                  <Progress value={uploading.progress} className="h-1.5" />
+                  <p className="text-xs text-muted-foreground">{uploading.progress}% uploaded</p>
+                </>
+              ) : (
+                <Button type="button" size="sm" variant="outline" className="pointer-events-none w-full">
+                  <FileUp size={13} />
+                  Choose files
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <WorkspaceAssetPreview assets={ordered} index={previewIndex} onIndexChange={setPreviewIndex} />
     </section>

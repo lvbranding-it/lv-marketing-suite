@@ -181,7 +181,7 @@ export default function WorkspaceDocumentEditor({
     content: initialHtml,
     editorProps: {
       attributes: {
-        class: "workspace-doc prose prose-sm max-w-none min-h-[45vh] py-5 focus:outline-none",
+        class: "workspace-doc prose prose-base md:prose-sm max-w-none min-h-[45vh] py-5 focus:outline-none",
       },
       /**
        * What a plain-text paste receives, for chats, forms and plain email.
@@ -283,7 +283,7 @@ function ToolButton({
           onMouseDown={(event) => event.preventDefault()}
           onClick={onClick}
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors md:h-8 md:w-8",
             "hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
             active && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
@@ -412,7 +412,9 @@ function Toolbar({ editor }: { editor: Editor }) {
   };
 
   return (
-    <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-0.5 border-b border-border bg-background/95 px-1 py-1.5 backdrop-blur">
+    // One row that swipes sideways on a phone. Wrapped, its tools took three or
+    // four rows, and pinned to the top they covered a third of the screen.
+    <div className="sticky top-0 z-10 -mx-1 flex items-center gap-0.5 overflow-x-auto border-b border-border bg-background/95 px-1 py-1.5 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
       <ToolButton label="Undo" shortcut="⌘Z" disabled={!s.canUndo} onClick={() => chain().undo().run()}>
         <Undo2 size={15} />
       </ToolButton>
@@ -423,7 +425,7 @@ function Toolbar({ editor }: { editor: Editor }) {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-[118px] justify-between px-2 text-xs font-normal" onMouseDown={(event) => event.preventDefault()}>
+          <Button variant="ghost" size="sm" className="h-9 w-[118px] shrink-0 justify-between px-2 text-xs font-normal md:h-8" onMouseDown={(event) => event.preventDefault()}>
             {style}
             <ChevronDown size={12} className="text-muted-foreground" />
           </Button>
@@ -438,7 +440,7 @@ function Toolbar({ editor }: { editor: Editor }) {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-[92px] justify-between px-2 text-xs font-normal" onMouseDown={(event) => event.preventDefault()}>
+          <Button variant="ghost" size="sm" className="h-9 w-[92px] shrink-0 justify-between px-2 text-xs font-normal md:h-8" onMouseDown={(event) => event.preventDefault()}>
             {sizeLabel}
             <ChevronDown size={12} className="text-muted-foreground" />
           </Button>
@@ -478,7 +480,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 type="button"
                 aria-label="Text colour"
                 onMouseDown={(event) => event.preventDefault()}
-                className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
               >
                 <Baseline size={15} />
                 <span className="absolute bottom-1.5 left-2 right-2 h-[3px] rounded-full" style={{ background: s.color ?? "currentColor" }} />
@@ -505,7 +507,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 type="button"
                 aria-label="Highlight"
                 onMouseDown={(event) => event.preventDefault()}
-                className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
               >
                 <Highlighter size={15} />
                 {s.highlight && <span className="absolute bottom-1.5 left-2 right-2 h-[3px] rounded-full" style={{ background: s.highlight }} />}
@@ -555,7 +557,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 aria-label="Table"
                 onMouseDown={(event) => event.preventDefault()}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8",
                   s.table && "bg-primary/10 text-primary",
                 )}
               >
@@ -598,7 +600,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 aria-label="Link"
                 onMouseDown={(event) => event.preventDefault()}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8",
                   s.link && "bg-primary/10 text-primary",
                 )}
               >
@@ -622,9 +624,9 @@ function Toolbar({ editor }: { editor: Editor }) {
               value={linkUrl}
               onChange={(event) => setLinkUrl(event.target.value)}
               placeholder="Paste or type a link"
-              className="h-8 text-sm"
+              className="h-9 text-base md:h-8 md:text-sm"
             />
-            <Button type="submit" size="sm" className="h-8">Apply</Button>
+            <Button type="submit" size="sm" className="h-9 md:h-8">Apply</Button>
           </form>
           {s.link && (
             <button
@@ -650,7 +652,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 type="button"
                 aria-label="Alignment"
                 onMouseDown={(event) => event.preventDefault()}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:h-8 md:w-8"
               >
                 <AlignIcon size={15} />
               </button>
@@ -674,7 +676,7 @@ function Toolbar({ editor }: { editor: Editor }) {
         variant="ghost"
         size="sm"
         onClick={copyPage}
-        className="ml-auto h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+        className="ml-auto h-9 shrink-0 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground md:h-8"
       >
         <Copy size={13} />
         Copy page
