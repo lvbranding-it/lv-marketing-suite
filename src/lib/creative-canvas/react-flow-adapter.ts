@@ -55,6 +55,9 @@ export function edgeAppearance(kind: CreativeEdgeKind = "association"): Partial<
 export const edgeKindOf = (edge: Pick<CreativeFlowEdge, "data">): CreativeEdgeKind =>
   edge.data?.kind === "sequence" || edge.data?.kind === "reference" ? edge.data.kind : "association";
 
+/** Whether the canvas drew this arrow from a result back to what made it. */
+export const isMadeFrom = (edge: Pick<CreativeFlowEdge, "data">) => edge.data?.madeFrom === true;
+
 export function sceneToFlow(scene: CreativeSceneDocument, assetUrls: ReadonlyMap<string, string> = new Map()) {
   const nodes: CreativeFlowNode[] = scene.nodes.map((node) => ({
     id: node.id,
@@ -83,7 +86,7 @@ export function sceneToFlow(scene: CreativeSceneDocument, assetUrls: ReadonlyMap
       source: edge.source,
       target: edge.target,
       type: "smoothstep",
-      data: { kind },
+      data: edge.madeFrom ? { kind, madeFrom: true } : { kind },
       ...edgeAppearance(kind),
       // A label someone typed wins over the derived one.
       ...(edge.label ? { label: edge.label } : {}),
@@ -120,6 +123,7 @@ export function flowToScene(nodes: CreativeFlowNode[], edges: CreativeFlowEdge[]
       // The kind's own label is decoration recomputed on load, not content.
       label: typeof edge.label === "string" && edge.label !== SEQUENCE_EDGE_LABEL ? edge.label : undefined,
       kind: edgeKindOf(edge),
+      ...(isMadeFrom(edge) ? { madeFrom: true } : {}),
     })),
     viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom },
     savedAt: new Date().toISOString(),

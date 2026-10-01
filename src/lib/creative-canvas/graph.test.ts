@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectInheritedContext, MAX_INHERITED_NODES, sequencePath, sequencePosition } from "./graph";
+import { collectInheritedContext, MAX_INHERITED_NODES, pictureSourceIds, sequencePath, sequencePosition } from "./graph";
 
 const edge = (source: string, target: string) => ({ source, target });
 
@@ -147,5 +147,30 @@ describe("sequencePosition", () => {
 
   it("survives a loop instead of spinning", () => {
     expect(sequencePosition([then("a", "b"), then("b", "a")], "a")).toBeNull();
+  });
+});
+
+describe("which connected pictures travel with a request", () => {
+  const madeFrom = (source: string, target: string) => ({ source, target, madeFrom: true });
+
+  it("sends a picture connected by an arrow a person drew", () => {
+    // style board → product photo, product photo selected.
+    expect(pictureSourceIds([edge("style", "product")], ["product"], { selectionHasPicture: true })).toEqual(["style"]);
+  });
+
+  it("does not resend a result's earlier drafts when the result is selected to change it", () => {
+    // original photo → (made from) → edited photo, edited photo selected.
+    expect(pictureSourceIds([madeFrom("original", "edited")], ["edited"], { selectionHasPicture: true })).toEqual([]);
+  });
+
+  it("brings the picture a failed run was working from when its card is retried", () => {
+    // photo → (made from) → failed run card, failed card selected (no picture of its own).
+    expect(pictureSourceIds([madeFrom("photo", "failed-run")], ["failed-run"], { selectionHasPicture: false })).toEqual(["photo"]);
+  });
+
+  it("still carries direction through made-from arrows for the text of a request", () => {
+    // The made-from rule is only about pictures: direction keeps flowing.
+    const found = collectInheritedContext([edge("brief", "draft"), madeFrom("draft", "edited")], ["edited"]);
+    expect(found.map((entry) => entry.id)).toEqual(["draft", "brief"]);
   });
 });

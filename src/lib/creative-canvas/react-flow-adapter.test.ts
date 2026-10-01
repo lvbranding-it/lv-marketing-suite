@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { edgeKindOf, flowToScene, sceneToFlow, SEQUENCE_EDGE_LABEL } from "./react-flow-adapter";
+import { edgeKindOf, flowToScene, isMadeFrom, sceneToFlow, SEQUENCE_EDGE_LABEL } from "./react-flow-adapter";
 import { collectInheritedContext } from "./graph";
 import { serializeScene } from "./scene";
 
@@ -79,5 +79,19 @@ describe("arrow kinds through the adapter", () => {
     expect(collectInheritedContext(flat, ["b"])).toEqual([]);
     // Whereas handing the flow edge over unconverted is the bug this guards.
     expect(collectInheritedContext(flow.edges, ["b"])).toHaveLength(1);
+  });
+});
+
+describe("made-from arrows", () => {
+  it("keep their mark across a save and a reload", () => {
+    const scene = serializeScene({
+      schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, nodes: [],
+      edges: [{ id: "edge-1", source: "photo", target: "result", kind: "association", madeFrom: true }, { id: "edge-2", source: "brief", target: "result" }],
+    });
+    const flow = sceneToFlow(scene);
+    expect(flow.edges.map(isMadeFrom)).toEqual([true, false]);
+    const saved = flowToScene([], flow.edges, flow.viewport).edges;
+    expect(saved[0].madeFrom).toBe(true);
+    expect(saved[1]).not.toHaveProperty("madeFrom");
   });
 });

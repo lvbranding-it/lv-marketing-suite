@@ -23,9 +23,9 @@ import CommandPanel from "@/components/creative-canvas/CommandPanel";
 import { toast } from "@/hooks/use-toast";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useBrandContext, useCreativeAssets, useCreativeCanvas, useCreativeGenerations, useCreateDecision, useCreativeProviderStatus, useCreativeUsage, useGenerateCreative, useSaveBrandContext, useSaveCreativeCanvas, useUploadCreativeAsset } from "@/hooks/useCreativeCanvas";
-import { edgeAppearance, edgeKindOf, flowToScene, sceneToFlow, type CreativeFlowEdge, type CreativeFlowNode, type CreativeNodeData } from "@/lib/creative-canvas/react-flow-adapter";
-import { createEmptyScene, makeIdempotencyKey, restoreScene, serializeScene, type CreativeSceneDocument } from "@/lib/creative-canvas/scene";
-import { collectInheritedContext, sequencePosition, type CreativeEdgeKind } from "@/lib/creative-canvas/graph";
+import { edgeAppearance, edgeKindOf, flowToScene, isMadeFrom, sceneToFlow, type CreativeFlowEdge, type CreativeFlowNode, type CreativeNodeData } from "@/lib/creative-canvas/react-flow-adapter";
+import { createEmptyScene, makeIdempotencyKey, restoreScene, sceneFingerprint, serializeScene, type CreativeSceneDocument } from "@/lib/creative-canvas/scene";
+import { collectInheritedContext, pictureSourceIds, sequencePosition, type CreativeEdgeKind } from "@/lib/creative-canvas/graph";
 import { runPaced, runSeries, type SeriesPlan } from "@/lib/creative-canvas/series";
 import { buildCommandRequest, parseSlash, type CommandSelectionItem } from "@/lib/creative-canvas/commands/registry";
 import type { CommandDefinition, CommandValues } from "@/lib/creative-canvas/commands/types";
@@ -134,13 +134,6 @@ const BRAND_FIELDS: Array<{ key: keyof BrandContext; label: string; placeholder:
 
 type FlowSnapshot = { nodes: CreativeFlowNode[]; edges: CreativeFlowEdge[] };
 const cloneSnapshot = (nodes: CreativeFlowNode[], edges: CreativeFlowEdge[]): FlowSnapshot => ({ nodes: structuredClone(nodes), edges: structuredClone(edges) });
-// `savedAt` is stamped with the current time every time a scene is built, so a
-// straight comparison of two serializations never matches. The fingerprint is
-// everything that actually describes the document, minus that timestamp.
-const sceneFingerprint = (scene: CreativeSceneDocument): string => {
-  const { savedAt: _savedAt, ...rest } = scene;
-  return JSON.stringify(rest);
-};
 const newId = (prefix = "node") => `${prefix}-${crypto.randomUUID()}`;
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url); }
 
@@ -222,6 +215,20 @@ export default function CreativeCanvasWorkspace() {
   const addNode = useCallback((type: CreativeNodeType, options: Partial<CreativeNodeData> & { width?: number; height?: number } = {}, point = canvasCenter()) => { recordHistory(); const node = makeNode(type, point, options); setNodes((current) => [...current.map((item) => ({ ...item, selected: false })), node]); return node.id; }, [canvasCenter, recordHistory, setNodes]);
   const connect = useCallback((connection: Connection) => { recordHistory(); setEdges((current) => addEdge({ ...connection, id: newId("edge"), type: "smoothstep", data: { kind: "association" }, ...edgeAppearance("association") }, current)); }, [recordHistory, setEdges]);
   /** Changes what an arrow claims, and redresses it to match. */
+  /**
+   * Arrows from a result back to the cards it was made from. They inform it like
+   * any arrow, so the next step taken from a result inherits what produced it.
+   * Marked made-from so the earlier drafts behind a picture are not re-sent when
+   * that picture is selected to change it (see pictureSourceIds).
+   */
+  const linkMadeFrom = useCallback((sourceIds: string[], targetId: string) => {
+    const sources = [...new Set(sourceIds)].filter((id) => id !== targetId);
+    if (!sources.length) return;
+    setEdges((current) => [...current, ...sources.map((source) => ({
+      id: newId("edge"), source, target: targetId, type: "smoothstep",
+      data: { kind: "association" as const, madeFrom: true }, ...edgeAppearance("association"),
+    }))]);
+  }, [setEdges]);
   const setEdgeKind = useCallback((id: string, kind: CreativeEdgeKind) => { recordHistory(); setEdges((current) => current.map((edge) => edge.id === id ? { ...edge, data: { ...edge.data, kind }, ...edgeAppearance(kind) } : edge)); }, [recordHistory, setEdges]);
   const deleteSelection = useCallback(() => { if (!selection.length && !edgesRef.current.some((edge) => edge.selected)) return; recordHistory(); const ids = new Set(selection.map((node) => node.id)); setNodes((current) => current.filter((node) => !ids.has(node.id) && (!node.parentId || !ids.has(node.parentId)))); setEdges((current) => current.filter((edge) => !edge.selected && !ids.has(edge.source) && !ids.has(edge.target))); }, [recordHistory, selection, setEdges, setNodes]);
   const copySelection = useCallback(() => { clipboard.current = structuredClone(selection); }, [selection]);
@@ -241,7 +248,7 @@ export default function CreativeCanvasWorkspace() {
   // undefined, which reads as "informs" and quietly undoes what a Then arrow is
   // for.
   const graphEdges = useMemo(
-    () => edges.map((edge) => ({ source: edge.source, target: edge.target, kind: edgeKindOf(edge) })),
+    () => edges.map((edge) => ({ source: edge.source, target: edge.target, kind: edgeKindOf(edge), madeFrom: isMadeFrom(edge) })),
     [edges],
   );
   const inherited = useMemo(
@@ -275,7 +282,31 @@ export default function CreativeCanvasWorkspace() {
   const runGeneration = async () => {
     if (!canvas || !instruction.trim()) return;
     if (generationBlocker) { toast({ ...generationBlocker, variant: "destructive" }); return; }
-    const point = canvasCenter(); const originalInstruction = instruction.trim(); const placeholderId = addNode("generation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI generation", body: `Provider: ${provider}\n\n${originalInstruction}`, status: "processing", width: 360, height: 240 }, point); try { const result = await generate.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, operation, instruction: originalInstruction, provider, idempotencyKey: makeIdempotencyKey(canvas.id, operation), selectedNodes: selectedContext, brandContext: brandDraft, referenceAssetIds, language, placement: point }); setNodes((current) => current.filter((node) => node.id !== placeholderId)); if (result.asset?.signedUrl) addNode("image", { title: "Generated image", body: originalInstruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: 480, height: 420 }, point); else addNode("conversation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI response", body: `Instruction\n${originalInstruction}\n\nResponse\n${result.generation.output_text ?? "Generation completed."}`, status: "generated", width: 420, height: 320 }, point); setInstruction(""); if (result.budget?.warning) toast({ title: "Canvas AI budget warning", description: `$${result.budget.monthTotalUsd.toFixed(2)} estimated this month of a $${result.budget.softLimitUsd.toFixed(2)} soft limit.` }); } catch (error) { updateNodeData(placeholderId, { status: "failed", body: `${originalInstruction}\n\n${error instanceof Error ? error.message : "Generation failed"}` }); toast({ title: "Generation failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } };
+    const point = canvasCenter();
+    const originalInstruction = instruction.trim();
+    // Read before the placeholder goes in: adding a card clears the selection.
+    const sourceIds = selection.map((node) => node.id);
+    const placeholderId = addNode("generation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI generation", body: `Provider: ${provider}\n\n${originalInstruction}`, status: "processing", width: 360, height: 240 }, point);
+    // Joined to its sources from the start, so a run that fails still knows
+    // what it was working from: select its card and try again, and the picture
+    // and direction come with it.
+    linkMadeFrom(sourceIds, placeholderId);
+    try {
+      const result = await generate.mutateAsync({ projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id, operation, instruction: originalInstruction, provider, idempotencyKey: makeIdempotencyKey(canvas.id, operation), selectedNodes: selectedContext, brandContext: brandDraft, referenceAssetIds, language, placement: point });
+      setNodes((current) => current.filter((node) => node.id !== placeholderId));
+      const outputId = result.asset?.signedUrl
+        ? addNode("image", { title: "Generated image", body: originalInstruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: 480, height: 420 }, point)
+        : addNode("conversation", { title: AI_ACTIONS.find((item) => item.value === operation)?.label ?? "AI response", body: `Instruction\n${originalInstruction}\n\nResponse\n${result.generation.output_text ?? "Generation completed."}`, status: "generated", width: 420, height: 320 }, point);
+      // The result takes over the placeholder's arrows. Before, it landed with
+      // none, so the next step from it carried nothing of what made it.
+      setEdges((current) => current.map((edge) => edge.target === placeholderId ? { ...edge, target: outputId } : edge));
+      setInstruction("");
+      if (result.budget?.warning) toast({ title: "Canvas AI budget warning", description: `$${result.budget.monthTotalUsd.toFixed(2)} estimated this month of a $${result.budget.softLimitUsd.toFixed(2)} soft limit.` });
+    } catch (error) {
+      updateNodeData(placeholderId, { status: "failed", body: `${originalInstruction}\n\n${error instanceof Error ? error.message : "Generation failed"}` });
+      toast({ title: "Generation failed", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" });
+    }
+  };
   /**
    * What the export buttons would produce right now.
    *
@@ -323,14 +354,21 @@ export default function CreativeCanvasWorkspace() {
   const artworkIn = useCallback((list: CreativeFlowNode[]) => list.filter((node) => isArtworkNode(node.data.nodeType) && Boolean(node.data.assetId)), []);
   const referenceAssetIds = useMemo(() => {
     const usable = (list: CreativeFlowNode[]) => artworkIn(list).filter((node) => node.data.includeInContext !== false).map((node) => node.data.assetId);
-    // What was selected leads; inherited artwork fills the remaining slots. This
+    // Connected pictures that may come along. A result is joined to what made
+    // it, and those earlier drafts only travel when no picture is selected —
+    // see pictureSourceIds.
+    const sources = pictureSourceIds(graphEdges, selection.map((node) => node.id), {
+      selectionHasPicture: artworkIn(selection).length > 0,
+      isExcluded: (id) => nodes.find((node) => node.id === id)?.data.includeInContext === false,
+    });
+    // What was selected leads; connected artwork fills the remaining slots. This
     // is the order the model receives them in, so the first is the one an edit
     // treats as its base.
     return [...new Set([
       ...usable(selection),
-      ...usable(inherited.flatMap((entry) => nodes.filter((node) => node.id === entry.id))),
+      ...usable(sources.flatMap((id) => nodes.filter((node) => node.id === id))),
     ])].slice(0, 4);
-  }, [artworkIn, inherited, nodes, selection]);
+  }, [artworkIn, graphEdges, nodes, selection]);
   const mutedArtwork = useMemo(
     () => artworkIn(selection).filter((node) => node.data.includeInContext === false).length,
     [artworkIn, selection],
@@ -384,26 +422,38 @@ export default function CreativeCanvasWorkspace() {
     const gap = 48;
     setSeriesProgress({ done: 0, total: plan.cells.length });
     let done = 0;
+    const isMuted = (id: string) => nodes.find((node) => node.id === id)?.data.includeInContext === false;
     await runSeries(plan.cells, async (cell) => {
       const point = {
         x: origin.x + cell.column * (size[0] + gap) - ((plan.columns - 1) * (size[0] + gap)) / 2,
         y: origin.y + cell.row * (size[1] + gap) - ((plan.rows - 1) * (size[1] + gap)) / 2,
       };
+      // The cell's own cards are already written into its instruction. What a
+      // series used to drop was everything connected to them — a direction card
+      // or a palette feeding the products — because it sent no canvas context at
+      // all. Each cell now carries the direction connected to its own cards.
+      const cellSources = [cell.a.id, cell.b?.id].filter((id): id is string => Boolean(id));
+      const direction = collectInheritedContext(graphEdges, cellSources, { isExcluded: isMuted }).flatMap((entry) => {
+        const node = nodes.find((item) => item.id === entry.id);
+        return node ? [contextNode(node, "inherited", entry.depth, entry.into)] : [];
+      });
       try {
         const result = await generate.mutateAsync({
           projectId: canvas.project_id, canvasId: canvas.id, orgId: canvas.org_id,
           operation: "generate_image", instruction: cell.instruction, provider,
           idempotencyKey: `${plan.id}-${cell.column}-${cell.row}`,
-          selectedNodes: [], brandContext: brandDraft,
+          selectedNodes: direction, brandContext: brandDraft,
           referenceAssetIds: cell.referenceAssetIds, language, placement: point,
           aspect: plan.aspect,
           series: { id: plan.id, label: cell.label, index: cell.column * plan.rows + cell.row, total: plan.cells.length },
         });
         if (result.asset?.signedUrl) {
-          addNode("image", { title: cell.label, body: cell.instruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: size[0], height: size[1] }, point);
+          const id = addNode("image", { title: cell.label, body: cell.instruction, assetId: result.asset.id, assetUrl: result.asset.signedUrl, status: "generated", width: size[0], height: size[1] }, point);
+          linkMadeFrom(cellSources, id);
         }
       } catch (error) {
-        addNode("generation", { title: cell.label, body: `${cell.instruction}\n\n${error instanceof Error ? error.message : "Generation failed"}`, status: "failed", width: size[0], height: size[1] }, point);
+        const id = addNode("generation", { title: cell.label, body: `${cell.instruction}\n\n${error instanceof Error ? error.message : "Generation failed"}`, status: "failed", width: size[0], height: size[1] }, point);
+        linkMadeFrom(cellSources, id);
         throw error;
       } finally {
         done += 1;
@@ -516,10 +566,7 @@ export default function CreativeCanvasWorkspace() {
           : addNode("conversation", { title: label, body: `${request.instruction}\n\n${result.generation.output_text ?? "Completed."}`, status: "generated", width: 440, height: 360 }, point);
         created.push(id);
         // Visible lineage: every source informs what came out of it.
-        setEdges((current) => [...current, ...sourceIds.map((source) => ({
-          id: newId("edge"), source, target: id, type: "smoothstep",
-          data: { kind: "association" as const }, ...edgeAppearance("association"),
-        }))]);
+        linkMadeFrom(sourceIds, id);
         return id;
       } finally {
         done += 1;
@@ -672,7 +719,7 @@ export default function CreativeCanvasWorkspace() {
     <div className="creative-canvas-stage">
       <aside className={`creative-toolbar ${leftOpen ? "creative-toolbar--open" : ""}`}><button className="creative-panel-toggle" onClick={() => setLeftOpen(!leftOpen)} aria-label={leftOpen ? "Collapse creation toolbar" : "Open creation toolbar"}>{leftOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button><div className="space-y-1 p-2">{leftOpen && <p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[.16em] text-white/35">Create</p>}{NODE_TOOLS.filter((tool) => !tool.group).map(({ type, label, icon: Icon }) => <button key={type} className="creative-tool-button" title={label} onClick={() => addNode(type)}><Icon size={16} />{leftOpen && <span>{label}</span>}</button>)}<div className="my-2 h-px bg-white/10" /><button ref={ugcToggle} className="creative-tool-button" title="UGC blocks" onClick={() => setUgcOpen(!ugcOpen)} aria-expanded={ugcOpen}><Video size={16} />{leftOpen && <><span>UGC</span>{ugcOpen ? <ChevronLeft size={13} className="ml-auto rotate-90 opacity-50" /> : <ChevronRight size={13} className="ml-auto opacity-50" />}</>}</button>{ugcOpen && NODE_TOOLS.filter((tool) => tool.group === "ugc").map(({ type, label, icon: Icon }) => <button key={type} className={`creative-tool-button ${leftOpen ? "pl-5" : ""}`} title={label} onClick={() => addNode(type)}><Icon size={15} />{leftOpen && <span>{label}</span>}</button>)}<button className="creative-tool-button" title="Upload references" onClick={() => fileInput.current?.click()}><Upload size={16} />{leftOpen && <span>Upload</span>}</button><input ref={fileInput} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => event.target.files && void upload(event.target.files)} /><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" onClick={() => { setPaletteQuery(""); setPaletteOpen(true); }} title="Search the LV Creative Command System"><Slash size={16} />{leftOpen && <span>Commands</span>}</button><button className="creative-tool-button" onClick={() => setSeriesOpen(true)} title="Combine selected objects into a grid of posts"><Grid3x3 size={16} />{leftOpen && <span>Series</span>}</button><div className="my-2 h-px bg-white/10" /><button className="creative-tool-button" title="Fit selection" onClick={() => void flow?.fitView({ nodes: selection, padding: .25, duration: 250 })}><Focus size={16} />{leftOpen && <span>Fit selection</span>}</button><button className="creative-tool-button" title="Fit canvas" onClick={() => void flow?.fitView({ padding: .15, duration: 250 })}><Maximize2 size={16} />{leftOpen && <span>Fit canvas</span>}</button></div></aside>
       {selection.length > 0 && <div className="creative-selection-actions"><span className="max-w-40 truncate text-xs text-white/55">{selection.length === 1 ? selection[0].data.title : `${selection.length} selected`}</span><Button size="icon" variant="ghost" className="h-8 w-8" title="Group" disabled={selection.length < 2} onClick={groupSelection}><Group size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Ungroup" onClick={ungroupSelection}><Ungroup size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Bring forward" onClick={() => changeOrder(1)}><ArrowUpToLine size={14} /></Button><Button size="icon" variant="ghost" className="h-8 w-8" title="Send backward" onClick={() => changeOrder(-1)}><ArrowDownToLine size={14} /></Button>{selection.length === 1 && <Select value={["favorite","shortlisted","rejected","needs_revision","client_selected","approved_final"].includes(selection[0].data.status) ? selection[0].data.status : undefined} onValueChange={(value) => void applyDecision(value as CreativeDecision)}><SelectTrigger className="h-8 w-36 border-white/10 bg-white/5 text-xs text-white"><SelectValue placeholder="Set decision" /></SelectTrigger><SelectContent><SelectItem value="favorite">Favorite</SelectItem><SelectItem value="shortlisted">Shortlisted</SelectItem><SelectItem value="needs_revision">Needs revision</SelectItem><SelectItem value="rejected">Rejected</SelectItem><SelectItem value="client_selected">Client selected</SelectItem><SelectItem value="approved_final">Approved final</SelectItem></SelectContent></Select>}{selectedAsset?.signedUrl && <Button size="sm" variant="ghost" className="h-8 text-white/65" onClick={async () => { try { const response = await fetch(selectedAsset.signedUrl!); downloadBlob(await response.blob(), selectedAsset.original_filename); } catch { toast({ title: "Download failed", variant: "destructive" }); } }}><Download size={13} className="mr-1.5" />Original</Button>}</div>}
-      <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData} fitNodeToAsset={fitNodeToAsset}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (hydrated.current) { setPendingScene(flowToScene(nodesRef.current, edgesRef.current, viewport)); setSaveState(navigator.onLine ? "unsaved" : "offline"); } }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
+      <main className="creative-flow-wrap"><CreativeNodeActionsProvider updateNodeData={updateNodeData} fitNodeToAsset={fitNodeToAsset}><ReactFlow<CreativeFlowNode, CreativeFlowEdge> nodes={nodes} edges={edges} nodeTypes={creativeNodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect} onInit={(instance) => { setFlow(instance); void instance.setViewport(viewportRef.current); }} onNodeDragStart={recordHistory} onMoveEnd={(_, viewport) => { viewportRef.current = viewport; if (!hydrated.current) return; const next = flowToScene(nodesRef.current, edgesRef.current, viewport); /* Restoring the saved view on open ends a move too; only a view that differs from the saved one is worth a save. */ if (sceneFingerprint(serializeScene(next)) === lastSavedScene.current) return; setPendingScene(next); setSaveState(navigator.onLine ? "unsaved" : "offline"); }} deleteKeyCode={null} multiSelectionKeyCode={["Meta", "Control"]} selectionOnDrag panOnDrag={[1, 2]} minZoom={.1} maxZoom={4} fitViewOptions={{ padding: .15 }}><Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,.14)" /><Controls position="bottom-left" /><MiniMap position="bottom-right" pannable zoomable nodeColor={(node) => String(node.data.accent)} maskColor="rgba(23,20,21,.76)" /></ReactFlow></CreativeNodeActionsProvider>{nodes.length === 0 && <div className="creative-empty-state"><div className="creative-empty-mark"><Sparkles size={22} /></div><h2>Begin with direction, not decoration.</h2><p>Build a brief, upload the right references, then turn strategy into creative work.</p><div><Button size="sm" onClick={() => addNode("brand_context")}><Plus size={14} className="mr-1.5" />Add project brief</Button><Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}><Upload size={14} className="mr-1.5" />Upload references</Button><Button size="sm" variant="outline" onClick={() => addNode("creative_direction")}><Sparkles size={14} className="mr-1.5" />Creative direction</Button></div></div>}</main>
       <aside className={`creative-inspector ${rightOpen ? "creative-inspector--open" : ""}`}><button className="creative-panel-toggle creative-panel-toggle--right" onClick={() => setRightOpen(!rightOpen)} aria-label={rightOpen ? "Collapse inspector" : "Open inspector"}>{rightOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>{rightOpen && <Tabs defaultValue="properties" className="flex h-full flex-col"><TabsList className="m-2 grid grid-cols-4 bg-white/5"><TabsTrigger value="properties">Object</TabsTrigger><TabsTrigger value="brand">Brand</TabsTrigger><TabsTrigger value="assets">Assets</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList><ScrollArea className="flex-1"><TabsContent value="properties" className="m-0 p-4">{selection.length === 1 ? <div className="space-y-4"><div><p className="creative-inspector-label">Selected object</p><p className="mt-1 text-sm font-medium capitalize text-white">{selection[0].data.nodeType.replaceAll("_", " ")}</p></div><div className="space-y-1.5"><Label className="text-white/70">Title</Label><Input value={selection[0].data.title} onChange={(event) => updateNodeData(selection[0].id, { title: event.target.value })} /></div><div className="space-y-1.5"><Label className="text-white/70">Content</Label><Textarea className="min-h-32" value={selection[0].data.body} onChange={(event) => updateNodeData(selection[0].id, { body: event.target.value })} /></div></div> : !selection.length && edgeSelection.length === 1 ? <ConnectionInspector kind={edgeKindOf(edgeSelection[0])} sourceTitle={nodes.find((node) => node.id === edgeSelection[0].source)?.data.title ?? ""} targetTitle={nodes.find((node) => node.id === edgeSelection[0].target)?.data.title ?? ""} onChange={(kind) => setEdgeKind(edgeSelection[0].id, kind)} /> : <div className="py-10 text-center text-sm text-white/45">{selection.length ? `${selection.length} objects selected` : edgeSelection.length ? `${edgeSelection.length} connections selected` : "Select an object or a connection to edit it."}</div>}</TabsContent>
         <TabsContent value="brand" className="m-0 space-y-4 p-4"><div><p className="text-sm font-semibold text-white">Project source of truth</p><p className="mt-1 text-xs leading-5 text-white/45">Only relevant fields and selected objects are sent to AI providers.</p></div>{BRAND_FIELDS.map((field) => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-white/65">{field.label}</Label><Textarea value={brandDraft[field.key] ?? ""} placeholder={field.placeholder} className="min-h-16 bg-white/5 text-xs text-white" onChange={(event) => setBrandDraft((current) => ({ ...current, [field.key]: event.target.value }))} /></div>)}<Button className="w-full bg-[#CB2039]" disabled={saveBrand.isPending} onClick={async () => { try { await saveBrand.mutateAsync(brandDraft); toast({ description: "Brand context saved." }); } catch (error) { toast({ title: "Brand context was not saved", description: error instanceof Error ? error.message : "Try again.", variant: "destructive" }); } }}>{saveBrand.isPending && <Loader2 size={14} className="mr-2 animate-spin" />}Save brand context</Button></TabsContent>
         <TabsContent value="assets" className="m-0 space-y-3 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Asset library</p><p className="text-xs text-white/45">Private · {assets.length} assets</p></div><Button size="icon" variant="outline" onClick={() => fileInput.current?.click()} aria-label="Upload asset"><Plus size={14} /></Button></div>{assets.length === 0 ? <p className="py-10 text-center text-xs text-white/40">No uploaded or generated assets.</p> : <div className="grid grid-cols-2 gap-2">{assets.map((asset) => <button key={asset.id} className="overflow-hidden rounded-lg border border-white/10 bg-white/5 text-left" onClick={() => addNode(asset.source_type === "reference" ? "reference" : "image", { title: asset.original_filename, body: `${asset.source_type} asset`, assetId: asset.id, assetUrl: asset.signedUrl ?? "", width: 360, height: 340 })}>{asset.signedUrl ? <img src={asset.signedUrl} alt="" className="aspect-square w-full object-cover" /> : <div className="aspect-square bg-white/5" />}<p className="truncate p-2 text-[10px] text-white/60">{asset.original_filename}</p></button>)}</div>}</TabsContent>

@@ -22,6 +22,12 @@ export interface GraphEdge {
   target: string;
   /** Missing means `association`: the meaning every edge had before kinds existed. */
   kind?: CreativeEdgeKind;
+  /**
+   * Drawn by the canvas from a result back to what it was made from, rather
+   * than by a person. Carries direction like any informing arrow; see
+   * `pictureSourceIds` for the one thing it does differently.
+   */
+  madeFrom?: boolean;
 }
 
 export interface InheritedContext {
@@ -93,6 +99,25 @@ export function collectInheritedContext(
   }
 
   return found;
+}
+
+/**
+ * Connected cards whose picture may travel with a request as a reference image.
+ *
+ * An arrow a person draws sends the picture at its far end, as the canvas help
+ * promises. A made-from arrow is different only here: the pictures behind a
+ * result are its earlier drafts, and selecting a picture to change it should
+ * send that picture, not every version before it. So made-from arrows bring
+ * pictures along only when nothing selected is a picture — selecting the card
+ * of a run that failed, say, and trying again with the photo it was working on.
+ */
+export function pictureSourceIds(
+  edges: GraphEdge[],
+  selectedIds: string[],
+  options: { selectionHasPicture: boolean; isExcluded?: (id: string) => boolean },
+): string[] {
+  const usable = options.selectionHasPicture ? edges.filter((edge) => !edge.madeFrom) : edges;
+  return collectInheritedContext(usable, selectedIds, { isExcluded: options.isExcluded }).map((entry) => entry.id);
 }
 
 /** Sequence links as predecessor/successor maps, ignoring anything malformed. */

@@ -25,10 +25,29 @@ const MAX_IMAGE_PROMPT_CHARS = 2_400;
  */
 const SINGLE_OUTPUT = "Return exactly one finished image. Do not produce a collage, grid, contact sheet, split screen, side-by-side layout or before-and-after pair, do not divide the frame into panels, and do not include the reference images themselves anywhere in the output.";
 
-/** Brand fields that describe how a picture should look, not how copy reads. */
+/**
+ * Brand fields that describe how a picture should look, not how copy reads,
+ * with the words an image model is given for each. A field name like
+ * `brandName` means nothing to a picture model; "Brand" and "Avoid" do.
+ */
 const VISUAL_BRAND_FIELDS = [
-  "visualPrinciples", "approvedColors", "requiredElements", "prohibitedElements", "typography", "brandName",
+  ["visualPrinciples", "Look"],
+  ["approvedColors", "Colors"],
+  ["typography", "Type"],
+  ["requiredElements", "Include"],
+  ["prohibitedElements", "Avoid"],
 ] as const;
+
+/**
+ * Cards that are pictures. Their picture travels as a reference image; the text
+ * on them is a caption ("Reference notes", the instruction that made them), and
+ * a generation card's text can be an error message. None of it describes what
+ * to draw, so it is kept out of an image prompt.
+ */
+const PICTURE_CARD_TYPES = new Set(["image", "reference", "generation"]);
+
+const describesPicture = (node: Record<string, unknown>) =>
+  !PICTURE_CARD_TYPES.has(String(node.type)) && !node.assetId;
 
 export const LV_CANVAS_SYSTEM = `${LV_BRAND_IDENTITY_GUARDRAIL}
 
@@ -123,7 +142,7 @@ export function buildCreativeContext(request: CreativeRequest, project?: Project
     systemInstructions: LV_CANVAS_SYSTEM,
     structuredContext,
     enhancedPrompt,
-    imagePrompt: buildImagePrompt(request, selected, inherited),
+    imagePrompt: buildImagePrompt(request, selected, inherited, project),
     manifest: {
       selectedObjectIds: included.map((node) => node.id),
       excludedObjectIds: excluded.map((node) => node.id),
@@ -136,48 +155,84 @@ export function buildCreativeContext(request: CreativeRequest, project?: Project
 }
 
 /**
+ * One card as a line of an image prompt: its title, then its text.
+ *
+ * A card holding an AI reply reads "Instruction … Response …". The response is
+ * the content; the instruction that asked for it is not something to draw.
+ */
+const cardLine = (node: Record<string, unknown>, max: number) => {
+  const title = typeof node.title === "string" ? node.title.trim() : "";
+  const raw = typeof node.text === "string" ? node.text.trim() : "";
+  const reply = raw.startsWith("Instruction\n") ? raw.match(/\nResponse\n([\s\S]+)$/)?.[1] : undefined;
+  const text = (reply ?? raw).trim();
+  const line = title && text && !text.startsWith(title) ? `${title}: ${text}` : text || title;
+  return (cleanText(line.replace(/\s+/g, " "), max) as string) || "";
+};
+
+/**
  * The prompt an image model actually receives.
  *
- * The instruction leads, because it is the subject. Attached pictures are named
- * in the order they are sent so an instruction can refer to "the first image"
- * and mean something. Everything else is trimmed to what is visible in a
- * picture and capped hard — a long prompt does not make a more faithful edit,
- * it makes a vaguer one.
+ * In order:
+ *  1. The instruction, because it is the subject.
+ *  2. The attached pictures, named in the order they are sent, so "the first
+ *     image" means something.
+ *  3. Who "LV" is. Before anything else is read into the letters: with only
+ *     "Brand: LV Branding" and "Textured Luxury" to go on, a sweater came back
+ *     carrying a fashion-house logo.
+ *  4. The text of the selected cards. A concept card selected for "make the key
+ *     visual" is what the picture is of; it used to be left out, and the model
+ *     drew from the one-line instruction alone.
+ *  5. The brand's look, and connected direction, a line each.
+ *  6. The one-image rule.
+ *
+ * 3 and 6 are never trimmed; the cap comes out of 4 and 5. A long prompt does
+ * not make a more faithful picture, it makes a vaguer one.
  */
 function buildImagePrompt(
   request: CreativeRequest,
   selected: Array<Record<string, unknown>>,
   inherited: Array<Record<string, unknown>>,
+  project?: ProjectContext,
 ): string {
-  const parts: string[] = [cleanText(request.instruction, 1_200) as string];
-
   const references = request.referenceAssetIds ?? [];
-  if (references.length) {
-    const titleFor = (assetId: string) => {
-      const match = [...selected, ...inherited].find((node) => node.assetId === assetId);
-      return typeof match?.title === "string" && match.title.trim() ? match.title.trim().slice(0, 80) : "untitled";
-    };
-    parts.push(references.map((assetId, index) => `Image ${index + 1}: ${titleFor(assetId)}`).join("\n"));
-  }
+  const titleFor = (assetId: string) => {
+    const match = [...selected, ...inherited].find((node) => node.assetId === assetId);
+    return typeof match?.title === "string" && match.title.trim() ? match.title.trim().slice(0, 80) : "untitled";
+  };
+  const imageList = references.map((assetId, index) => `Image ${index + 1}: ${titleFor(assetId)}`).join("\n");
+  // The instruction gets up to 1,200 characters, less whatever the fixed parts
+  // need, so the whole prompt stays inside the cap with four images attached.
+  const instructionRoom = Math.min(
+    1_200,
+    MAX_IMAGE_PROMPT_CHARS - imageList.length - LV_BRAND_VISUAL_IDENTITY_GUARDRAIL.length - SINGLE_OUTPUT.length - 8,
+  );
+  const head = [cleanText(request.instruction, instructionRoom) as string, imageList].filter(Boolean);
+
+  const context: string[] = [];
+
+  const subject = selected.filter(describesPicture).map((node) => cardLine(node, 300)).filter(Boolean);
+  if (subject.length) context.push(`Subject — ${subject.join(" | ")}`);
 
   const brand = (request.brandContext ?? {}) as Record<string, unknown>;
-  const visual = VISUAL_BRAND_FIELDS
-    .map((field) => [field, cleanText(brand[field], 220)] as const)
-    .filter(([, value]) => typeof value === "string" && value.trim());
-  if (visual.length) {
-    parts.push(`Brand constraints — ${visual.map(([field, value]) => `${field}: ${value}`).join("; ")}`);
+  const brandName = [brand.brandName, project?.clientName, project?.name]
+    .map((value) => cleanText(value, 120))
+    .find((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  const look = VISUAL_BRAND_FIELDS
+    .map(([field, label]) => [label, cleanText(brand[field], 220)] as const)
+    .filter(([, value]) => typeof value === "string" && value.trim())
+    .map(([label, value]) => `${label}: ${value}`);
+  if (brandName || look.length) {
+    context.push(`Brand — ${[brandName, ...look].filter(Boolean).join(". ")}`);
   }
 
   // Direction that arrived through an arrow is guidance for the look, kept to a
-  // line each so it cannot outweigh the instruction.
-  const direction = inherited
-    .map((node) => cleanText(node.text ?? node.title, 200))
-    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
-    .slice(0, 3);
-  if (direction.length) parts.push(`Creative direction — ${direction.join("; ")}`);
+  // line each so it cannot outweigh the instruction. Pictures upstream travel
+  // as pictures, not as their captions.
+  const direction = inherited.filter(describesPicture).map((node) => cardLine(node, 200)).filter(Boolean).slice(0, 3);
+  if (direction.length) context.push(`Creative direction — ${direction.join("; ")}`);
 
-  // Last, and never trimmed away: the cap applies to everything before it.
-  const permanentRules = `${LV_BRAND_VISUAL_IDENTITY_GUARDRAIL}\n\n${SINGLE_OUTPUT}`;
-  const body = parts.join("\n\n").slice(0, MAX_IMAGE_PROMPT_CHARS - permanentRules.length - 2);
-  return `${body}\n\n${permanentRules}`;
+  const opening = head.join("\n\n");
+  const fixed = opening.length + LV_BRAND_VISUAL_IDENTITY_GUARDRAIL.length + SINGLE_OUTPUT.length + 6;
+  const middle = context.join("\n\n").slice(0, Math.max(0, MAX_IMAGE_PROMPT_CHARS - fixed - 2));
+  return [opening, LV_BRAND_VISUAL_IDENTITY_GUARDRAIL, middle, SINGLE_OUTPUT].filter(Boolean).join("\n\n");
 }

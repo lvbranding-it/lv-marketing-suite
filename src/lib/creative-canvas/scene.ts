@@ -30,6 +30,8 @@ export interface CreativeSceneEdge {
   target: string;
   kind?: "association" | "sequence" | "reference";
   label?: string;
+  /** Drawn by the canvas from a result back to its sources. */
+  madeFrom?: boolean;
 }
 
 export interface CreativeSceneDocument {
@@ -46,6 +48,37 @@ export function createEmptyScene(): CreativeSceneDocument {
 
 export function serializeScene(scene: Omit<CreativeSceneDocument, "savedAt"> | CreativeSceneDocument): CreativeSceneDocument {
   return { ...scene, schemaVersion: 1, savedAt: new Date().toISOString() };
+}
+
+/** Objects with sorted keys and no undefined fields, numbers rounded to a thousandth. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().filter((key) => record[key] !== undefined).map((key) => [key, canonical(record[key])]),
+    );
+  }
+  if (typeof value === "number") return Math.round(value * 1000) / 1000;
+  return value;
+}
+
+/**
+ * What decides whether a scene needs saving: two scenes with the same
+ * fingerprint are the same document.
+ *
+ * A plain JSON.stringify could not tell. The scene comes back from Postgres as
+ * jsonb, which stores object keys in its own order, so the copy just loaded
+ * never matched the same scene rebuilt from the canvas, and every open was
+ * written back as an edit — raising the version, and with it the chance that a
+ * second open tab's next save is refused as a conflict. So keys are sorted,
+ * undefined fields dropped, and positions rounded past the float noise a
+ * restored viewport picks up. `savedAt` is left out because it is stamped with
+ * the current time on every serialization.
+ */
+export function sceneFingerprint(scene: CreativeSceneDocument): string {
+  const { savedAt: _savedAt, ...rest } = scene;
+  return JSON.stringify(canonical(rest));
 }
 
 export function restoreScene(value: unknown): CreativeSceneDocument | null {

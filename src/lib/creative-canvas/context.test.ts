@@ -68,10 +68,27 @@ describe("the prompt an image model receives", () => {
     expect(imagePrompt.startsWith("Keep the person and face from the first image")).toBe(true);
   });
 
-  it("never interprets LV Branding visual assets as Louis Vuitton", () => {
+  it("tells the image model who LV is before anything else is read into the letters", () => {
     const { imagePrompt } = buildCreativeContext(outfitTransfer());
     expect(imagePrompt).toContain(LV_BRAND_VISUAL_IDENTITY_GUARDRAIL);
-    expect(imagePrompt).toContain("not Louis Vuitton or LVMH");
+    expect(imagePrompt.indexOf(LV_BRAND_VISUAL_IDENTITY_GUARDRAIL)).toBeLessThan(imagePrompt.indexOf("Brand — LV Branding"));
+    expect(imagePrompt).not.toMatch(/louis|vuitton|lvmh/i);
+  });
+
+  /**
+   * The request that came back with a fashion-house logo on the sweater: the
+   * whole brand side of that prompt was "visualPrinciples: High-Contrast,
+   * Cinematic, Textured Luxury; brandName: LV Branding".
+   */
+  it("gives the luxury-sweater request an identity to read LV by", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "generate_image",
+      instruction: "Change the color of the sweater to red and make the background New York",
+      brandContext: { brandName: "LV Branding", visualPrinciples: "High-Contrast, Cinematic, Textured Luxury" },
+    }));
+    expect(imagePrompt).toContain("Brand — LV Branding. Look: High-Contrast, Cinematic, Textured Luxury");
+    expect(imagePrompt).toContain("not a fashion or luxury-goods label");
+    expect(imagePrompt).not.toContain("brandName:");
   });
 
   it("stays within the image model prompt budget", () => {
@@ -111,6 +128,66 @@ describe("the prompt an image model receives", () => {
     }));
     expect(imagePrompt.indexOf("A product shot of the bottle")).toBe(0);
     expect(imagePrompt).toContain("Low golden light");
+  });
+
+  it("draws from the selected card's text, not only the instruction", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "generate_image",
+      instruction: "Make the key visual",
+      selectedNodes: [
+        { id: "n1", type: "conversation", title: "Campaign concept", text: "A founder at dawn on a Houston rooftop, city waking behind her", role: "selected" },
+      ],
+    }));
+    expect(imagePrompt).toContain("Subject — Campaign concept: A founder at dawn on a Houston rooftop");
+  });
+
+  it("takes an AI reply card's response, not the instruction that asked for it", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "generate_image",
+      instruction: "Make the key visual",
+      selectedNodes: [{
+        id: "n1", type: "conversation", title: "Campaign concept", role: "selected",
+        text: "Instruction\nGive me three concepts from this photo\n\nResponse\nA founder at dawn on a Houston rooftop",
+      }],
+    }));
+    expect(imagePrompt).toContain("Subject — Campaign concept: A founder at dawn on a Houston rooftop");
+    expect(imagePrompt).not.toContain("Give me three concepts");
+  });
+
+  it("keeps picture captions and failed-run errors out of the prompt", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "edit_image",
+      instruction: "Warm the light",
+      referenceAssetIds: ["asset-photo"],
+      selectedNodes: [
+        { id: "n1", type: "reference", title: "photo.jpg", text: "Reference notes", assetId: "asset-photo", role: "selected" },
+        { id: "n2", type: "generation", title: "Generate image", text: "Warm the light\n\nGeneration timed out", role: "inherited", depth: 1 },
+      ],
+    }));
+    expect(imagePrompt).toContain("Image 1: photo.jpg");
+    expect(imagePrompt).not.toContain("Reference notes");
+    expect(imagePrompt).not.toContain("timed out");
+  });
+
+  it("names the client when the brand panel is empty", () => {
+    const { imagePrompt } = buildCreativeContext(
+      request({ operation: "generate_image", instruction: "A storefront at night" }),
+      { name: "Spring launch", clientName: "Casa Melilla" },
+    );
+    expect(imagePrompt).toContain("Brand — Casa Melilla");
+  });
+
+  it("stays inside the cap with a long instruction and four pictures", () => {
+    const { imagePrompt } = buildCreativeContext(request({
+      operation: "edit_image",
+      instruction: "x".repeat(5_000),
+      referenceAssetIds: ["a1", "a2", "a3", "a4"],
+      selectedNodes: ["a1", "a2", "a3", "a4"].map((assetId) => ({ id: assetId, type: "image", title: "y".repeat(200), assetId, role: "selected" as const })),
+      brandContext: { brandName: "LV Branding", visualPrinciples: "z".repeat(5_000) },
+    }));
+    expect(imagePrompt.length).toBeLessThanOrEqual(2_400);
+    expect(imagePrompt).toContain(LV_BRAND_VISUAL_IDENTITY_GUARDRAIL);
+    expect(imagePrompt.endsWith("in the output.")).toBe(true);
   });
 
   it("leaves the writing prompt alone", () => {
