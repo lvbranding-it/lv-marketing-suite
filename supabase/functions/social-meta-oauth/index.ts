@@ -14,6 +14,10 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const APP_URL = Deno.env.get("APP_URL") || "https://marketing.lvbranding.com";
 const META_APP_ID = Deno.env.get("META_APP_ID") || "";
 const META_APP_SECRET = Deno.env.get("META_APP_SECRET") || "";
+// A Facebook Login for Business configuration (User access token) names the
+// permissions in the Meta app itself; Meta recommends sending its ID instead
+// of a scope list. Without one, the scope list below is requested directly.
+const META_LOGIN_CONFIG_ID = Deno.env.get("META_LOGIN_CONFIG_ID") || "";
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/social-meta-oauth`;
 const SCOPES = [
   "pages_show_list",
@@ -22,6 +26,10 @@ const SCOPES = [
   "instagram_basic",
   "instagram_content_publish",
   "business_management",
+  // Meta requires both to publish to Instagram when someone's role on the
+  // linked Page comes through a Business Portfolio, as an agency's usually does.
+  "ads_management",
+  "ads_read",
 ];
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -207,7 +215,8 @@ serve(async (req) => {
     authUrl.searchParams.set("client_id", META_APP_ID);
     authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.set("state", rawState);
-    authUrl.searchParams.set("scope", SCOPES.join(","));
+    if (META_LOGIN_CONFIG_ID) authUrl.searchParams.set("config_id", META_LOGIN_CONFIG_ID);
+    else authUrl.searchParams.set("scope", SCOPES.join(","));
     authUrl.searchParams.set("response_type", "code");
     return json({ url: authUrl.toString(), permissions: SCOPES });
   } catch (error) {

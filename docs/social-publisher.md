@@ -18,6 +18,7 @@ Configure server-only Edge Function secrets:
 npx supabase secrets set \
   META_APP_ID=... \
   META_APP_SECRET=... \
+  META_LOGIN_CONFIG_ID=... \
   META_GRAPH_VERSION=v25.0 \
   SOCIAL_TOKEN_ENCRYPTION_KEY=... \
   SOCIAL_PUBLISHER_WORKER_SECRET=... \
@@ -29,29 +30,66 @@ Use a randomly generated value of at least 32 characters for both social
 secrets. `SOCIAL_TOKEN_ENCRYPTION_KEY` encrypts Meta tokens with AES-GCM before
 database storage. The browser roles have no grants on token tables.
 
-In the Meta application, configure this exact OAuth redirect URI:
+`META_LOGIN_CONFIG_ID` is optional. When set, the login sends that Facebook
+Login for Business configuration instead of the permission list, as Meta
+recommends; without it, the permissions below are requested directly.
 
-```text
-https://kgdeqwjuspiqraxrlcew.supabase.co/functions/v1/social-meta-oauth
-```
+## Meta app setup
 
-The app requests `pages_show_list`, `pages_read_engagement`,
-`pages_manage_posts`, `instagram_basic`, `instagram_content_publish`, and
-`business_management`. Meta app mode, access level, Business Portfolio access,
-Page tasks, and the Instagram professional-account link must also be correct.
+The app ("LV Social Publisher") is a Business app using Facebook Login for
+Business. It needs three use cases; others only add review requirements:
+
+- **Manage everything on your Page**: `pages_show_list`, `pages_read_engagement`,
+  `pages_manage_posts`, `business_management`
+- **Manage messaging & content on Instagram**, set up under *API setup with
+  Facebook login* (not *Instagram login*, whose `instagram_business_*`
+  permissions, app ID and secret this code does not use):
+  `instagram_basic`, `instagram_content_publish`
+- **Create & manage ads with Marketing API**: `ads_management`, `ads_read`.
+  Meta requires these to publish to Instagram when someone's role on the
+  linked Page comes through a Business Portfolio.
+
+In Facebook Login for Business:
+
+- **Settings**: add this exact Valid OAuth Redirect URI:
+
+  ```text
+  https://kgdeqwjuspiqraxrlcew.supabase.co/functions/v1/social-meta-oauth
+  ```
+
+- **Configurations**: create one with token type *User access token* and the
+  eight permissions above; its ID is `META_LOGIN_CONFIG_ID`.
+
+In App settings > Basic: app icon, category, privacy policy URL and a data
+deletion URL (instructions page or callback). These are required to publish.
+
+Access: whoever clicks Connect Meta needs a role on the app (App roles) and
+must manage the Pages in Meta Business Suite; each Instagram account must be a
+professional account linked to its Page, and the Page must have completed Page
+Publishing Authorization if Meta asks for it. Meta allows 100 API-published
+Instagram posts per account in any 24 hours. With Standard Access, which needs no
+App Review or business verification, only people with an app role can connect.
+Letting anyone else connect needs Advanced Access, App Review and business
+verification.
+
+App mode: while the app is unpublished, anything it posts is visible only to
+people with a role on the app. Publish the app before posting for real; test
+posts made before then become public when it is published, so delete them.
 
 ## Recurring worker
 
-Before applying the migration, add these Supabase Vault entries:
+`20261001200000_social_publisher_worker.sql` installs the one-minute `pg_cron`
+task that publishes queued posts. It needs one Vault entry, created in the SQL
+editor with the same value as the `SOCIAL_PUBLISHER_WORKER_SECRET` Edge
+Function secret:
 
-- `project_url`: the Supabase project URL
-- `service_role_key`: the project service-role key, used only as the gateway API key
-- `social_publisher_worker_secret`: the same value set on the Edge Function
+```sql
+select vault.create_secret('<SOCIAL_PUBLISHER_WORKER_SECRET value>', 'social_publisher_worker_secret');
+```
 
-The migration installs a one-minute `pg_cron` task when all three entries are
-present. If they are absent, the migration emits a warning and leaves jobs
-queued safely. After adding the entries later, rerun only the guarded scheduler
-block at the bottom of the migration.
+The migration stops with an error if that entry is missing, and can be rerun.
+(The first migration's version of this block wanted three entries, including
+the service role key; none had been added, so it never installed the task.)
 
 ## Publishing behavior
 

@@ -25,6 +25,8 @@ export const META_PERMISSIONS = [
   { scope: "instagram_basic", reason: "Identify linked professional Instagram accounts" },
   { scope: "instagram_content_publish", reason: "Publish approved Instagram content" },
   { scope: "business_management", reason: "Discover eligible business assets" },
+  { scope: "ads_management", reason: "Required by Meta to publish to Instagram when Page access comes through a Business Portfolio" },
+  { scope: "ads_read", reason: "Required by Meta alongside ads_management for that Instagram publishing" },
 ];
 
 export function validateSocialDraft(input: {
