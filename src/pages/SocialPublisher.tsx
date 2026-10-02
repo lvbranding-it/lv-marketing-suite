@@ -27,7 +27,7 @@ import {
   type ComposerDraft, type SocialAccount, type SocialPost, type SocialVariant,
 } from "@/hooks/useSocialPublisher";
 import {
-  defaultScheduleValue, formatSocialDate, META_PERMISSIONS, SOCIAL_STATUS_META,
+  defaultScheduleValue, formatSocialDate, formatsForMedia, META_PERMISSIONS, MIN_SCHEDULE_LEAD_MINUTES, minutesUntil, SOCIAL_STATUS_META,
   validateSocialDraft, type SocialPlatform, type SocialWorkflowStatus,
 } from "@/lib/socialPublisher";
 import { cn } from "@/lib/utils";
@@ -114,7 +114,8 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
   const { toast } = useToast();
   const createPost = useCreateSocialPost();
   const storageKey = `lv-social-composer:${org?.id || "unknown"}`;
-  const [draft, setDraft] = useState<ComposerDraft>(() => ({ ...EMPTY_DRAFT, timezone }));
+  // EMPTY_DRAFT's time was worked out when the page loaded; a new draft gets a fresh one.
+  const [draft, setDraft] = useState<ComposerDraft>(() => ({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone }));
   const [schedule, setSchedule] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -150,13 +151,13 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
       title: draft.title, accountIds: draft.accountIds,
       captions: { facebook: draft.facebookCaption, instagram: draft.instagramCaption },
       formats, files: draft.files, sizes: previews.map((preview) => preview.size),
-      scheduledLocal: schedule ? draft.scheduledLocal : undefined,
+      scheduledLocal: schedule ? draft.scheduledLocal : undefined, timezone: draft.timezone,
     });
     if (validation.length) return setErrors(validation);
     try {
       await createPost.mutateAsync({ draft, schedule });
       localStorage.removeItem(storageKey);
-      setDraft({ ...EMPTY_DRAFT, timezone });
+      setDraft({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone });
       setErrors([]);
       onOpenChange(false);
       toast({ description: schedule ? "Post scheduled for both channels." : "Draft saved." });
@@ -206,7 +207,10 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
               <ComposerMediaPicker
                 files={draft.files}
                 previews={previews}
-                onChange={(files) => setDraft((current) => ({ ...current, files }))}
+                onChange={(files) => setDraft((current) => {
+                  const fitting = formatsForMedia(files, { facebook: current.facebookFormat, instagram: current.instagramFormat });
+                  return { ...current, files, facebookFormat: fitting.facebook, instagramFormat: fitting.instagram };
+                })}
                 instagram={hasInstagram}
                 instagramFeed={hasInstagram && ["image", "carousel"].includes(draft.instagramFormat)}
               />
@@ -229,9 +233,24 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
               </div>
             )) : <div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-background p-6 text-center"><div><LayoutGrid className="mx-auto h-8 w-8 text-muted-foreground/50" /><p className="mt-3 text-sm text-muted-foreground">Select a destination to see its preview.</p></div></div>}
             <div className="rounded-xl border bg-background p-4">
-              <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Schedule this post</p><p className="text-xs text-muted-foreground">Times shown in {timezone}</p></div><Switch checked={schedule} disabled={approvalRequired || !canSchedule} onCheckedChange={setSchedule} /></div>
+              <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Schedule this post</p><p className="text-xs text-muted-foreground">Times shown in {timezone}</p></div><Switch checked={schedule} disabled={approvalRequired || !canSchedule} onCheckedChange={(on) => {
+                setSchedule(on);
+                // The time is set when the composer first loads and kept with
+                // the draft, so it can be in the past by the time it is used.
+                if (on) setDraft((current) => minutesUntil(current.scheduledLocal, current.timezone) < 5 ? { ...current, scheduledLocal: defaultScheduleValue() } : current);
+              }} /></div>
               {(approvalRequired || !canSchedule) && <p className="mt-2 text-xs text-amber-700">{approvalRequired ? "Approval is required. Save and submit the draft before scheduling." : "A manager or administrator must schedule the draft."}</p>}
-              {schedule && <Input type="datetime-local" className="mt-3" value={draft.scheduledLocal} onChange={(event) => setDraft({ ...draft, scheduledLocal: event.target.value })} />}
+              {schedule && (
+                <div className="mt-3 space-y-2">
+                  <Input type="datetime-local" value={draft.scheduledLocal} onChange={(event) => setDraft({ ...draft, scheduledLocal: event.target.value })} />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">At least {MIN_SCHEDULE_LEAD_MINUTES} minutes from now.</p>
+                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDraft((current) => ({ ...current, scheduledLocal: defaultScheduleValue(5, 1) }))}>
+                      <Clock3 className="mr-1.5 h-3.5 w-3.5" />In 5 minutes
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
             {errors.length > 0 && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <p key={error} className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>)}</div>}
           </div>

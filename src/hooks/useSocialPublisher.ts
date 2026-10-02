@@ -107,18 +107,34 @@ export function useSocialPublisherData() {
 
 type UploadedAsset = { path: string; url: string; file: File; position: number };
 
-async function uploadAsset(orgId: string, postId: string, file: File, position: number): Promise<UploadedAsset> {
+// The database's reasons for refusing to schedule, in words. A refusal used to
+// reach the screen as "Unable to save this post.", which said nothing.
+const SCHEDULE_REFUSALS: Record<string, string> = {
+  POST_VALIDATION_FAILED: "The post could not be scheduled. The time must be more than a minute away, and every destination must be switched on, connected, and have its media.",
+  APPROVAL_REQUIRED: "This workspace needs approval before scheduling. Save the draft and submit it for review.",
+  POST_NOT_SCHEDULABLE: "This post is already scheduled or published.",
+  NOT_AUTHORIZED: "Only managers and administrators can schedule posts.",
+};
+
+function saveError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  const message = typeof (error as { message?: unknown })?.message === "string" ? (error as { message: string }).message : "";
+  return new Error(SCHEDULE_REFUSALS[message] || message || "Unable to save this post.");
+}
+
+async function uploadAsset(orgId: string, postId: string, file: File, position: number, stored: string[]): Promise<UploadedAsset> {
   const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").slice(-100);
   const path = `${orgId}/${postId}/${crypto.randomUUID()}-${safeName}`;
   const { error } = await supabase.storage.from("social-media").upload(path, file, { contentType: file.type, upsert: false });
   if (error) throw error;
+  stored.push(path);
   const { data } = supabase.storage.from("social-media").getPublicUrl(path);
   return { path, url: data.publicUrl, file, position };
 }
 
-async function uploadAssets(orgId: string, postId: string, files: File[]) {
+async function uploadAssets(orgId: string, postId: string, files: File[], stored: string[]) {
   const uploaded: UploadedAsset[] = [];
-  for (let index = 0; index < files.length; index++) uploaded.push(await uploadAsset(orgId, postId, files[index], index));
+  for (let index = 0; index < files.length; index++) uploaded.push(await uploadAsset(orgId, postId, files[index], index, stored));
   return uploaded;
 }
 
@@ -127,11 +143,11 @@ async function uploadAssets(orgId: string, postId: string, files: File[]) {
  * (PNG, WebP, wider than 1440 pixels or over 8 MB), uploaded alongside the
  * original, which Facebook keeps. Files that already fit are not uploaded twice.
  */
-async function instagramAssets(orgId: string, postId: string, uploaded: UploadedAsset[]) {
+async function instagramAssets(orgId: string, postId: string, uploaded: UploadedAsset[], stored: string[]) {
   const result: UploadedAsset[] = [];
   for (const asset of uploaded) {
     const copy = await instagramImage(asset.file);
-    result.push(copy === asset.file ? asset : await uploadAsset(orgId, postId, copy, asset.position));
+    result.push(copy === asset.file ? asset : await uploadAsset(orgId, postId, copy, asset.position, stored));
   }
   return result;
 }
@@ -146,9 +162,12 @@ export function useCreateSocialPost() {
         org_id: org.id, title: draft.title.trim(), internal_notes: draft.notes.trim() || null,
         scheduled_timezone: draft.timezone,
       }).select("*").single();
-      if (postError) throw postError;
+      if (postError) throw saveError(postError);
+      // Every file stored for this post, removed again if saving fails: the
+      // post was deleted on failure, but its media stayed in storage.
+      const stored: string[] = [];
       try {
-        const uploaded = await uploadAssets(org.id, post.id, draft.files);
+        const uploaded = await uploadAssets(org.id, post.id, draft.files, stored);
         const { data: accounts, error: accountError } = await db.from("social_accounts").select("id,platform").in("id", draft.accountIds).eq("org_id", org.id);
         if (accountError) throw accountError;
         const scheduledUtc = schedule ? zonedDateTimeToUtc(draft.scheduledLocal, draft.timezone) : null;
@@ -162,7 +181,7 @@ export function useCreateSocialPost() {
         const { data: savedVariants, error: variantError } = await db.from("social_post_variants").insert(variants).select("id,platform");
         if (variantError) throw variantError;
         const forInstagram = (savedVariants || []).some((variant: { platform: SocialPlatform }) => variant.platform === "instagram")
-          ? await instagramAssets(org.id, post.id, uploaded)
+          ? await instagramAssets(org.id, post.id, uploaded, stored)
           : uploaded;
         const assets = (savedVariants || []).flatMap((variant: { id: string; platform: SocialPlatform }) => (variant.platform === "instagram" ? forInstagram : uploaded).map((asset) => ({
           org_id: org.id, post_variant_id: variant.id, storage_path: asset.path, public_url: asset.url,
@@ -180,7 +199,8 @@ export function useCreateSocialPost() {
         return post;
       } catch (error) {
         await db.from("social_posts").delete().eq("id", post.id);
-        throw error;
+        if (stored.length) await supabase.storage.from("social-media").remove(stored).catch(() => undefined);
+        throw saveError(error);
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["social-publisher", org?.id] }),

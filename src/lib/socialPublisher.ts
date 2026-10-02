@@ -31,6 +31,36 @@ export const META_PERMISSIONS = [
   { scope: "ads_read", reason: "Required by Meta alongside ads_management for that Instagram publishing" },
 ];
 
+/**
+ * How far ahead a post must be scheduled. The database refuses anything within
+ * a minute of now; the extra minute covers the time saving takes.
+ */
+export const MIN_SCHEDULE_LEAD_MINUTES = 2;
+
+/** Minutes from now until a time written in the workspace's time zone, or -Infinity if it is not a time. */
+export function minutesUntil(localValue: string, timeZone: string, now = Date.now()) {
+  try {
+    return (Date.parse(zonedDateTimeToUtc(localValue, timeZone)) - now) / 60_000;
+  } catch {
+    return -Infinity;
+  }
+}
+
+/**
+ * The formats that fit the media: a single video is a Facebook video and an
+ * Instagram Reel, several files are an Instagram carousel. A Facebook text or
+ * link post stays one. A video left as "Image" used to reach Facebook's photo
+ * endpoint and fail at publishing time.
+ */
+export function formatsForMedia(files: Pick<File, "type">[], current: { facebook: string; instagram: string }) {
+  if (!files.length) return current;
+  const singleVideo = files.length === 1 && files[0].type.startsWith("video/");
+  return {
+    facebook: ["image", "video"].includes(current.facebook) ? (singleVideo ? "video" : "image") : current.facebook,
+    instagram: files.length > 1 ? "carousel" : singleVideo ? "reel" : "image",
+  };
+}
+
 export function validateSocialDraft(input: {
   title: string;
   accountIds: string[];
@@ -40,11 +70,20 @@ export function validateSocialDraft(input: {
   /** Each file's width and height, in the same order, once read. */
   sizes?: (MediaSize | undefined)[];
   scheduledLocal?: string;
+  /** The workspace time zone the scheduled time is written in. */
+  timezone?: string;
 }) {
   const errors: string[] = [];
   if (!input.title.trim()) errors.push("Add an internal title.");
   if (!input.accountIds.length) errors.push("Select at least one destination.");
-  if (input.scheduledLocal && new Date(input.scheduledLocal).getTime() <= Date.now()) errors.push("Choose a future publishing time.");
+  if (input.scheduledLocal) {
+    const minutes = input.timezone
+      ? minutesUntil(input.scheduledLocal, input.timezone)
+      : (new Date(input.scheduledLocal).getTime() - Date.now()) / 60_000;
+    if (!(minutes >= MIN_SCHEDULE_LEAD_MINUTES)) errors.push(`Choose a publishing time at least ${MIN_SCHEDULE_LEAD_MINUTES} minutes from now.`);
+  }
+  const hasVideo = input.files.some((file) => file.type.startsWith("video/"));
+  const hasImage = input.files.some((file) => file.type.startsWith("image/"));
   for (const platform of ["facebook", "instagram"] as const) {
     if (!input.formats[platform]) continue;
     const format = input.formats[platform];
@@ -58,7 +97,14 @@ export function validateSocialDraft(input: {
     if (platform === "instagram" && caption.length > 2_200) errors.push("Instagram captions cannot exceed 2,200 characters.");
     if (platform === "instagram" && (caption.match(/(^|\s)#[\p{L}\p{N}_]+/gu) || []).length > 30) errors.push("Instagram captions can contain at most 30 hashtags.");
     if (platform === "facebook" && caption.length > 63_206) errors.push("Facebook captions cannot exceed 63,206 characters.");
-    if (["image", "video", "reel"].includes(format) && input.files.length > 1) errors.push(`${format === "reel" ? "Reels" : "Single-media posts"} accept one file.`);
+    if (platform === "facebook" && format === "image" && hasVideo) errors.push("The Facebook version is set to Image, but the media is a video. Choose Video.");
+    if (platform === "facebook" && format === "video" && hasImage) errors.push("The Facebook version is set to Video, but the media is an image. Choose Image.");
+    if (platform === "instagram" && format === "image" && hasVideo) errors.push("The Instagram version is set to Feed image, but the media is a video. Choose Reel.");
+    if (["image", "video", "reel"].includes(format) && input.files.length > 1) {
+      errors.push(platform === "facebook"
+        ? "A Facebook post here takes one image or video. Remove the others, or send the carousel to Instagram only."
+        : format === "reel" ? "A Reel takes one video." : "An Instagram feed image takes one file. Choose Carousel for 2 to 10.");
+    }
     if (format === "carousel" && (input.files.length < 2 || input.files.length > 10)) errors.push("Instagram carousels require 2–10 media files.");
     if (format === "reel" && !input.files.some((file) => file.type.startsWith("video/"))) errors.push("Instagram Reels require a video.");
     // PNG and WebP images get a JPEG copy for Instagram when the post is saved,
@@ -109,9 +155,10 @@ export function formatSocialDate(value: string, timeZone: string, options?: Intl
   }).format(new Date(value));
 }
 
-export function defaultScheduleValue(minutesAhead = 60) {
+/** A time to schedule for, `minutesAhead` from now, rounded up to the next `step` minutes. */
+export function defaultScheduleValue(minutesAhead = 60, step = 15) {
   const date = new Date(Date.now() + minutesAhead * 60_000);
-  date.setMinutes(Math.ceil(date.getMinutes() / 15) * 15, 0, 0);
+  date.setMinutes(Math.ceil((date.getMinutes() + (date.getSeconds() ? 1 : 0)) / step) * step, 0, 0);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
