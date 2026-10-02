@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { zonedDateTimeToUtc, type SocialPlatform } from "@/lib/socialPublisher";
+import { instagramImage } from "@/lib/socialMedia";
 
 const db = supabase as any;
 
@@ -104,18 +105,35 @@ export function useSocialPublisherData() {
   });
 }
 
+type UploadedAsset = { path: string; url: string; file: File; position: number };
+
+async function uploadAsset(orgId: string, postId: string, file: File, position: number): Promise<UploadedAsset> {
+  const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").slice(-100);
+  const path = `${orgId}/${postId}/${crypto.randomUUID()}-${safeName}`;
+  const { error } = await supabase.storage.from("social-media").upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from("social-media").getPublicUrl(path);
+  return { path, url: data.publicUrl, file, position };
+}
+
 async function uploadAssets(orgId: string, postId: string, files: File[]) {
-  const uploaded: Array<{ path: string; url: string; file: File; position: number }> = [];
-  for (let index = 0; index < files.length; index++) {
-    const file = files[index];
-    const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").slice(-100);
-    const path = `${orgId}/${postId}/${crypto.randomUUID()}-${safeName}`;
-    const { error } = await supabase.storage.from("social-media").upload(path, file, { contentType: file.type, upsert: false });
-    if (error) throw error;
-    const { data } = supabase.storage.from("social-media").getPublicUrl(path);
-    uploaded.push({ path, url: data.publicUrl, file, position: index });
-  }
+  const uploaded: UploadedAsset[] = [];
+  for (let index = 0; index < files.length; index++) uploaded.push(await uploadAsset(orgId, postId, files[index], index));
   return uploaded;
+}
+
+/**
+ * Instagram's media: a JPEG copy of any image Instagram cannot take as it is
+ * (PNG, WebP, wider than 1440 pixels or over 8 MB), uploaded alongside the
+ * original, which Facebook keeps. Files that already fit are not uploaded twice.
+ */
+async function instagramAssets(orgId: string, postId: string, uploaded: UploadedAsset[]) {
+  const result: UploadedAsset[] = [];
+  for (const asset of uploaded) {
+    const copy = await instagramImage(asset.file);
+    result.push(copy === asset.file ? asset : await uploadAsset(orgId, postId, copy, asset.position));
+  }
+  return result;
 }
 
 export function useCreateSocialPost() {
@@ -143,7 +161,10 @@ export function useCreateSocialPost() {
         }));
         const { data: savedVariants, error: variantError } = await db.from("social_post_variants").insert(variants).select("id,platform");
         if (variantError) throw variantError;
-        const assets = (savedVariants || []).flatMap((variant: { id: string }) => uploaded.map((asset) => ({
+        const forInstagram = (savedVariants || []).some((variant: { platform: SocialPlatform }) => variant.platform === "instagram")
+          ? await instagramAssets(org.id, post.id, uploaded)
+          : uploaded;
+        const assets = (savedVariants || []).flatMap((variant: { id: string; platform: SocialPlatform }) => (variant.platform === "instagram" ? forInstagram : uploaded).map((asset) => ({
           org_id: org.id, post_variant_id: variant.id, storage_path: asset.path, public_url: asset.url,
           position: asset.position, media_type: asset.file.type.startsWith("video/") ? "video" : "image",
           mime_type: asset.file.type, file_size_bytes: asset.file.size,

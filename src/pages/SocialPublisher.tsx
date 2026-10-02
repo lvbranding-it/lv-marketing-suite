@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
-  CircleDot, Clock3, Copy, ExternalLink, Facebook, FileImage, Instagram,
+  CircleDot, Clock3, Copy, ExternalLink, Facebook, Instagram,
   LayoutGrid, Link2, ListFilter, Loader2, MoreHorizontal, Plus, RefreshCw,
-  RotateCcw, Send, Settings2, ShieldCheck, Sparkles, Trash2, Upload, X,
+  RotateCcw, Send, Settings2, ShieldCheck, Sparkles, Trash2, X,
 } from "lucide-react";
 import { addMonths, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from "date-fns";
 import AppShell from "@/components/layout/AppShell";
@@ -32,6 +32,9 @@ import {
 } from "@/lib/socialPublisher";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import SocialPostPreview from "@/components/social/SocialPostPreview";
+import ComposerMediaPicker from "@/components/social/ComposerMediaPicker";
+import { useMediaPreviews } from "@/hooks/useMediaPreviews";
 
 const TIMEZONE = "America/Chicago";
 const EMPTY_DRAFT: ComposerDraft = {
@@ -133,11 +136,21 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
 
   const selected = accounts.filter((account) => draft.accountIds.includes(account.id));
   const formats = Object.fromEntries(selected.map((account) => [account.platform, account.platform === "facebook" ? draft.facebookFormat : draft.instagramFormat]));
+  const previews = useMediaPreviews(draft.files);
+  const hasInstagram = selected.some((account) => account.platform === "instagram");
+  // The time the previews show: the scheduled one, read as written, or "Just now".
+  const previewWhen = (() => {
+    const match = schedule && /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(draft.scheduledLocal);
+    if (!match) return "Just now";
+    const [, year, month, day, hour, minute] = match.map(Number);
+    return format(new Date(year, month - 1, day, hour, minute), "MMM d 'at' h:mm a");
+  })();
   const submit = async () => {
     const validation = validateSocialDraft({
       title: draft.title, accountIds: draft.accountIds,
       captions: { facebook: draft.facebookCaption, instagram: draft.instagramCaption },
-      formats, files: draft.files, scheduledLocal: schedule ? draft.scheduledLocal : undefined,
+      formats, files: draft.files, sizes: previews.map((preview) => preview.size),
+      scheduledLocal: schedule ? draft.scheduledLocal : undefined,
     });
     if (validation.length) return setErrors(validation);
     try {
@@ -162,13 +175,15 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
           <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" />Create social post</DialogTitle>
           <DialogDescription>One idea, tailored independently for every destination.</DialogDescription>
         </DialogHeader>
-        <div className="grid lg:grid-cols-[1.1fr_.9fr]">
-          <div className="space-y-6 p-6 lg:border-r">
+        {/* minmax(0, …) columns: on a phone the previews and long captions widened
+            the single column past the dialog, which then scrolled sideways. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
+          <div className="min-w-0 space-y-6 p-4 sm:p-6 lg:border-r">
             <div className="space-y-2"><Label htmlFor="social-title">Internal title</Label><Input id="social-title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="September brand story" /></div>
             <div className="space-y-2">
               <Label>Destinations</Label>
-              {accounts.length ? <div className="grid gap-2 sm:grid-cols-2">{accounts.filter((account) => account.status === "active").map((account) => (
-                <button type="button" key={account.id} onClick={() => toggleAccount(account.id)} className={cn("flex items-center justify-between rounded-xl border p-3 text-left transition", draft.accountIds.includes(account.id) ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50")}>
+              {accounts.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{accounts.filter((account) => account.status === "active").map((account) => (
+                <button type="button" key={account.id} onClick={() => toggleAccount(account.id)} className={cn("flex min-w-0 items-center justify-between gap-2 rounded-xl border p-3 text-left transition", draft.accountIds.includes(account.id) ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50")}>
                   <AccountPill account={account} />{draft.accountIds.includes(account.id) && <Check className="h-4 w-4 text-primary" />}
                 </button>
               ))}</div> : <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Connect Meta to choose a Page or Instagram account.</div>}
@@ -188,14 +203,31 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
             )}
             <div className="space-y-2">
               <Label>Media</Label>
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed p-5 text-sm text-muted-foreground transition hover:border-primary hover:text-primary"><Upload className="h-4 w-4" />Choose images or video<input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" className="sr-only" onChange={(event) => setDraft({ ...draft, files: Array.from(event.target.files || []) })} /></label>
-              {draft.files.length > 0 && <div className="flex flex-wrap gap-2">{draft.files.map((file) => <Badge key={`${file.name}-${file.size}`} variant="secondary" className="gap-1"><FileImage className="h-3 w-3" />{file.name}</Badge>)}</div>}
+              <ComposerMediaPicker
+                files={draft.files}
+                previews={previews}
+                onChange={(files) => setDraft((current) => ({ ...current, files }))}
+                instagram={hasInstagram}
+                instagramFeed={hasInstagram && ["image", "carousel"].includes(draft.instagramFormat)}
+              />
             </div>
             <div className="space-y-2"><Label>Internal notes</Label><Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} rows={2} placeholder="Context for reviewers (never published)" /></div>
           </div>
-          <div className="space-y-5 bg-muted/30 p-6">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live preview</p><p className="mt-1 text-sm text-muted-foreground">Previews approximate the final platform layout.</p></div>
-            {selected.length ? selected.map((account) => <VariantPreview key={account.id} variant={{ id: account.id, platform: account.platform, format: account.platform === "facebook" ? draft.facebookFormat : draft.instagramFormat, caption: account.platform === "facebook" ? draft.facebookCaption : draft.instagramCaption, scheduled_for_utc: null, publication_status: "draft", provider_post_id: null, provider_permalink: null, social_account_id: account.id, social_accounts: account, social_post_assets: [], social_publish_jobs: [] }} />) : <div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-background p-6 text-center"><div><LayoutGrid className="mx-auto h-8 w-8 text-muted-foreground/50" /><p className="mt-3 text-sm text-muted-foreground">Select a destination to see its preview.</p></div></div>}
+          <div className="min-w-0 space-y-5 bg-muted/30 p-4 sm:p-6">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live preview</p><p className="mt-1 text-sm text-muted-foreground">How each destination will show it. Meta may compress or crop media slightly.</p></div>
+            {selected.length ? selected.map((account) => (
+              <div key={account.id} className="space-y-1.5">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><PlatformIcon platform={account.platform} className="h-3.5 w-3.5" />{account.display_name}</p>
+                <SocialPostPreview
+                  account={account}
+                  format={account.platform === "facebook" ? draft.facebookFormat : draft.instagramFormat}
+                  caption={account.platform === "facebook" ? draft.facebookCaption : draft.instagramCaption}
+                  linkUrl={draft.linkUrl}
+                  media={previews}
+                  when={previewWhen}
+                />
+              </div>
+            )) : <div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-background p-6 text-center"><div><LayoutGrid className="mx-auto h-8 w-8 text-muted-foreground/50" /><p className="mt-3 text-sm text-muted-foreground">Select a destination to see its preview.</p></div></div>}
             <div className="rounded-xl border bg-background p-4">
               <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Schedule this post</p><p className="text-xs text-muted-foreground">Times shown in {timezone}</p></div><Switch checked={schedule} disabled={approvalRequired || !canSchedule} onCheckedChange={setSchedule} /></div>
               {(approvalRequired || !canSchedule) && <p className="mt-2 text-xs text-amber-700">{approvalRequired ? "Approval is required. Save and submit the draft before scheduling." : "A manager or administrator must schedule the draft."}</p>}

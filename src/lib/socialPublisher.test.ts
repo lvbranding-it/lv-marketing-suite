@@ -16,6 +16,28 @@ describe("social publisher validation", () => {
     });
     expect(errors).toContain("Instagram carousels require 2–10 media files.");
   });
+
+  it("takes PNG images and MOV video for Instagram, which used to be refused", () => {
+    const png = new File(["x"], "post.png", { type: "image/png" });
+    const mov = new File(["x"], "reel.mov", { type: "video/quicktime" });
+    expect(validateSocialDraft({
+      title: "Launch", accountIds: ["ig"], captions: { instagram: "Caption" },
+      formats: { instagram: "image" }, files: [png], sizes: [{ width: 1080, height: 1350 }],
+    })).toEqual([]);
+    expect(validateSocialDraft({
+      title: "Launch", accountIds: ["ig"], captions: { instagram: "Caption" },
+      formats: { instagram: "reel" }, files: [mov],
+    })).toEqual([]);
+  });
+
+  it("refuses a feed image Instagram cannot take without cropping", () => {
+    const story = new File(["x"], "story.jpg", { type: "image/jpeg" });
+    const errors = validateSocialDraft({
+      title: "Launch", accountIds: ["ig", "fb"], captions: { instagram: "Caption", facebook: "Caption" },
+      formats: { instagram: "image", facebook: "image" }, files: [story], sizes: [{ width: 1080, height: 1920 }],
+    });
+    expect(errors).toEqual(["story.jpg is too tall for an Instagram feed post (1080×1920). Crop it to 4:5 or wider."]);
+  });
 });
 
 describe("workspace timezone conversion", () => {

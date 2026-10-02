@@ -1,3 +1,5 @@
+import { instagramRatioProblem, type MediaSize } from "./socialMedia";
+
 export type SocialPlatform = "facebook" | "instagram";
 export type SocialWorkflowStatus =
   | "draft" | "in_review" | "changes_requested" | "approved" | "scheduled"
@@ -35,6 +37,8 @@ export function validateSocialDraft(input: {
   captions: Partial<Record<SocialPlatform, string>>;
   formats: Partial<Record<SocialPlatform, string>>;
   files: File[];
+  /** Each file's width and height, in the same order, once read. */
+  sizes?: (MediaSize | undefined)[];
   scheduledLocal?: string;
 }) {
   const errors: string[] = [];
@@ -57,8 +61,16 @@ export function validateSocialDraft(input: {
     if (["image", "video", "reel"].includes(format) && input.files.length > 1) errors.push(`${format === "reel" ? "Reels" : "Single-media posts"} accept one file.`);
     if (format === "carousel" && (input.files.length < 2 || input.files.length > 10)) errors.push("Instagram carousels require 2–10 media files.");
     if (format === "reel" && !input.files.some((file) => file.type.startsWith("video/"))) errors.push("Instagram Reels require a video.");
-    if (platform === "instagram" && input.files.some((file) => file.type.startsWith("image/") && file.type !== "image/jpeg")) errors.push("Instagram publishing requires JPEG images.");
-    if (platform === "instagram" && input.files.some((file) => file.type.startsWith("video/") && file.type !== "video/mp4")) errors.push("Instagram publishing requires MP4 video.");
+    // PNG and WebP images get a JPEG copy for Instagram when the post is saved,
+    // and Meta takes MOV as well as MP4, so neither is refused here. The shape
+    // of a feed image cannot be fixed without cropping it, so that is.
+    if (platform === "instagram" && ["image", "carousel"].includes(format)) {
+      input.files.forEach((file, index) => {
+        const size = input.sizes?.[index];
+        const problem = file.type.startsWith("image/") && size ? instagramRatioProblem(size, file.name) : null;
+        if (problem) errors.push(problem);
+      });
+    }
   }
   for (const file of input.files) {
     if (!["image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"].includes(file.type)) {

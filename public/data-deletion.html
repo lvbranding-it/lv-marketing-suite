@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Social Publisher Data Deletion | LV Branding</title>
+  <meta name="description" content="What LV Branding's Social Publisher receives from Meta, how it is stored, and how to have it deleted." />
+  <meta name="robots" content="index, follow" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!--
+    A static page on purpose: Meta checks this address (the app's data
+    deletion instructions URL) and its reviewers read it, so the text is here
+    in the HTML rather than drawn by the app's JavaScript.
+    Everything it says about stored data follows supabase/functions/social-meta-oauth,
+    supabase/functions/social-publish and the social_* tables; keep them in step.
+  -->
+  <style>
+    :root {
+      --red: #cb2039;
+      --ink: #1d1a1b;
+      --muted: #5d5658;
+      --line: #ece5e6;
+      --wash: #faf6f6;
+      --page: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --red: #ef5a6f;
+        --ink: #f3eeee;
+        --muted: #b9afb1;
+        --line: #3a3234;
+        --wash: #241f20;
+        --page: #171314;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 400 17px/1.65 "Fira Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .wrap { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+    header { display: flex; align-items: center; gap: 0.75rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
+    header img { width: 36px; height: 36px; }
+    header span { font-weight: 600; letter-spacing: 0.02em; }
+    h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.75rem; text-wrap: balance; }
+    h2 { font-size: 1.2rem; margin: 2.5rem 0 0.5rem; }
+    p, li { color: var(--ink); }
+    .lead { font-size: 1.1rem; color: var(--muted); margin: 0; }
+    .meta { font-size: 0.85rem; color: var(--muted); margin-top: 0.75rem; }
+    ul, ol { padding-left: 1.25rem; }
+    li { margin: 0.35rem 0; }
+    li::marker { color: var(--red); font-weight: 600; }
+    a { color: var(--red); text-underline-offset: 3px; }
+    a:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; border-radius: 2px; }
+    .steps { list-style: none; padding: 0; counter-reset: step; display: grid; gap: 0.75rem; }
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      margin: 0;
+      padding: 1rem 1rem 1rem 3.25rem;
+      background: var(--wash);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 1rem;
+      top: 1rem;
+      width: 1.6rem;
+      height: 1.6rem;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--red);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .steps strong { display: block; }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; }
+    footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); font-size: 0.9rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="/favicon.svg" alt="" />
+      <span>LV Branding</span>
+    </header>
+
+    <main>
+      <h1>Social Publisher: your Meta data and how to delete it</h1>
+      <p class="lead">
+        Social Publisher is part of LV Branding's marketing suite. The LV Branding team uses it to plan and publish
+        posts to Facebook Pages and Instagram professional accounts it manages. It connects through Meta's official
+        login, as the app "LV Social Publisher".
+      </p>
+      <p class="meta">LV Branding LLC, Houston, Texas. Last updated October 2, 2026.</p>
+
+      <h2>What Social Publisher receives from Meta</h2>
+      <p>When someone on the team connects Meta, Social Publisher stores:</p>
+      <ul>
+        <li>An access token for the connection, the list of permissions granted, and when the token expires.</li>
+        <li>For each Facebook Page the person chose to share: the Page's ID, name and profile picture address, the tasks the person can do on it, and the Page's access token.</li>
+        <li>For each Instagram professional account linked to those Pages: its ID, username, name and profile picture address.</li>
+      </ul>
+      <p>
+        It does not store your Facebook profile, and it does not read messages, comments, followers or insights.
+        It does not sell or share this information.
+      </p>
+
+      <h2>What Social Publisher creates</h2>
+      <ul>
+        <li>The posts the team writes in it: captions, internal notes, schedules and the images or videos uploaded for them.</li>
+        <li>Publishing results: the ID and link of each published post, and any error Meta returned.</li>
+        <li>An activity history of who connected, disconnected, scheduled or published, and when.</li>
+      </ul>
+
+      <h2>How it is kept</h2>
+      <ul>
+        <li>Access tokens are encrypted before they are stored, are used only on LV Branding's servers, and are never sent to anyone's browser.</li>
+        <li>Only members of the LV Branding workspace can see the connected accounts and posts.</li>
+        <li>Uploaded images and videos are kept at hard-to-guess public web addresses, because Meta fetches them from there when it publishes.</li>
+        <li>Everything is kept while the connection is in use, until it is disconnected or a deletion request is made.</li>
+      </ul>
+
+      <h2>How to delete your data</h2>
+      <ol class="steps">
+        <li>
+          <strong>Disconnect in Social Publisher</strong>
+          A workspace administrator can open Social Publisher, choose Connections, then Disconnect. The stored access
+          tokens are deleted at once, and Social Publisher can no longer reach your Pages or Instagram accounts.
+        </li>
+        <li>
+          <strong>Remove the app from Facebook</strong>
+          On Facebook, open Settings &amp; privacy, then Settings, then Business integrations (or Apps and websites).
+          Find "LV Social Publisher" and remove it. This withdraws every permission the app was given.
+        </li>
+        <li>
+          <strong>Ask us to delete the rest</strong>
+          Write to <a href="mailto:admin@lvbranding.com?subject=Data%20Deletion%20Request%20-%20Social%20Publisher">admin@lvbranding.com</a>
+          or use the <a href="https://www.lvbranding.com/contact">LV Branding contact page</a>, with the subject
+          "Data Deletion Request - Social Publisher". Name the Facebook Pages or Instagram accounts concerned. We will
+          delete their account records and connection history, and the posts and media stored for them, and confirm
+          by email once it is done.
+        </li>
+      </ol>
+
+      <h2>More information</h2>
+      <p>
+        LV Branding's general <a href="https://www.lvbranding.com/privacy">privacy policy</a> covers the rest of how we
+        handle personal information.
+      </p>
+    </main>
+
+    <footer>
+      LV Branding LLC · Houston, Texas · <a href="https://www.lvbranding.com/">lvbranding.com</a>
+    </footer>
+  </div>
+</body>
+</html>
