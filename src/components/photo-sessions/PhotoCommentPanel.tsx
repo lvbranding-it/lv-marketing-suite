@@ -44,7 +44,7 @@ type PhotoCommentPanelProps =
     };
 
 function TeamPhotoDisplay({ storagePath }: { storagePath: string }) {
-  const { data: signedUrl, isLoading } = useSignedUrl(storagePath, { width: 1200 });
+  const { data: signedUrl, isLoading } = useSignedUrl(storagePath);
   return <PhotoImage url={signedUrl ?? null} loading={isLoading} />;
 }
 
@@ -105,7 +105,7 @@ export default function PhotoCommentPanel(props: PhotoCommentPanelProps) {
         <div className="p-4 pt-3">
           {photo && (isClient
             ? <PhotoImage url={props.imageUrl ?? null} />
-            : <TeamPhotoDisplay storagePath={(photo as SessionPhoto).storage_path} />)}
+            : <TeamPhotoDisplay storagePath={(photo as SessionPhoto).preview_path ?? (photo as SessionPhoto).storage_path} />)}
         </div>
 
         <div className="px-4 pb-2 text-xs text-muted-foreground font-medium uppercase tracking-wide">

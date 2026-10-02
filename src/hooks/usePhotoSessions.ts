@@ -12,6 +12,7 @@ import type {
 } from "@/integrations/supabase/types";
 import { splitName, type SessionClient } from "@/lib/photo-sessions/clients";
 import { CLIENT_QUERY_RETRY, isShareToken } from "@/lib/photo-sessions/retry";
+import { copyPath, makePhotoCopies, photoFiles, type PhotoCopy } from "@/lib/photo-sessions/previews";
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -221,26 +222,20 @@ export function usePhotoComments(photoId: string | undefined) {
 }
 
 /**
- * Signed URL query — staleTime 50 min so URLs refresh before they expire (1 hr).
+ * A one-hour link to a file in the session-photos bucket.
  *
- * With a width, the link is to a resized copy. The session grid used the
- * originals, so opening a 172-photo session downloaded every full-size file
- * (about 500 MB) to show squares a couple of hundred pixels wide. `enabled`
- * lets a caller wait until the picture is actually on screen.
+ * Callers pass a photo's thumbnail or preview copy where it has one. Links
+ * used to ask Supabase to resize the original instead, which Supabase bills
+ * for every distinct photo beyond the plan's 100 a cycle. `enabled` lets a
+ * caller wait until the picture is actually on screen.
  */
-export function useSignedUrl(storagePath: string | undefined, options: { width?: number; enabled?: boolean } = {}) {
-  const { width, enabled = true } = options;
+export function useSignedUrl(storagePath: string | undefined, options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   return useQuery({
-    queryKey: ["signed-url", storagePath, width ?? "original"],
+    queryKey: ["signed-url", storagePath],
     queryFn: async () => {
       if (!storagePath) return null;
-      const { data, error } = await supabase.storage
-        .from("session-photos")
-        .createSignedUrl(
-          storagePath,
-          3600,
-          width ? { transform: { width, height: width, resize: "contain", quality: 75 } } : undefined,
-        );
+      const { data, error } = await supabase.storage.from("session-photos").createSignedUrl(storagePath, 3600);
       if (error) throw error;
       return data?.signedUrl ?? null;
     },
@@ -448,6 +443,20 @@ export function useDeleteSession() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // The session's files go with it. Deleting the record used to leave every
+      // photo and deliverable in storage, where nothing could reach them again.
+      const [{ data: photos }, { data: deliverables }] = await Promise.all([
+        supabase.from("session_photos").select("storage_path").eq("session_id", id),
+        supabase.from("session_deliverables").select("storage_path").eq("session_id", id),
+      ]);
+      const photoPaths = (photos ?? []).flatMap((photo: { storage_path: string }) => photoFiles(photo.storage_path));
+      const deliverablePaths = (deliverables ?? []).map((file: { storage_path: string }) => file.storage_path);
+      for (let i = 0; i < photoPaths.length; i += 100) {
+        await supabase.storage.from("session-photos").remove(photoPaths.slice(i, i + 100));
+      }
+      for (let i = 0; i < deliverablePaths.length; i += 100) {
+        await supabase.storage.from("session-deliverables").remove(deliverablePaths.slice(i, i + 100));
+      }
       const { error } = await supabase
         .from("photo_sessions")
         .delete()
@@ -499,8 +508,8 @@ export function useDeletePhoto() {
       sessionId: string;
       storagePath: string;
     }) => {
-      // Remove from storage first
-      await supabase.storage.from("session-photos").remove([storagePath]);
+      // Remove from storage first: the original and its thumbnail and preview.
+      await supabase.storage.from("session-photos").remove(photoFiles(storagePath));
       // Then delete the DB row (cascade removes comments too)
       const { error } = await supabase
         .from("session_photos")
@@ -691,8 +700,12 @@ export function useAddComment() {
  *
  * `displayOrder` is the photo's place in the shoot, decided before the batch
  * starts; every photo used to be saved as 0 and shown in the order its upload
- * happened to finish. If the record cannot be written the file is removed
+ * happened to finish. If the record cannot be written the files are removed
  * again, so storage never holds a photo the session does not know about.
+ *
+ * Its thumbnail and preview are made here too (see previews.ts). If a copy
+ * cannot be made, the photo is still saved; the session page makes the
+ * missing copies the next time someone on the team opens it.
  */
 export async function uploadPhoto(
   file: File,
@@ -713,12 +726,15 @@ export async function uploadPhoto(
 
   if (uploadError) throw uploadError;
 
+  const copies = await storePhotoCopies(file, path, false).catch(() => ({ thumb_path: null, preview_path: null }));
+
   const { data, error: insertError } = await supabase
     .from("session_photos")
     .insert({
       session_id: sessionId,
       org_id: orgId,
       storage_path: path,
+      ...copies,
       file_name: file.name,
       file_size: file.size,
       mime_type: contentType,
@@ -728,10 +744,28 @@ export async function uploadPhoto(
     .single();
 
   if (insertError) {
-    await supabase.storage.from("session-photos").remove([path]);
+    await supabase.storage.from("session-photos").remove(photoFiles(path));
     throw insertError;
   }
   return data as SessionPhoto;
+}
+
+/**
+ * Makes a photo's thumbnail and preview and stores them beside the original.
+ * Each copy is recorded only once it is stored. `replace` lets the copies of
+ * an older photo be written again if two people make them at the same time.
+ */
+export async function storePhotoCopies(original: Blob, storagePath: string, replace: boolean) {
+  const made = await makePhotoCopies(original);
+  const stored: { thumb_path: string | null; preview_path: string | null } = { thumb_path: null, preview_path: null };
+  for (const copy of ["thumb", "preview"] as PhotoCopy[]) {
+    const path = copyPath(storagePath, copy);
+    const { error } = await supabase.storage
+      .from("session-photos")
+      .upload(path, made[copy], { cacheControl: "3600", contentType: "image/jpeg", upsert: replace });
+    if (!error) stored[copy === "thumb" ? "thumb_path" : "preview_path"] = path;
+  }
+  return stored;
 }
 
 // ── Deliverables ──────────────────────────────────────────────────────────────

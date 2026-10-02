@@ -43,7 +43,7 @@ export default function PhotoThumbnail({ photo, photoNumber, comments = [], onCl
   // A 400px copy, requested once the card nears the screen. The grid used to
   // sign and download every original as soon as the session opened.
   const [frameRef, inView] = useInView<HTMLDivElement>();
-  const { data: signedUrl, isLoading } = useSignedUrl(photo.storage_path, { width: 400, enabled: inView });
+  const { data: signedUrl, isLoading } = useSignedUrl(photo.thumb_path ?? photo.storage_path, { enabled: inView });
   const updateStatus = useUpdatePhotoStatus();
   const deletePhoto  = useDeletePhoto();
   const [imgError, setImgError] = useState(false);

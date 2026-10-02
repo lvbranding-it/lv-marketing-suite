@@ -42,6 +42,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useOrg } from "@/hooks/useOrg";
 import type { SessionPhoto } from "@/integrations/supabase/types";
+import { usePhotoCopyBackfill } from "@/hooks/usePhotoCopyBackfill";
 
 export default function PhotoSessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -52,6 +53,7 @@ export default function PhotoSessionDetail() {
 
   const { data: session, isLoading: sessionLoading } = usePhotoSession(sessionId);
   const { data: photos = [], isLoading: photosLoading } = useSessionPhotos(sessionId);
+  const copyBackfill = usePhotoCopyBackfill(sessionId, photosLoading ? undefined : photos);
   const { data: deliverables = [] } = useSessionDeliverables(sessionId);
   const publishDeliverables = usePublishDeliverables();
   const startNextRound = useStartNextRound();
@@ -230,6 +232,16 @@ export default function PhotoSessionDetail() {
 
         {/* ── Stats ── */}
         <SessionStatsBar photos={photos} />
+
+        {copyBackfill.running && (
+          <div role="status" className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin" />
+            <span>
+              Preparing fast previews: {copyBackfill.done + copyBackfill.failed} of {copyBackfill.total} photos.
+              Whatever is left carries on the next time this session is opened.
+            </span>
+          </div>
+        )}
 
         {/* ── Invoice panels ── */}
         <SessionInvoicePanel session={session} />

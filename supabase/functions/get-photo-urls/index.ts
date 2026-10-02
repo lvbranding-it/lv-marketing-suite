@@ -1,13 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// "grid" is the small preview in the gallery. "large" is the photo opened on
-// its own, which used the grid preview and so showed at 600 pixels at most.
-// Large ones are asked for a few at a time, as the client moves through them.
-const SIZES = {
-  grid: { width: 600, height: 600, resize: "contain", quality: 70 },
-  large: { width: 1600, height: 1600, resize: "contain", quality: 80 },
-} as const;
+// "grid" is the gallery's thumbnail; "large" is the photo opened on its own.
+// Both are copies made when the photo was uploaded (thumb_path, 600 pixels;
+// preview_path, 1600 pixels). Links used to ask Supabase to resize the
+// original, which Supabase bills for every distinct photo beyond the plan's
+// 100 a cycle. A photo without its copies yet gets its original.
+type Size = "grid" | "large";
 const LARGE_PER_REQUEST = 12;
 
 const CORS_HEADERS = {
@@ -25,9 +24,9 @@ serve(async (req) => {
     const { share_token, photo_ids, size: requestedSize } = await req.json() as {
       share_token: string;
       photo_ids: string[];
-      size?: keyof typeof SIZES;
+      size?: Size;
     };
-    const size = requestedSize === "large" ? "large" : "grid";
+    const size: Size = requestedSize === "large" ? "large" : "grid";
 
     if (!share_token || !Array.isArray(photo_ids) || photo_ids.length === 0) {
       return new Response(
@@ -63,7 +62,7 @@ serve(async (req) => {
     const requested = new Set(size === "large" ? photo_ids.slice(0, LARGE_PER_REQUEST) : photo_ids);
     const { data: sessionPhotos, error: photosError } = await supabaseAdmin
       .from("session_photos")
-      .select("id, storage_path")
+      .select("id, storage_path, thumb_path, preview_path")
       .eq("session_id", session.id);
     const photos = (sessionPhotos ?? []).filter((photo) => requested.has(photo.id));
 
@@ -74,25 +73,16 @@ serve(async (req) => {
       );
     }
 
-    // 3. Generate a 1-hour signed URL for each photo, downscaled to the size asked for.
+    // 3. Generate a 1-hour signed URL for each photo, to the copy of the size asked for.
     //    Eight at a time: one after another took about 210 ms each, so a
     //    172-photo session kept the client waiting over half a minute.
-    const signOne = async (photo: { id: string; storage_path: string }) => {
+    type PhotoFiles = { id: string; storage_path: string; thumb_path: string | null; preview_path: string | null };
+    const signOne = async (photo: PhotoFiles) => {
+      const path = (size === "large" ? photo.preview_path : photo.thumb_path) ?? photo.storage_path;
       const { data: urlData } = await supabaseAdmin.storage
         .from("session-photos")
-        .createSignedUrl(photo.storage_path, 3600, { transform: { ...SIZES[size] } });
-
-      let signedUrl = urlData?.signedUrl ?? null;
-
-      // Fall back to a full-size signed URL if transformations aren't available
-      if (!signedUrl) {
-        const { data: fallback } = await supabaseAdmin.storage
-          .from("session-photos")
-          .createSignedUrl(photo.storage_path, 3600);
-        signedUrl = fallback?.signedUrl ?? null;
-      }
-
-      return { photo_id: photo.id, signed_url: signedUrl };
+        .createSignedUrl(path, 3600);
+      return { photo_id: photo.id, signed_url: urlData?.signedUrl ?? null };
     };
 
     const queue = [...(photos ?? [])];

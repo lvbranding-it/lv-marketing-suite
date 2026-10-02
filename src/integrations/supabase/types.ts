@@ -888,6 +888,8 @@ export type Database = {
           session_id: string;
           org_id: string;
           storage_path: string;
+          thumb_path: string | null;
+          preview_path: string | null;
           file_name: string;
           file_size: number;
           mime_type: string;
@@ -902,6 +904,8 @@ export type Database = {
           session_id: string;
           org_id: string;
           storage_path: string;
+          thumb_path?: string | null;
+          preview_path?: string | null;
           file_name: string;
           file_size: number;
           mime_type?: string;
@@ -916,6 +920,8 @@ export type Database = {
           session_id?: string;
           org_id?: string;
           storage_path?: string;
+          thumb_path?: string | null;
+          preview_path?: string | null;
           file_name?: string;
           file_size?: number;
           mime_type?: string;
