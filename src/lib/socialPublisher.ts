@@ -147,6 +147,17 @@ export function zonedDateTimeToUtc(localValue: string, timeZone: string) {
   return new Date(result).toISOString();
 }
 
+/**
+ * A published post's link, made whole. Facebook gave videos and Reels a path
+ * ("/reel/123/") rather than a link, and posts published before the publisher
+ * completed it still have one; opened as it was, it led to this app.
+ */
+export function postLink(permalink: string | null | undefined, platform: SocialPlatform) {
+  if (!permalink) return null;
+  if (/^https?:\/\//i.test(permalink)) return permalink;
+  return `https://www.${platform === "facebook" ? "facebook" : "instagram"}.com${permalink.startsWith("/") ? "" : "/"}${permalink}`;
+}
+
 /** A UTC time as the composer writes it, "YYYY-MM-DDTHH:mm", in the workspace time zone. */
 export function utcToZonedLocal(iso: string, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {

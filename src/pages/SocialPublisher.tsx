@@ -32,7 +32,7 @@ import {
   type ComposerDraft, type SocialAccount, type SocialPost, type SocialVariant,
 } from "@/hooks/useSocialPublisher";
 import {
-  canEditPost, defaultScheduleValue, formatSocialDate, formatsForMedia, META_PERMISSIONS, MIN_SCHEDULE_LEAD_MINUTES, minutesUntil, SOCIAL_STATUS_META,
+  canEditPost, defaultScheduleValue, formatSocialDate, formatsForMedia, postLink, META_PERMISSIONS, MIN_SCHEDULE_LEAD_MINUTES, minutesUntil, SOCIAL_STATUS_META,
   validateSocialDraft, type SocialPlatform, type SocialWorkflowStatus,
 } from "@/lib/socialPublisher";
 import { cn } from "@/lib/utils";
@@ -355,7 +355,14 @@ function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSche
           {post.workflow_status === "in_review" && canApprove && <><Button size="sm" onClick={() => onAction("approve")}><Check className="mr-1.5 h-3.5 w-3.5" />Approve</Button><Button size="sm" variant="outline" onClick={() => onAction("request_changes")}>Request changes</Button></>}
           {["approved", "draft", "changes_requested"].includes(post.workflow_status) && canSchedule && <Button size="sm" variant="outline" onClick={onSchedule}><CalendarDays className="mr-1.5 h-3.5 w-3.5" />Schedule</Button>}
           {failedJob && canApprove && <Button size="sm" variant="outline" onClick={() => onRetry(failedJob.id)}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Retry failed channel</Button>}
-          {post.workflow_status === "published" && post.social_post_variants.some((variant) => variant.provider_permalink) && <Button size="sm" variant="ghost" asChild><a href={post.social_post_variants.find((variant) => variant.provider_permalink)?.provider_permalink || "#"} target="_blank" rel="noreferrer">Open post<ExternalLink className="ml-1.5 h-3.5 w-3.5" /></a></Button>}
+          {/* One link per published channel; a single "Open post" reached only the first. */}
+          {post.social_post_variants.filter((variant) => variant.provider_permalink).map((variant) => (
+            <Button key={variant.id} size="sm" variant="ghost" asChild>
+              <a href={postLink(variant.provider_permalink, variant.platform) ?? "#"} target="_blank" rel="noreferrer">
+                <PlatformIcon platform={variant.platform} className="mr-1.5 h-3.5 w-3.5" />Open on {variant.platform === "facebook" ? "Facebook" : "Instagram"}<ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          ))}
           {CANCELABLE.includes(post.workflow_status) && canApprove && <CancelPostButton post={post} onCancel={() => onAction("cancel")} />}
         </div>
       </CardContent>
@@ -399,7 +406,7 @@ function CalendarEntry({ post, variant, timezone, canManage, onEdit }: {
   }
   if (variant.provider_permalink) {
     return (
-      <a href={variant.provider_permalink} target="_blank" rel="noreferrer" title={`Open on ${variant.platform === "facebook" ? "Facebook" : "Instagram"}`} className={cn(base, "transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+      <a href={postLink(variant.provider_permalink, variant.platform) ?? "#"} target="_blank" rel="noreferrer" title={`Open on ${variant.platform === "facebook" ? "Facebook" : "Instagram"}`} className={cn(base, "transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
         {body}
       </a>
     );

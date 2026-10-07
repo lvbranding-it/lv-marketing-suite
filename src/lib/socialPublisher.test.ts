@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canEditPost, formatsForMedia, minutesUntil, utcToZonedLocal, validateSocialDraft, zonedDateTimeToUtc } from "./socialPublisher";
+import { canEditPost, formatsForMedia, postLink, minutesUntil, utcToZonedLocal, validateSocialDraft, zonedDateTimeToUtc } from "./socialPublisher";
 
 describe("social publisher validation", () => {
   it("requires a destination and channel content", () => {
@@ -96,6 +96,14 @@ describe("editing", () => {
     expect(canEditPost("partially_published", true, true)).toBe(false);
     expect(canEditPost("published", true, true)).toBe(false);
     expect(canEditPost("canceled", false, true)).toBe(false);
+  });
+});
+
+describe("postLink", () => {
+  it("completes Facebook's path for videos and leaves full links alone", () => {
+    expect(postLink("/reel/1765800574645621/", "facebook")).toBe("https://www.facebook.com/reel/1765800574645621/");
+    expect(postLink("https://www.instagram.com/p/DeMxDS2lHOm/", "instagram")).toBe("https://www.instagram.com/p/DeMxDS2lHOm/");
+    expect(postLink(null, "facebook")).toBeNull();
   });
 });
 

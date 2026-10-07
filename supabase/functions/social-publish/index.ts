@@ -59,6 +59,8 @@ async function publishFacebook(account: any, variant: Variant, assets: Asset[], 
     try {
       const lookup = await graphRequest(`/${postId}?fields=permalink_url`, token);
       permalink = lookup.data.permalink_url || null;
+      // Facebook gives videos and Reels a path ("/reel/123/"), not a full link.
+      if (permalink?.startsWith("/")) permalink = `https://www.facebook.com${permalink}`;
     } catch { /* The provider id is still authoritative. */ }
   }
   return { postId, permalink, requestId, containerId: null };
