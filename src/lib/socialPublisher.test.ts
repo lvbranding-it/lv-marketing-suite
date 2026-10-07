@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatsForMedia, minutesUntil, validateSocialDraft, zonedDateTimeToUtc } from "./socialPublisher";
+import { canEditPost, formatsForMedia, minutesUntil, utcToZonedLocal, validateSocialDraft, zonedDateTimeToUtc } from "./socialPublisher";
 
 describe("social publisher validation", () => {
   it("requires a destination and channel content", () => {
@@ -79,6 +79,23 @@ describe("schedule lead time", () => {
       title: "First Post", accountIds: ["fb"], captions: { facebook: "Hi" }, formats: { facebook: "text" }, files: [], scheduledLocal: local,
     });
     expect(errors).toEqual(["Choose a publishing time at least 2 minutes from now."]);
+  });
+});
+
+describe("editing", () => {
+  it("reads a scheduled time back in the workspace time zone", () => {
+    expect(utcToZonedLocal("2026-10-07T16:15:00Z", "America/Chicago")).toBe("2026-10-07T11:15");
+    expect(utcToZonedLocal("2026-12-22T05:05:00Z", "America/Chicago")).toBe("2026-12-21T23:05");
+  });
+
+  it("lets anyone edit a draft, managers anything not yet published, and nobody a published post", () => {
+    expect(canEditPost("draft", false, false)).toBe(true);
+    expect(canEditPost("scheduled", false, false)).toBe(false);
+    expect(canEditPost("scheduled", false, true)).toBe(true);
+    expect(canEditPost("failed", false, true)).toBe(true);
+    expect(canEditPost("partially_published", true, true)).toBe(false);
+    expect(canEditPost("published", true, true)).toBe(false);
+    expect(canEditPost("canceled", false, true)).toBe(false);
   });
 });
 

@@ -147,6 +147,27 @@ export function zonedDateTimeToUtc(localValue: string, timeZone: string) {
   return new Date(result).toISOString();
 }
 
+/** A UTC time as the composer writes it, "YYYY-MM-DDTHH:mm", in the workspace time zone. */
+export function utcToZonedLocal(iso: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(new Date(iso));
+  const value = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}T${value.hour === "24" ? "00" : value.hour}:${value.minute}`;
+}
+
+/**
+ * Whether a post can be edited. Drafts can be by anyone in the workspace;
+ * a post in review, approved, scheduled or failed goes back to draft to be
+ * edited, which managers and administrators can do (social_reopen_post).
+ * Nothing published, publishing or canceled is edited; it is duplicated.
+ */
+export function canEditPost(status: string, anyChannelPublished: boolean, isManagerOrAbove: boolean) {
+  if (anyChannelPublished) return false;
+  if (["draft", "changes_requested"].includes(status)) return true;
+  return isManagerOrAbove && ["in_review", "approved", "scheduled", "failed", "connection_required"].includes(status);
+}
+
 export function formatSocialDate(value: string, timeZone: string, options?: Intl.DateTimeFormatOptions) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,

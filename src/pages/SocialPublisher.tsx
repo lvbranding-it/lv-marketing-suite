@@ -4,7 +4,7 @@ import {
   AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
   CircleDot, Clock3, Copy, ExternalLink, Facebook, Instagram,
   LayoutGrid, Link2, ListFilter, Loader2, MoreHorizontal, Plus, RefreshCw,
-  RotateCcw, Send, Settings2, ShieldCheck, Sparkles, Trash2, X,
+  Pencil, RotateCcw, Send, Settings2, ShieldCheck, Sparkles, Trash2, X,
 } from "lucide-react";
 import { addMonths, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from "date-fns";
 import AppShell from "@/components/layout/AppShell";
@@ -27,11 +27,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useOrg } from "@/hooks/useOrg";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
+  draftFromPost, loadPostMedia,
   useCreateSocialPost, useSocialAction, useSocialPublisherData,
   type ComposerDraft, type SocialAccount, type SocialPost, type SocialVariant,
 } from "@/hooks/useSocialPublisher";
 import {
-  defaultScheduleValue, formatSocialDate, formatsForMedia, META_PERMISSIONS, MIN_SCHEDULE_LEAD_MINUTES, minutesUntil, SOCIAL_STATUS_META,
+  canEditPost, defaultScheduleValue, formatSocialDate, formatsForMedia, META_PERMISSIONS, MIN_SCHEDULE_LEAD_MINUTES, minutesUntil, SOCIAL_STATUS_META,
   validateSocialDraft, type SocialPlatform, type SocialWorkflowStatus,
 } from "@/lib/socialPublisher";
 import { cn } from "@/lib/utils";
@@ -111,8 +112,10 @@ function VariantPreview({ variant, compact = false }: { variant: SocialVariant; 
   );
 }
 
-function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequired, canSchedule = false }: {
+function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequired, canSchedule = false, editing = null }: {
   open: boolean; onOpenChange: (open: boolean) => void; accounts: SocialAccount[]; timezone: string; approvalRequired: boolean; canSchedule?: boolean;
+  /** A post to edit; without one, the composer makes a new post. */
+  editing?: SocialPost | null;
 }) {
   const { org } = useOrg();
   const { toast } = useToast();
@@ -122,22 +125,48 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
   const [draft, setDraft] = useState<ComposerDraft>(() => ({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone }));
   const [schedule, setSchedule] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [loadingMedia, setLoadingMedia] = useState(false);
+
+  // Editing fills the composer from the post, its media loaded as files.
+  useEffect(() => {
+    if (!open || !editing) return;
+    let cancelled = false;
+    const filled = draftFromPost(editing, timezone);
+    const available = new Set(accounts.map((account) => account.id));
+    setDraft({ ...filled, accountIds: filled.accountIds.filter((id) => available.has(id)) });
+    setSchedule(editing.workflow_status === "scheduled" && canSchedule && !approvalRequired);
+    setErrors([]);
+    setLoadingMedia(true);
+    loadPostMedia(editing)
+      .then((files) => { if (!cancelled) setDraft((current) => ({ ...current, files })); })
+      .catch((error) => { if (!cancelled) setErrors([error instanceof Error ? error.message : "The post's media could not be loaded."]); })
+      .finally(() => { if (!cancelled) setLoadingMedia(false); });
+    return () => { cancelled = true; };
+    // Filled once per post opened; later changes to the list do not reset the edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing?.id]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || editing) return;
+    // A new post starts from its saved draft or from nothing, never from a
+    // post that was opened for editing and closed.
+    setSchedule(false);
+    setErrors([]);
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) setDraft({ ...EMPTY_DRAFT, ...JSON.parse(saved), files: [], timezone });
-      else setDraft((current) => ({ ...current, timezone }));
-    } catch { /* Keep a clean draft. */ }
-  }, [open, storageKey, timezone]);
+      else setDraft({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone });
+    } catch { setDraft({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone }); }
+  }, [open, storageKey, timezone, editing]);
+  // The unsaved new post is kept between visits; an edit is not, so it never
+  // overwrites that draft.
   useEffect(() => {
-    if (!open) return;
+    if (!open || editing) return;
     const timer = window.setTimeout(() => {
       localStorage.setItem(storageKey, JSON.stringify({ ...draft, files: [] }));
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [draft, open, storageKey]);
+  }, [draft, open, storageKey, editing]);
 
   const selected = accounts.filter((account) => draft.accountIds.includes(account.id));
   const formats = Object.fromEntries(selected.map((account) => [account.platform, account.platform === "facebook" ? draft.facebookFormat : draft.instagramFormat]));
@@ -159,12 +188,12 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
     });
     if (validation.length) return setErrors(validation);
     try {
-      await createPost.mutateAsync({ draft, schedule });
-      localStorage.removeItem(storageKey);
+      await createPost.mutateAsync({ draft, schedule, postId: editing?.id });
+      if (!editing) localStorage.removeItem(storageKey);
       setDraft({ ...EMPTY_DRAFT, scheduledLocal: defaultScheduleValue(), timezone });
       setErrors([]);
       onOpenChange(false);
-      toast({ description: schedule ? "Post scheduled for both channels." : "Draft saved." });
+      toast({ description: editing ? (schedule ? "Changes saved and scheduled." : "Changes saved as a draft.") : schedule ? "Post scheduled for both channels." : "Draft saved." });
     } catch (error) {
       toast({ variant: "destructive", description: error instanceof Error ? error.message : "Unable to save this post." });
     }
@@ -177,9 +206,16 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto p-0">
         <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" />Create social post</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">{editing ? <Pencil className="h-5 w-5 text-primary" /> : <Sparkles className="h-5 w-5 text-primary" />}{editing ? "Edit social post" : "Create social post"}</DialogTitle>
           <DialogDescription>One idea, tailored independently for every destination.</DialogDescription>
         </DialogHeader>
+        {editing && !["draft", "changes_requested"].includes(editing.workflow_status) && (
+          <p className="border-b bg-amber-50 px-6 py-2.5 text-xs text-amber-800">
+            {approvalRequired
+              ? "Saving takes this post back to draft. It needs approval again before it can be scheduled."
+              : "Saving replaces the version that was " + (editing.workflow_status === "scheduled" ? "scheduled" : editing.workflow_status.replace("_", " ")) + ". Keep scheduling on below to schedule the new version."}
+          </p>
+        )}
         {/* minmax(0, …) columns: on a phone the previews and long captions widened
             the single column past the dialog, which then scrolled sideways. */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
@@ -259,7 +295,7 @@ function ComposerDialog({ open, onOpenChange, accounts, timezone, approvalRequir
             {errors.length > 0 && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errors.map((error) => <p key={error} className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>)}</div>}
           </div>
         </div>
-        <DialogFooter className="border-t px-6 py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={submit} disabled={createPost.isPending || !accounts.length}>{createPost.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{schedule ? "Schedule post" : "Save draft"}</Button></DialogFooter>
+        <DialogFooter className="border-t px-6 py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={submit} disabled={createPost.isPending || loadingMedia || !accounts.length}>{(createPost.isPending || loadingMedia) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{loadingMedia ? "Loading media…" : editing ? (schedule ? "Save and schedule" : "Save changes") : schedule ? "Schedule post" : "Save draft"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -298,9 +334,10 @@ function CancelPostButton({ post, onCancel }: { post: SocialPost; onCancel: () =
   );
 }
 
-function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSchedule, onRetry }: {
-  post: SocialPost; canApprove: boolean; canSchedule: boolean; onAction: (action: string) => void; onDuplicate: () => void; onSchedule: () => void; onRetry: (jobId: string) => void;
+function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSchedule, onRetry, onEdit }: {
+  post: SocialPost; canApprove: boolean; canSchedule: boolean; onAction: (action: string) => void; onDuplicate: () => void; onSchedule: () => void; onRetry: (jobId: string) => void; onEdit: () => void;
 }) {
+  const editable = canEditPost(post.workflow_status, post.social_post_variants.some((variant) => variant.provider_post_id), canApprove);
   const next = post.social_post_variants.map((variant) => variant.scheduled_for_utc).filter(Boolean).sort()[0];
   const failedJob = post.social_post_variants.flatMap((variant) => variant.social_publish_jobs || []).find((job) => job.status === "failed");
   return (
@@ -313,6 +350,7 @@ function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSche
         {next && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{formatSocialDate(next, post.scheduled_timezone)} · {post.scheduled_timezone}</p>}
         {failedJob?.last_error_message_safe && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700"><p className="font-medium">{failedJob.last_error_category === "authentication" ? "Reconnect Meta to continue" : "Publishing failed"}</p><p className="mt-1">{failedJob.last_error_message_safe}</p></div>}
         <div className="flex flex-wrap gap-2 border-t pt-3">
+          {editable && <Button size="sm" variant="outline" onClick={onEdit}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button>}
           {["draft", "changes_requested"].includes(post.workflow_status) && <Button size="sm" variant="outline" onClick={() => onAction("submit")}><Send className="mr-1.5 h-3.5 w-3.5" />Submit for review</Button>}
           {post.workflow_status === "in_review" && canApprove && <><Button size="sm" onClick={() => onAction("approve")}><Check className="mr-1.5 h-3.5 w-3.5" />Approve</Button><Button size="sm" variant="outline" onClick={() => onAction("request_changes")}>Request changes</Button></>}
           {["approved", "draft", "changes_requested"].includes(post.workflow_status) && canSchedule && <Button size="sm" variant="outline" onClick={onSchedule}><CalendarDays className="mr-1.5 h-3.5 w-3.5" />Schedule</Button>}
@@ -402,6 +440,7 @@ export default function SocialPublisher() {
   const data = useSocialPublisherData();
   const actions = useSocialAction();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [editPost, setEditPost] = useState<SocialPost | null>(null);
   const [schedulePost, setSchedulePost] = useState<SocialPost | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
@@ -432,10 +471,10 @@ export default function SocialPublisher() {
   return <AppShell><div className="flex min-h-full flex-col bg-muted/20"><Header title="Social Publisher" subtitle="Plan once. Adapt each message. Publish with control." actions={<Button onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create post</Button>} /><main className="flex-1 space-y-6 p-4 sm:p-6">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Scheduled" value={counts.scheduled} detail="Queued across all channels" /><Metric label="Awaiting review" value={counts.review} detail="Ready for an approver" /><Metric label="Published" value={counts.published} detail="Completed publishing sets" tone="green" /><Metric label="Needs attention" value={counts.attention} detail="Failures or reconnects" tone={counts.attention ? "red" : "default"} /></div>
     <Tabs defaultValue="content" className="space-y-4"><div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center"><TabsList className="h-auto flex-wrap justify-start"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="operations">Operations</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger></TabsList><div className="flex gap-2"><Select value={channelFilter} onValueChange={setChannelFilter}><SelectTrigger className="w-36 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All channels</SelectItem><SelectItem value="facebook">Facebook</SelectItem><SelectItem value="instagram">Instagram</SelectItem></SelectContent></Select><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="in_review">In review</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="published">Published</SelectItem><SelectItem value="failed">Failed</SelectItem></SelectContent></Select></div></div>
-      <TabsContent value="content"><div className="grid gap-4 xl:grid-cols-2">{data.isLoading ? <div className="col-span-full grid min-h-52 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : filtered.length ? filtered.map((post) => <PostCard key={post.id} post={post} canApprove={isManagerOrAbove} canSchedule={isManagerOrAbove && (!value?.settings?.approval_required || post.workflow_status === "approved")} onAction={(action) => run(actions.transition.mutateAsync({ postId: post.id, action }), action === "approve" ? "Post approved." : action === "submit" ? "Post submitted for review." : action === "cancel" ? "Post canceled." : "Changes requested.")} onDuplicate={() => run(actions.duplicate.mutateAsync(post), "Draft duplicated.")} onSchedule={() => setSchedulePost(post)} onRetry={(jobId) => run(actions.retry.mutateAsync(jobId), "Failed channel processed again.")} />) : <div className="col-span-full rounded-2xl border border-dashed bg-background p-12 text-center"><Sparkles className="mx-auto h-9 w-9 text-muted-foreground/50" /><h3 className="mt-4 font-semibold">Your content calendar starts here</h3><p className="mt-2 text-sm text-muted-foreground">Create separate Facebook and Instagram versions under one post.</p><Button className="mt-5" onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create first post</Button></div>}</div></TabsContent>
+      <TabsContent value="content"><div className="grid gap-4 xl:grid-cols-2">{data.isLoading ? <div className="col-span-full grid min-h-52 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : filtered.length ? filtered.map((post) => <PostCard key={post.id} post={post} canApprove={isManagerOrAbove} canSchedule={isManagerOrAbove && (!value?.settings?.approval_required || post.workflow_status === "approved")} onAction={(action) => run(actions.transition.mutateAsync({ postId: post.id, action }), action === "approve" ? "Post approved." : action === "submit" ? "Post submitted for review." : action === "cancel" ? "Post canceled." : "Changes requested.")} onDuplicate={() => run(actions.duplicate.mutateAsync(post), "Draft duplicated.")} onSchedule={() => setSchedulePost(post)} onRetry={(jobId) => run(actions.retry.mutateAsync(jobId), "Failed channel processed again.")} onEdit={() => setEditPost(post)} />) : <div className="col-span-full rounded-2xl border border-dashed bg-background p-12 text-center"><Sparkles className="mx-auto h-9 w-9 text-muted-foreground/50" /><h3 className="mt-4 font-semibold">Your content calendar starts here</h3><p className="mt-2 text-sm text-muted-foreground">Create separate Facebook and Instagram versions under one post.</p><Button className="mt-5" onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create first post</Button></div>}</div></TabsContent>
       <TabsContent value="calendar"><EditorialCalendar posts={filtered} timezone={timezone} /></TabsContent>
       <TabsContent value="operations"><div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Publishing jobs</CardTitle></CardHeader><CardContent className="space-y-2">{posts.flatMap((post) => post.social_post_variants.flatMap((variant) => (variant.social_publish_jobs || []).map((job) => ({ post, variant, job })))).sort((a, b) => b.job.id.localeCompare(a.job.id)).map(({ post, variant, job }) => <div key={job.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><PlatformIcon platform={variant.platform} className="h-5 w-5" /><div><p className="text-sm font-medium">{post.title}</p><p className="text-xs text-muted-foreground">Attempt {job.attempt_count} · <span className="capitalize">{job.status}</span></p></div></div>{job.status === "failed" && isManagerOrAbove && <Button size="sm" variant="outline" onClick={() => run(actions.retry.mutateAsync(job.id), "Channel retried.")}><RotateCcw className="mr-2 h-3.5 w-3.5" />Retry</Button>}</div>)}{!posts.some((post) => post.social_post_variants.some((variant) => variant.social_publish_jobs?.length)) && <p className="py-10 text-center text-sm text-muted-foreground">No publishing jobs yet.</p>}</CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader><CardContent className="space-y-4">{(value?.activity || []).map((event: any) => <div key={event.id} className="flex gap-3"><div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-sm font-medium capitalize">{String(event.action).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{format(new Date(event.created_at), "MMM d, h:mm a")}</p></div></div>)}{!value?.activity?.length && <p className="text-sm text-muted-foreground">Activity appears here as your team works.</p>}</CardContent></Card></div></TabsContent>
       <TabsContent value="connections"><ConnectionsPanel accounts={value?.accounts || []} connection={value?.connection} canManage={isAdmin} approvalRequired={value?.settings?.approval_required || false} onApprovalChange={setApprovalRequired} onAccountSelection={(accountId, selected) => run(actions.selectAccount.mutateAsync({ accountId, selected }), selected ? "Destination enabled." : "Destination disabled.")} busy={actions.connect.isPending || actions.sync.isPending || actions.disconnect.isPending} onConnect={() => run(actions.connect.mutateAsync(), "Opening Meta authorization…")} onSync={() => run(actions.sync.mutateAsync(), "Meta accounts synchronized.")} onDisconnect={() => run(actions.disconnect.mutateAsync(), "Meta disconnected.")} /></TabsContent>
     </Tabs>
-  </main></div><ComposerDialog open={composerOpen} onOpenChange={setComposerOpen} accounts={(value?.accounts || []).filter((account) => account.is_selected)} timezone={timezone} approvalRequired={value?.settings?.approval_required || false} canSchedule={isManagerOrAbove} /><ScheduleDialog post={schedulePost} open={Boolean(schedulePost)} onOpenChange={(open) => !open && setSchedulePost(null)} pending={actions.schedule.isPending} onSchedule={(scheduledLocal) => schedulePost && run(actions.schedule.mutateAsync({ postId: schedulePost.id, scheduledLocal, timezone: schedulePost.scheduled_timezone }), "Post scheduled.").then(() => setSchedulePost(null))} /></AppShell>;
+  </main></div><ComposerDialog open={composerOpen || !!editPost} onOpenChange={(open) => { setComposerOpen(open && !editPost); if (!open) setEditPost(null); }} editing={editPost} accounts={(value?.accounts || []).filter((account) => account.is_selected)} timezone={timezone} approvalRequired={value?.settings?.approval_required || false} canSchedule={isManagerOrAbove} /><ScheduleDialog post={schedulePost} open={Boolean(schedulePost)} onOpenChange={(open) => !open && setSchedulePost(null)} pending={actions.schedule.isPending} onSchedule={(scheduledLocal) => schedulePost && run(actions.schedule.mutateAsync({ postId: schedulePost.id, scheduledLocal, timezone: schedulePost.scheduled_timezone }), "Post scheduled.").then(() => setSchedulePost(null))} /></AppShell>;
 }
