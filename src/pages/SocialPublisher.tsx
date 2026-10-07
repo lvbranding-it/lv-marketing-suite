@@ -363,15 +363,71 @@ function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSche
   );
 }
 
-function EditorialCalendar({ posts, timezone }: { posts: SocialPost[]; timezone: string }) {
+/**
+ * One channel of a post on the calendar. An editable post opens in the
+ * composer and a published one on Meta; the entries could not be clicked, so
+ * changing a post meant finding it again in the Content tab.
+ */
+function CalendarEntry({ post, variant, timezone, canManage, onEdit }: {
+  post: SocialPost; variant: SocialVariant; timezone: string; canManage: boolean; onEdit: (post: SocialPost) => void;
+}) {
+  const editable = canEditPost(post.workflow_status, post.social_post_variants.some((item) => item.provider_post_id), canManage);
+  const status = SOCIAL_STATUS_META[variant.publication_status as SocialWorkflowStatus];
+  // The cell already names the day, so the entry shows only the time.
+  const time = formatSocialDate(variant.scheduled_for_utc!, timezone, { month: undefined, day: undefined, hour: "numeric", minute: "2-digit" });
+  const base = cn(
+    "block w-full rounded border-l-2 bg-muted px-2 py-1 text-left text-[10px]",
+    variant.platform === "facebook" ? "border-l-blue-500" : "border-l-pink-500",
+    variant.publication_status === "canceled" && "opacity-60",
+  );
+  const body = (
+    <>
+      <p className={cn("truncate font-medium", variant.publication_status === "canceled" && "line-through")}>{post.title}</p>
+      <p className="flex items-center gap-1 truncate text-muted-foreground">
+        <PlatformIcon platform={variant.platform} className="h-2.5 w-2.5 shrink-0" />
+        {time}
+        {variant.publication_status !== "scheduled" && status && <span>· {status.label}</span>}
+      </p>
+    </>
+  );
+  if (editable) {
+    return (
+      <button type="button" onClick={() => onEdit(post)} title={`Edit "${post.title}"`} className={cn(base, "transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+        {body}
+      </button>
+    );
+  }
+  if (variant.provider_permalink) {
+    return (
+      <a href={variant.provider_permalink} target="_blank" rel="noreferrer" title={`Open on ${variant.platform === "facebook" ? "Facebook" : "Instagram"}`} className={cn(base, "transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+        {body}
+      </a>
+    );
+  }
+  return <div className={base} title={`${status?.label ?? "This post"}: it cannot be edited now`}>{body}</div>;
+}
+
+function EditorialCalendar({ posts, timezone, canManage, onEdit }: { posts: SocialPost[]; timezone: string; canManage: boolean; onEdit: (post: SocialPost) => void }) {
   const [month, setMonth] = useState(startOfMonth(new Date()));
+  // Days showing every entry instead of the first three.
+  const [openDays, setOpenDays] = useState<Set<string>>(() => new Set());
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(month)); const end = endOfWeek(endOfMonth(month)); const result: Date[] = [];
     for (let day = start; day <= end; day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)) result.push(day);
     return result;
   }, [month]);
   const scheduled = posts.flatMap((post) => post.social_post_variants.filter((variant) => variant.scheduled_for_utc).map((variant) => ({ post, variant, date: new Date(variant.scheduled_for_utc!) })));
-  return <Card className="shadow-none"><CardHeader className="flex-row items-center justify-between space-y-0"><div><CardTitle className="text-base">{format(month, "MMMM yyyy")}</CardTitle><p className="mt-1 text-xs text-muted-foreground">Publishing times shown in {timezone}</p></div><div className="flex gap-1"><Button size="icon" variant="outline" onClick={() => setMonth(subMonths(month, 1))}><ChevronLeft className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => setMonth(startOfMonth(new Date()))}>Today</Button><Button size="icon" variant="outline" onClick={() => setMonth(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button></div></CardHeader><CardContent><div className="grid grid-cols-7 border-l border-t">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => <div key={label} className="border-b border-r bg-muted/40 p-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>)}{days.map((day) => { const items = scheduled.filter((item) => isSameDay(item.date, day)); return <div key={day.toISOString()} className={cn("min-h-28 border-b border-r p-2", !isSameMonth(day, month) && "bg-muted/20 text-muted-foreground")}><div className={cn("mb-2 grid h-6 w-6 place-items-center rounded-full text-xs", isSameDay(day, new Date()) && "bg-primary font-semibold text-primary-foreground")}>{format(day, "d")}</div><div className="space-y-1">{items.slice(0, 3).map(({ post, variant }) => <div key={variant.id} className={cn("rounded border-l-2 bg-muted px-2 py-1 text-[10px]", variant.platform === "facebook" ? "border-l-blue-500" : "border-l-pink-500")}><p className="truncate font-medium">{post.title}</p><p className="text-muted-foreground">{formatSocialDate(variant.scheduled_for_utc!, timezone, { hour: "numeric", minute: "2-digit" })}</p></div>)}{items.length > 3 && <p className="text-[10px] text-muted-foreground">+{items.length - 3} more</p>}</div></div>; })}</div></CardContent></Card>;
+  const toggleDay = (key: string) => setOpenDays((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  return <Card className="shadow-none"><CardHeader className="flex-row items-center justify-between space-y-0"><div><CardTitle className="text-base">{format(month, "MMMM yyyy")}</CardTitle><p className="mt-1 text-xs text-muted-foreground">Publishing times shown in {timezone}. Click a post to edit it.</p></div><div className="flex gap-1"><Button size="icon" variant="outline" onClick={() => setMonth(subMonths(month, 1))}><ChevronLeft className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => setMonth(startOfMonth(new Date()))}>Today</Button><Button size="icon" variant="outline" onClick={() => setMonth(addMonths(month, 1))}><ChevronRight className="h-4 w-4" /></Button></div></CardHeader><CardContent><div className="grid grid-cols-7 border-l border-t">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => <div key={label} className="border-b border-r bg-muted/40 p-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>)}{days.map((day) => {
+    const key = day.toISOString();
+    const items = scheduled.filter((item) => isSameDay(item.date, day)).sort((a, b) => a.date.getTime() - b.date.getTime());
+    const showAll = openDays.has(key);
+    return <div key={key} className={cn("min-h-28 min-w-0 border-b border-r p-2", !isSameMonth(day, month) && "bg-muted/20 text-muted-foreground")}><div className={cn("mb-2 grid h-6 w-6 place-items-center rounded-full text-xs", isSameDay(day, new Date()) && "bg-primary font-semibold text-primary-foreground")}>{format(day, "d")}</div><div className="space-y-1">{(showAll ? items : items.slice(0, 3)).map(({ post, variant }) => <CalendarEntry key={variant.id} post={post} variant={variant} timezone={timezone} canManage={canManage} onEdit={onEdit} />)}{items.length > 3 && <button type="button" onClick={() => toggleDay(key)} className="text-[10px] font-medium text-muted-foreground hover:text-foreground">{showAll ? "Show less" : `+${items.length - 3} more`}</button>}</div></div>;
+  })}</div></CardContent></Card>;
 }
 
 const byAccountName = (a: SocialAccount, b: SocialAccount) =>
@@ -472,7 +528,7 @@ export default function SocialPublisher() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Scheduled" value={counts.scheduled} detail="Queued across all channels" /><Metric label="Awaiting review" value={counts.review} detail="Ready for an approver" /><Metric label="Published" value={counts.published} detail="Completed publishing sets" tone="green" /><Metric label="Needs attention" value={counts.attention} detail="Failures or reconnects" tone={counts.attention ? "red" : "default"} /></div>
     <Tabs defaultValue="content" className="space-y-4"><div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center"><TabsList className="h-auto flex-wrap justify-start"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="operations">Operations</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger></TabsList><div className="flex gap-2"><Select value={channelFilter} onValueChange={setChannelFilter}><SelectTrigger className="w-36 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All channels</SelectItem><SelectItem value="facebook">Facebook</SelectItem><SelectItem value="instagram">Instagram</SelectItem></SelectContent></Select><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="in_review">In review</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="published">Published</SelectItem><SelectItem value="failed">Failed</SelectItem></SelectContent></Select></div></div>
       <TabsContent value="content"><div className="grid gap-4 xl:grid-cols-2">{data.isLoading ? <div className="col-span-full grid min-h-52 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : filtered.length ? filtered.map((post) => <PostCard key={post.id} post={post} canApprove={isManagerOrAbove} canSchedule={isManagerOrAbove && (!value?.settings?.approval_required || post.workflow_status === "approved")} onAction={(action) => run(actions.transition.mutateAsync({ postId: post.id, action }), action === "approve" ? "Post approved." : action === "submit" ? "Post submitted for review." : action === "cancel" ? "Post canceled." : "Changes requested.")} onDuplicate={() => run(actions.duplicate.mutateAsync(post), "Draft duplicated.")} onSchedule={() => setSchedulePost(post)} onRetry={(jobId) => run(actions.retry.mutateAsync(jobId), "Failed channel processed again.")} onEdit={() => setEditPost(post)} />) : <div className="col-span-full rounded-2xl border border-dashed bg-background p-12 text-center"><Sparkles className="mx-auto h-9 w-9 text-muted-foreground/50" /><h3 className="mt-4 font-semibold">Your content calendar starts here</h3><p className="mt-2 text-sm text-muted-foreground">Create separate Facebook and Instagram versions under one post.</p><Button className="mt-5" onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create first post</Button></div>}</div></TabsContent>
-      <TabsContent value="calendar"><EditorialCalendar posts={filtered} timezone={timezone} /></TabsContent>
+      <TabsContent value="calendar"><EditorialCalendar posts={filtered} timezone={timezone} canManage={isManagerOrAbove} onEdit={setEditPost} /></TabsContent>
       <TabsContent value="operations"><div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Publishing jobs</CardTitle></CardHeader><CardContent className="space-y-2">{posts.flatMap((post) => post.social_post_variants.flatMap((variant) => (variant.social_publish_jobs || []).map((job) => ({ post, variant, job })))).sort((a, b) => b.job.id.localeCompare(a.job.id)).map(({ post, variant, job }) => <div key={job.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><PlatformIcon platform={variant.platform} className="h-5 w-5" /><div><p className="text-sm font-medium">{post.title}</p><p className="text-xs text-muted-foreground">Attempt {job.attempt_count} · <span className="capitalize">{job.status}</span></p></div></div>{job.status === "failed" && isManagerOrAbove && <Button size="sm" variant="outline" onClick={() => run(actions.retry.mutateAsync(job.id), "Channel retried.")}><RotateCcw className="mr-2 h-3.5 w-3.5" />Retry</Button>}</div>)}{!posts.some((post) => post.social_post_variants.some((variant) => variant.social_publish_jobs?.length)) && <p className="py-10 text-center text-sm text-muted-foreground">No publishing jobs yet.</p>}</CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader><CardContent className="space-y-4">{(value?.activity || []).map((event: any) => <div key={event.id} className="flex gap-3"><div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-sm font-medium capitalize">{String(event.action).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{format(new Date(event.created_at), "MMM d, h:mm a")}</p></div></div>)}{!value?.activity?.length && <p className="text-sm text-muted-foreground">Activity appears here as your team works.</p>}</CardContent></Card></div></TabsContent>
       <TabsContent value="connections"><ConnectionsPanel accounts={value?.accounts || []} connection={value?.connection} canManage={isAdmin} approvalRequired={value?.settings?.approval_required || false} onApprovalChange={setApprovalRequired} onAccountSelection={(accountId, selected) => run(actions.selectAccount.mutateAsync({ accountId, selected }), selected ? "Destination enabled." : "Destination disabled.")} busy={actions.connect.isPending || actions.sync.isPending || actions.disconnect.isPending} onConnect={() => run(actions.connect.mutateAsync(), "Opening Meta authorization…")} onSync={() => run(actions.sync.mutateAsync(), "Meta accounts synchronized.")} onDisconnect={() => run(actions.disconnect.mutateAsync(), "Meta disconnected.")} /></TabsContent>
     </Tabs>
