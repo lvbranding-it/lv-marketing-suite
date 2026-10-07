@@ -149,7 +149,16 @@ async function refreshPostAggregate(db: any, postId: string) {
   await db.from("social_posts").update({ workflow_status: workflow }).eq("id", postId);
 }
 
-async function processJob(db: any, job: any) {
+// A post the scheduler reaches long after its time is not published unasked:
+// after the scheduler has been stopped for a while, everything it missed would
+// otherwise go out at once, perhaps days late. It is marked as missed instead,
+// and "Retry failed channel" publishes it on purpose. Retries of a temporary
+// failure are late by design and are not held back.
+const MISSED_AFTER_MS = 2 * 60 * 60 * 1000;
+const MISSED_MESSAGE =
+  "This post was not published because it was reached more than 2 hours after its scheduled time. Retry the channel to publish it now, or cancel the post.";
+
+async function processJob(db: any, job: any, fromScheduler: boolean) {
   const startedAt = new Date().toISOString();
   await db.from("social_publish_attempts").insert({
     org_id: job.org_id, publish_job_id: job.id, attempt_number: job.attempt_count, started_at: startedAt,
@@ -159,6 +168,23 @@ async function processJob(db: any, job: any) {
   if (variant.provider_post_id) {
     await db.from("social_publish_jobs").update({ status: "published", locked_at: null, locked_by: null }).eq("id", job.id);
     return { job: job.id, status: "published", duplicatePrevented: true };
+  }
+  if (fromScheduler && job.attempt_count <= 1 && Date.now() - Date.parse(job.scheduled_for_utc) > MISSED_AFTER_MS) {
+    await db.from("social_publish_jobs").update({
+      status: "failed", next_attempt_at: null, locked_at: null, locked_by: null,
+      last_error_category: "permanent", last_error_message_safe: MISSED_MESSAGE,
+    }).eq("id", job.id);
+    await db.from("social_post_variants").update({ publication_status: "failed" }).eq("id", variant.id);
+    await db.from("social_publish_attempts").update({
+      completed_at: new Date().toISOString(), result: "permanent_failure",
+      safe_diagnostics: { category: "missed", scheduled_for_utc: job.scheduled_for_utc },
+    }).eq("publish_job_id", job.id).eq("attempt_number", job.attempt_count);
+    await db.from("social_activity_log").insert({
+      org_id: job.org_id, entity_type: "social_post_variant", entity_id: variant.id,
+      action: "publish_missed", metadata: { platform: variant.platform, scheduled_for_utc: job.scheduled_for_utc },
+    });
+    await refreshPostAggregate(db, variant.social_post_id);
+    return { job: job.id, status: "failed", category: "missed" };
   }
   await db.from("social_post_variants").update({ publication_status: "publishing" }).eq("id", variant.id);
   await db.from("social_posts").update({ workflow_status: "publishing" }).eq("id", variant.social_post_id);
@@ -253,6 +279,6 @@ serve(async (req) => {
   });
   if (error) return json({ error: "Unable to claim publishing jobs" }, 500);
   const results = [];
-  for (const job of jobs || []) results.push(await processJob(db, job));
+  for (const job of jobs || []) results.push(await processJob(db, job, schedulerAuthorized));
   return json({ success: true, claimed: results.length, results });
 });

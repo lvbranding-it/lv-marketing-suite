@@ -13,6 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -267,6 +271,33 @@ function ScheduleDialog({ post, open, onOpenChange, onSchedule, pending }: { pos
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>Schedule “{post?.title}”</DialogTitle><DialogDescription>Every channel gets an independent job at this time. Times are shown in {post?.scheduled_timezone || TIMEZONE}.</DialogDescription></DialogHeader><div className="py-3"><Label htmlFor="approved-schedule">Publish date and time</Label><Input id="approved-schedule" type="datetime-local" className="mt-2" value={value} onChange={(event) => setValue(event.target.value)} /></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={() => onSchedule(value)} disabled={pending}>{pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Schedule channels</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+// A post can be canceled until it is fully published. The page had no way to
+// do it, so a scheduled post could not be stopped from here.
+const CANCELABLE = ["draft", "in_review", "changes_requested", "approved", "scheduled", "failed", "connection_required", "partially_published"];
+
+function CancelPostButton({ post, onCancel }: { post: SocialPost; onCancel: () => void }) {
+  const scheduled = post.workflow_status === "scheduled";
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive"><X className="mr-1.5 h-3.5 w-3.5" />Cancel post</Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel "{post.title}"?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {scheduled ? "It will not be published. " : ""}Channels already published stay online. A canceled post cannot be scheduled again; duplicate it to start over.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep it</AlertDialogCancel>
+          <AlertDialogAction onClick={onCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Cancel post</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSchedule, onRetry }: {
   post: SocialPost; canApprove: boolean; canSchedule: boolean; onAction: (action: string) => void; onDuplicate: () => void; onSchedule: () => void; onRetry: (jobId: string) => void;
 }) {
@@ -287,6 +318,7 @@ function PostCard({ post, canApprove, canSchedule, onAction, onDuplicate, onSche
           {["approved", "draft", "changes_requested"].includes(post.workflow_status) && canSchedule && <Button size="sm" variant="outline" onClick={onSchedule}><CalendarDays className="mr-1.5 h-3.5 w-3.5" />Schedule</Button>}
           {failedJob && canApprove && <Button size="sm" variant="outline" onClick={() => onRetry(failedJob.id)}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Retry failed channel</Button>}
           {post.workflow_status === "published" && post.social_post_variants.some((variant) => variant.provider_permalink) && <Button size="sm" variant="ghost" asChild><a href={post.social_post_variants.find((variant) => variant.provider_permalink)?.provider_permalink || "#"} target="_blank" rel="noreferrer">Open post<ExternalLink className="ml-1.5 h-3.5 w-3.5" /></a></Button>}
+          {CANCELABLE.includes(post.workflow_status) && canApprove && <CancelPostButton post={post} onCancel={() => onAction("cancel")} />}
         </div>
       </CardContent>
     </Card>
@@ -400,7 +432,7 @@ export default function SocialPublisher() {
   return <AppShell><div className="flex min-h-full flex-col bg-muted/20"><Header title="Social Publisher" subtitle="Plan once. Adapt each message. Publish with control." actions={<Button onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create post</Button>} /><main className="flex-1 space-y-6 p-4 sm:p-6">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Scheduled" value={counts.scheduled} detail="Queued across all channels" /><Metric label="Awaiting review" value={counts.review} detail="Ready for an approver" /><Metric label="Published" value={counts.published} detail="Completed publishing sets" tone="green" /><Metric label="Needs attention" value={counts.attention} detail="Failures or reconnects" tone={counts.attention ? "red" : "default"} /></div>
     <Tabs defaultValue="content" className="space-y-4"><div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center"><TabsList className="h-auto flex-wrap justify-start"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="operations">Operations</TabsTrigger><TabsTrigger value="connections">Connections</TabsTrigger></TabsList><div className="flex gap-2"><Select value={channelFilter} onValueChange={setChannelFilter}><SelectTrigger className="w-36 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All channels</SelectItem><SelectItem value="facebook">Facebook</SelectItem><SelectItem value="instagram">Instagram</SelectItem></SelectContent></Select><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-40 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="draft">Draft</SelectItem><SelectItem value="in_review">In review</SelectItem><SelectItem value="approved">Approved</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="published">Published</SelectItem><SelectItem value="failed">Failed</SelectItem></SelectContent></Select></div></div>
-      <TabsContent value="content"><div className="grid gap-4 xl:grid-cols-2">{data.isLoading ? <div className="col-span-full grid min-h-52 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : filtered.length ? filtered.map((post) => <PostCard key={post.id} post={post} canApprove={isManagerOrAbove} canSchedule={isManagerOrAbove && (!value?.settings?.approval_required || post.workflow_status === "approved")} onAction={(action) => run(actions.transition.mutateAsync({ postId: post.id, action }), action === "approve" ? "Post approved." : action === "submit" ? "Post submitted for review." : "Changes requested.")} onDuplicate={() => run(actions.duplicate.mutateAsync(post), "Draft duplicated.")} onSchedule={() => setSchedulePost(post)} onRetry={(jobId) => run(actions.retry.mutateAsync(jobId), "Failed channel processed again.")} />) : <div className="col-span-full rounded-2xl border border-dashed bg-background p-12 text-center"><Sparkles className="mx-auto h-9 w-9 text-muted-foreground/50" /><h3 className="mt-4 font-semibold">Your content calendar starts here</h3><p className="mt-2 text-sm text-muted-foreground">Create separate Facebook and Instagram versions under one post.</p><Button className="mt-5" onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create first post</Button></div>}</div></TabsContent>
+      <TabsContent value="content"><div className="grid gap-4 xl:grid-cols-2">{data.isLoading ? <div className="col-span-full grid min-h-52 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : filtered.length ? filtered.map((post) => <PostCard key={post.id} post={post} canApprove={isManagerOrAbove} canSchedule={isManagerOrAbove && (!value?.settings?.approval_required || post.workflow_status === "approved")} onAction={(action) => run(actions.transition.mutateAsync({ postId: post.id, action }), action === "approve" ? "Post approved." : action === "submit" ? "Post submitted for review." : action === "cancel" ? "Post canceled." : "Changes requested.")} onDuplicate={() => run(actions.duplicate.mutateAsync(post), "Draft duplicated.")} onSchedule={() => setSchedulePost(post)} onRetry={(jobId) => run(actions.retry.mutateAsync(jobId), "Failed channel processed again.")} />) : <div className="col-span-full rounded-2xl border border-dashed bg-background p-12 text-center"><Sparkles className="mx-auto h-9 w-9 text-muted-foreground/50" /><h3 className="mt-4 font-semibold">Your content calendar starts here</h3><p className="mt-2 text-sm text-muted-foreground">Create separate Facebook and Instagram versions under one post.</p><Button className="mt-5" onClick={() => setComposerOpen(true)}><Plus className="mr-2 h-4 w-4" />Create first post</Button></div>}</div></TabsContent>
       <TabsContent value="calendar"><EditorialCalendar posts={filtered} timezone={timezone} /></TabsContent>
       <TabsContent value="operations"><div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Publishing jobs</CardTitle></CardHeader><CardContent className="space-y-2">{posts.flatMap((post) => post.social_post_variants.flatMap((variant) => (variant.social_publish_jobs || []).map((job) => ({ post, variant, job })))).sort((a, b) => b.job.id.localeCompare(a.job.id)).map(({ post, variant, job }) => <div key={job.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><PlatformIcon platform={variant.platform} className="h-5 w-5" /><div><p className="text-sm font-medium">{post.title}</p><p className="text-xs text-muted-foreground">Attempt {job.attempt_count} · <span className="capitalize">{job.status}</span></p></div></div>{job.status === "failed" && isManagerOrAbove && <Button size="sm" variant="outline" onClick={() => run(actions.retry.mutateAsync(job.id), "Channel retried.")}><RotateCcw className="mr-2 h-3.5 w-3.5" />Retry</Button>}</div>)}{!posts.some((post) => post.social_post_variants.some((variant) => variant.social_publish_jobs?.length)) && <p className="py-10 text-center text-sm text-muted-foreground">No publishing jobs yet.</p>}</CardContent></Card><Card className="shadow-none"><CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader><CardContent className="space-y-4">{(value?.activity || []).map((event: any) => <div key={event.id} className="flex gap-3"><div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" /><div><p className="text-sm font-medium capitalize">{String(event.action).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{format(new Date(event.created_at), "MMM d, h:mm a")}</p></div></div>)}{!value?.activity?.length && <p className="text-sm text-muted-foreground">Activity appears here as your team works.</p>}</CardContent></Card></div></TabsContent>
       <TabsContent value="connections"><ConnectionsPanel accounts={value?.accounts || []} connection={value?.connection} canManage={isAdmin} approvalRequired={value?.settings?.approval_required || false} onApprovalChange={setApprovalRequired} onAccountSelection={(accountId, selected) => run(actions.selectAccount.mutateAsync({ accountId, selected }), selected ? "Destination enabled." : "Destination disabled.")} busy={actions.connect.isPending || actions.sync.isPending || actions.disconnect.isPending} onConnect={() => run(actions.connect.mutateAsync(), "Opening Meta authorization…")} onSync={() => run(actions.sync.mutateAsync(), "Meta accounts synchronized.")} onDisconnect={() => run(actions.disconnect.mutateAsync(), "Meta disconnected.")} /></TabsContent>
