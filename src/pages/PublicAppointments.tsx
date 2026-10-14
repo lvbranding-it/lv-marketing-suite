@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LVLogo from "@/components/LVLogo";
-import { downloadAppointmentCalendar } from "@/lib/appointments";
+import { dateIn, downloadAppointmentCalendar } from "@/lib/appointments";
 
 type PublicHost = { id: string; display_name: string; avatar_url?: string | null; is_default: boolean };
 type PublicPage = {
@@ -177,13 +177,13 @@ export default function PublicAppointments({ language = "en" }: { language?: Lan
       setSelectedStart("");
       setVisibleDateCount(10);
       setError("");
-      const from = new Date();
-      const to = new Date(Date.now() + 90 * 86400000);
+      // Dates where the booking page is: the UTC date is already tomorrow in
+      // Chicago from 7 PM, and asking from it hid the rest of today's times.
       const payload = {
         slug: page.slug,
         host_id: hostId,
-        from_date: from.toISOString().slice(0, 10),
-        to_date: to.toISOString().slice(0, 10),
+        from_date: dateIn(page.timezone),
+        to_date: dateIn(page.timezone, new Date(Date.now() + 90 * 86400000)),
       };
       // The Edge Function adds connected Google/Microsoft busy time. Falling
       // back to the database RPC keeps Supabase-only scheduling fully usable.

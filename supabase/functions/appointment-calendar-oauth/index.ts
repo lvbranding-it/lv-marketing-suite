@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encryptToken, requireProviderCredentials, sha256, type CalendarProvider } from "../_shared/appointment-calendar.ts";
+import { calendarBusyRanges, encryptToken, requireProviderCredentials, sha256, type CalendarProvider } from "../_shared/appointment-calendar.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -9,6 +9,21 @@ const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/appointment-calendar-oauth`;
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const redirect = (query: string) => Response.redirect(`${APP_URL}/appointments?${query}`, 302);
+
+// Why a connected calendar is not answering, in words an administrator can act
+// on. A failing check used to show only to prospects, as a booking refused
+// with "Calendar availability could not be verified".
+function calendarProblem(provider: CalendarProvider, error: unknown) {
+  const name = provider === "google" ? "Google" : "Microsoft";
+  const message = error instanceof Error ? error.message : String(error);
+  if (/token refresh failed \((400|401)\)|must be renewed/i.test(message)) {
+    return `${name} no longer accepts this connection's sign-in: it was revoked, or it expired.${provider === "google" ? " Google ends sign-ins after 7 days while its Cloud app is in Testing mode." : ""} Connect the calendar again.`;
+  }
+  if (/not configured/i.test(message)) return `${name} Calendar isn't set up on the server, so it can't be checked.`;
+  if (/\((401|403)\)/.test(message)) return `${name} refused the calendar request. The account may have lost access to the calendar, or the Calendar API may be turned off. Connect again with the right account.`;
+  if (/decrypt|OperationError/i.test(message)) return "The saved connection can't be read, likely because its encryption key changed. Connect the calendar again.";
+  return `${name} did not answer as expected (${message}). Try again shortly, or connect the calendar again.`;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -62,6 +77,26 @@ serve(async (req) => {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return json({ error: "Authentication required" }, 401);
   const input = await req.json().catch(() => ({}));
+
+  // Is this host's calendar answering? Asks it about the next hour, as a booking would.
+  if (input.action === "check") {
+    if (!input.host_id) return json({ error: "Invalid calendar check" }, 400);
+    const { data: host } = await db.from("appointment_hosts").select("id,org_id").eq("id", input.host_id).maybeSingle();
+    if (!host) return json({ error: "Team member not found" }, 404);
+    const { data: member } = await db.from("team_members").select("role").eq("org_id", host.org_id).eq("user_id", user.id).maybeSingle();
+    if (!member || !["owner", "admin"].includes(member.role)) return json({ error: "Administrator access required" }, 403);
+    const { data: connection } = await db.from("appointment_calendar_connections").select("*").eq("host_id", host.id).maybeSingle();
+    if (!connection) return json({ ok: false, reason: "No calendar is connected." });
+    try {
+      const start = new Date().toISOString();
+      await calendarBusyRanges(db, connection, start, new Date(Date.now() + 3_600_000).toISOString());
+      return json({ ok: true });
+    } catch (error) {
+      console.error("Calendar check failed", error);
+      return json({ ok: false, reason: calendarProblem(connection.provider, error) });
+    }
+  }
+
   const provider = input.provider as CalendarProvider;
   if (!(["google", "microsoft"] as string[]).includes(provider) || !input.host_id) return json({ error: "Invalid calendar connection" }, 400);
   const { data: host } = await db.from("appointment_hosts").select("id,org_id,email").eq("id", input.host_id).maybeSingle();

@@ -73,3 +73,20 @@ export function localDateTime(iso: string, timezone: string) {
   }).formatToParts(new Date(iso)).map((part) => [part.type, part.value]));
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
+
+/**
+ * Today's date where the booking page is, as "YYYY-MM-DD". The booking page
+ * asked for availability from the UTC date, which in Chicago is already
+ * tomorrow from 7 PM (6 PM in winter), so evening visitors lost the rest of
+ * today's times.
+ */
+export function dateIn(timezone: string, at: Date = new Date()) {
+  return localDateTime(at.toISOString(), timezone).date;
+}
+
+/** The earliest time a slot can start with this much notice, as a reader would say it in the page's time zone. */
+export function earliestBookable(noticeHours: number, timezone: string, now = Date.now()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  }).format(new Date(now + Math.max(0, noticeHours) * 3_600_000));
+}

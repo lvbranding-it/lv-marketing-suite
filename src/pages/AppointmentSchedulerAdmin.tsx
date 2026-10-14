@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
-import { downloadAppointmentCalendar, localDateTime, zonedDateTimeToIso } from "@/lib/appointments";
+import { downloadAppointmentCalendar, earliestBookable, localDateTime, zonedDateTimeToIso } from "@/lib/appointments";
 
 type PageRow = {
   id: string; org_id: string; slug: string; title: string; description: string; timezone: string;
@@ -43,6 +43,9 @@ export default function AppointmentSchedulerAdmin() {
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
+  // Whether each connected calendar answers. A calendar that stopped answering
+  // was noticed only by prospects, whose bookings were then refused.
+  const [calendarChecks, setCalendarChecks] = useState<Record<string, { ok: boolean; reason?: string } | "checking">>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState("");
@@ -84,6 +87,7 @@ export default function AppointmentSchedulerAdmin() {
     setAvailability(availabilityResult.data || []);
     setBookings(bookingsResult.data || []);
     setConnections(connectionsResult.data || []);
+    for (const connection of (connectionsResult.data || []) as ConnectionRow[]) void checkCalendar(connection.host_id);
     const loadedHosts = (hostsResult.data || []) as HostRow[];
     const loadedAvailability = (availabilityResult.data || []) as AvailabilityRow[];
     const firstHost = loadedHosts[0]?.id || "";
@@ -176,9 +180,35 @@ export default function AppointmentSchedulerAdmin() {
 
   const connectCalendar = async (host: HostRow, provider: "google" | "microsoft") => {
     const { data, error } = await supabase.functions.invoke("appointment-calendar-oauth", { body: { action: "start", provider, host_id: host.id } });
-    if (error || !data?.url) return toast({ variant: "destructive", title: `${provider === "google" ? "Google" : "Microsoft 365"} connection needs configuration`, description: data?.error || error?.message || "Add the provider credentials to Supabase, then try again." });
+    if (error || !data?.url) {
+      // The server's reason is in the response body; the error itself only
+      // said "Edge Function returned a non-2xx status code".
+      let reason: string | undefined = data?.error;
+      const response = (error as { context?: Response } | null)?.context;
+      if (!reason && response && typeof response.json === "function") {
+        reason = await response.json().then((body: { error?: string }) => body.error).catch(() => undefined);
+      }
+      const name = provider === "google" ? "Google Calendar" : "Microsoft 365";
+      const notSetUp = /not configured/i.test(reason ?? "");
+      return toast({
+        variant: "destructive",
+        title: notSetUp ? `${name} isn't set up for this workspace` : `${name} could not be connected`,
+        description: notSetUp
+          ? `The app credentials ${name} needs have not been added to the server yet, so this calendar can't be connected.${provider === "microsoft" ? " Google Calendar can be." : ""}`
+          : reason || error?.message || "Try again in a moment.",
+      });
+    }
     window.location.assign(data.url);
   };
+
+  async function checkCalendar(hostId: string) {
+    setCalendarChecks((current) => ({ ...current, [hostId]: "checking" }));
+    const { data, error } = await supabase.functions.invoke("appointment-calendar-oauth", { body: { action: "check", host_id: hostId } });
+    setCalendarChecks((current) => ({
+      ...current,
+      [hostId]: error ? { ok: false, reason: "The calendar check could not run. Try again shortly." } : { ok: Boolean(data?.ok), reason: data?.reason },
+    }));
+  }
 
   const disconnect = async (hostId: string) => {
     const { error } = await (supabase as any).rpc("disconnect_appointment_calendar", { p_host_id: hostId });
@@ -320,7 +350,7 @@ export default function AppointmentSchedulerAdmin() {
                   <div className="flex items-start gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-muted"><UserRound size={18} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{host.display_name}</p>{host.is_default && <Badge>Default</Badge>}</div><p className="truncate text-sm text-muted-foreground">{host.email}</p></div><Switch checked={host.is_enabled} onCheckedChange={(checked) => updateHost(host, { is_enabled: checked })} /></div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {!host.is_default && <Button size="sm" variant="outline" onClick={() => updateHost(host, { is_default: true })}>Make default</Button>}
-                    {connection ? <><Badge variant="outline" className="gap-1.5"><Link2 size={12} /> {connection.provider === "google" ? "Google" : "Microsoft 365"} · {connection.account_email}</Badge><Button size="sm" variant="ghost" onClick={() => disconnect(host.id)}><Unplug size={14} className="mr-1" /> Disconnect</Button></> : <><Button size="sm" variant="outline" onClick={() => connectCalendar(host, "google")}>Connect Google</Button><Button size="sm" variant="outline" onClick={() => connectCalendar(host, "microsoft")}>Connect Microsoft 365</Button></>}
+                    {connection ? <><Badge variant="outline" className="gap-1.5"><Link2 size={12} /> {connection.provider === "google" ? "Google" : "Microsoft 365"} · {connection.account_email}</Badge><CalendarCheckStatus check={calendarChecks[host.id]} onReconnect={() => connectCalendar(host, connection.provider)} onRetry={() => void checkCalendar(host.id)} /><Button size="sm" variant="ghost" onClick={() => disconnect(host.id)}><Unplug size={14} className="mr-1" /> Disconnect</Button></> : <><Button size="sm" variant="outline" onClick={() => connectCalendar(host, "google")}>Connect Google</Button><Button size="sm" variant="outline" onClick={() => connectCalendar(host, "microsoft")}>Connect Microsoft 365</Button></>}
                     {!host.is_default && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => removeHost(host)}><Trash2 size={14} /></Button>}
                   </div>
                 </article>;
@@ -340,7 +370,15 @@ export default function AppointmentSchedulerAdmin() {
               <div className="sm:col-span-2"><Label>Description</Label><Textarea rows={3} value={page.description} onChange={(e) => setPage({ ...page, description: e.target.value })} className="mt-1.5" /></div>
               <div><Label>Appointment length</Label><Select value={String(page.duration_minutes)} onValueChange={(value) => setPage({ ...page, duration_minutes: Number(value) })}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent>{[15,20,30,45,60,90,120].map((value) => <SelectItem key={value} value={String(value)}>{value} minutes</SelectItem>)}</SelectContent></Select></div>
               <div><Label>Buffer between appointments</Label><Select value={String(page.buffer_minutes)} onValueChange={(value) => setPage({ ...page, buffer_minutes: Number(value) })}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent>{[0,5,10,15,30,60].map((value) => <SelectItem key={value} value={String(value)}>{value} minutes</SelectItem>)}</SelectContent></Select></div>
-              <div><Label>Minimum notice</Label><Input type="number" min={0} max={720} value={page.minimum_notice_hours} onChange={(e) => setPage({ ...page, minimum_notice_hours: Number(e.target.value) })} className="mt-1.5" /></div>
+              <div>
+                <Label htmlFor="minimum-notice">Minimum notice (hours)</Label>
+                <Input id="minimum-notice" type="number" min={0} max={720} value={page.minimum_notice_hours} onChange={(e) => setPage({ ...page, minimum_notice_hours: Number(e.target.value) })} className="mt-1.5" />
+                {/* Said in what it does: a bare "24" read like a small number, and hid that no
+                    time today could be booked. */}
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  How far ahead a time must be to be booked. Right now, the earliest anyone can book is {earliestBookable(page.minimum_notice_hours, page.timezone)}.
+                </p>
+              </div>
               <div><Label>Booking window (days)</Label><Input type="number" min={1} max={365} value={page.booking_window_days} onChange={(e) => setPage({ ...page, booking_window_days: Number(e.target.value) })} className="mt-1.5" /></div>
               <div><Label>Timezone</Label><Select value={page.timezone} onValueChange={(value) => setPage({ ...page, timezone: value })}><SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="America/Chicago">Central Time</SelectItem><SelectItem value="America/New_York">Eastern Time</SelectItem><SelectItem value="America/Denver">Mountain Time</SelectItem><SelectItem value="America/Los_Angeles">Pacific Time</SelectItem><SelectItem value="America/Mexico_City">Mexico City</SelectItem></SelectContent></Select></div>
               <div><Label>Brand color</Label><div className="mt-1.5 flex gap-2"><Input type="color" value={page.brand_color} onChange={(e) => setPage({ ...page, brand_color: e.target.value })} className="w-16 p-1" /><Input value={page.brand_color} onChange={(e) => setPage({ ...page, brand_color: e.target.value })} /></div></div>
@@ -373,5 +411,29 @@ export default function AppointmentSchedulerAdmin() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  );
+}
+
+/** Whether a connected calendar answers, and what to do when it does not. */
+function CalendarCheckStatus({ check, onReconnect, onRetry }: {
+  check: { ok: boolean; reason?: string } | "checking" | undefined;
+  onReconnect: () => void;
+  onRetry: () => void;
+}) {
+  if (!check || check === "checking") {
+    return <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 size={12} className="animate-spin" />Checking calendar…</span>;
+  }
+  if (check.ok) {
+    return <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700"><Check size={12} />Answering</span>;
+  }
+  return (
+    <div role="alert" className="basis-full rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+      <p className="font-medium">This calendar isn't answering, so bookings are being refused.</p>
+      {check.reason && <p className="mt-1">{check.reason}</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" onClick={onReconnect}>Reconnect</Button>
+        <Button size="sm" variant="ghost" onClick={onRetry}><RefreshCw size={14} className="mr-1" />Check again</Button>
+      </div>
+    </div>
   );
 }

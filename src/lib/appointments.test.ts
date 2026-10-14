@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { appointmentCalendarFile, localDateTime, zonedDateTimeToIso } from "./appointments";
+import { appointmentCalendarFile, dateIn, earliestBookable, localDateTime, zonedDateTimeToIso } from "./appointments";
 
 describe("appointment calendar helpers", () => {
   it("creates a portable tentative calendar event", () => {
@@ -33,5 +33,20 @@ describe("appointment calendar helpers", () => {
     expect(zonedDateTimeToIso("2026-07-06", "09:00", "America/Chicago")).toBe("2026-07-06T14:00:00.000Z");
     expect(zonedDateTimeToIso("2026-12-07", "09:00", "America/Chicago")).toBe("2026-12-07T15:00:00.000Z");
     expect(localDateTime("2026-12-07T15:00:00.000Z", "America/Chicago")).toEqual({ date: "2026-12-07", time: "09:00" });
+  });
+});
+
+describe("booking dates", () => {
+  it("gives today's date where the booking page is, not in UTC", () => {
+    // 8 PM in Chicago on October 14 is already October 15 in UTC.
+    const evening = new Date("2026-10-15T01:00:00Z");
+    expect(dateIn("America/Chicago", evening)).toBe("2026-10-14");
+    expect(evening.toISOString().slice(0, 10)).toBe("2026-10-15");
+  });
+
+  it("names the earliest bookable time for a notice period", () => {
+    const now = Date.parse("2026-10-14T14:30:00Z"); // 9:30 AM in Chicago
+    expect(earliestBookable(24, "America/Chicago", now)).toBe("Thu, Oct 15, 9:30 AM");
+    expect(earliestBookable(2, "America/Chicago", now)).toBe("Wed, Oct 14, 11:30 AM");
   });
 });
