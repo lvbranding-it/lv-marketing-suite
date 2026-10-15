@@ -1,3 +1,4 @@
+import LVLogo from "@/components/LVLogo";
 import { cn } from "@/lib/utils";
 import type { LegalBlock } from "@/lib/legal/templates";
 
@@ -11,7 +12,10 @@ export default function LegalDocumentView({ blocks, className }: { blocks: Legal
 
   return (
     <article className={cn("rounded-lg border border-neutral-200 bg-white px-5 py-7 text-[#1c1a1b] shadow-sm sm:px-10 sm:py-10", className)}>
-      <p className="mb-6 text-[11px] font-bold tracking-[0.12em] text-[#cb2039]">LV BRANDING</p>
+      <div className="mb-7 flex items-center gap-2.5">
+        <LVLogo size={36} className="shrink-0" />
+        <span className="text-xs font-semibold tracking-[0.12em] text-[#cb2039]">LV BRANDING</span>
+      </div>
       {blocks.map((block, index) => {
         if (block.kind === "title") {
           return <h2 key={index} className="mb-5 text-balance text-xl font-bold uppercase tracking-wide sm:text-2xl">{block.text}</h2>;

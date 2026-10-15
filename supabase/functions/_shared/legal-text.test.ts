@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalJson, drawnWidth, pdfSafe, validSignature, wrapText } from "./legal-text";
+import { canonicalJson, drawnWidth, keepDrawable, pdfSafe, validSignature, wrapText } from "./legal-text";
 
 describe("canonicalJson", () => {
   it("gives the same text whatever order keys were written in, so the fingerprint is stable", () => {
@@ -23,7 +23,14 @@ describe("pdfSafe", () => {
   it("keeps Spanish and typographic marks, and replaces what the PDF fonts cannot draw", () => {
     expect(pdfSafe("Autorización — “sí” ñ ¿qué?")).toBe("Autorización — “sí” ñ ¿qué?");
     expect(pdfSafe("9:30 AM")).toBe("9:30 AM");
-    expect(pdfSafe("Hola 🙂")).toBe("Hola ??");
+    expect(pdfSafe("Hola 🙂")).toBe("Hola ?");
+    expect(pdfSafe("9:30\u202fAM\u00a0CDT")).toBe("9:30 AM CDT");
+    expect(pdfSafe("Nguyễn")).toBe("Nguy?n");
+  });
+
+  it("keeps whatever a font can draw, line breaks included", () => {
+    const fira = (codePoint: number) => codePoint !== 0x1f642; // everything but the emoji
+    expect(keepDrawable("Nguyễn\nĐặng 🙂", fira)).toBe("Nguyễn\nĐặng ?");
   });
 });
 

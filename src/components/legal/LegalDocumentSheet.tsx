@@ -31,7 +31,7 @@ function SignatureShown({ signature }: { signature: LegalSignature }) {
     <div className="flex h-16 items-end rounded-md border bg-white px-3 pb-2">
       {signature.type === "draw"
         ? <img src={signature.value} alt="Drawn signature" className="max-h-12 max-w-full object-contain" />
-        : <span className="truncate font-serif text-2xl italic text-[#1c1a1b]">{signature.value}</span>}
+        : <span className="truncate text-2xl italic text-[#1c1a1b]">{signature.value}</span>}
     </div>
   );
 }

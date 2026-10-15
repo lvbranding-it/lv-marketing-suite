@@ -30,12 +30,22 @@ export function validSignature(signature: unknown): Signature | null {
 }
 
 const WINANSI_EXTRA = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
-/** Text the PDF's built-in fonts can draw: Latin-1, which covers Spanish, plus a few marks. */
-export function pdfSafe(text: string) {
-  return text
-    .replace(/[    ]/g, " ")
-    .replace(/[^\n\x20-\x7e\xa0-\xff]/g, (char) => (WINANSI_EXTRA.includes(char) ? char : "?"));
+const latin1 = (codePoint: number) =>
+  (codePoint >= 0x20 && codePoint <= 0x7e) || (codePoint >= 0xa0 && codePoint <= 0xff) || WINANSI_EXTRA.includes(String.fromCodePoint(codePoint));
+
+/**
+ * Text a PDF font can draw: odd spaces become plain ones, line breaks stay,
+ * and any character the font has no glyph for becomes "?" instead of
+ * breaking the PDF.
+ */
+export function keepDrawable(text: string, canDraw: (codePoint: number) => boolean) {
+  return [...text.replace(/[\u00a0\u2007\u2009\u202f]/g, " ")]
+    .map((char) => (char === "\n" || canDraw(char.codePointAt(0)!) ? char : "?"))
+    .join("");
 }
+
+/** Text the PDF's built-in fonts can draw: Latin-1, which covers Spanish, plus a few marks. */
+export const pdfSafe = (text: string) => keepDrawable(text, latin1);
 
 /**
  * How wide pdf-lib draws a line. Its widthOfTextAtSize subtracts kerning that

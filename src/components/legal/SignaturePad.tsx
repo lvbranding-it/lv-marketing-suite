@@ -234,7 +234,7 @@ export default function SignaturePad({ value, onChange, defaultName = "", langua
             }}
           />
           <div className="flex h-24 items-end rounded-lg border bg-white px-5 pb-4">
-            <span className="w-full truncate border-b border-neutral-300 pb-1 font-serif text-3xl italic text-[#1c1a1b]">
+            <span className="w-full truncate border-b border-neutral-300 pb-1 text-3xl italic text-[#1c1a1b]">
               {typed.trim() || " "}
             </span>
           </div>

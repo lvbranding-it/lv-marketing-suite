@@ -30,6 +30,20 @@ organization (owner, admin or manager to send, resend, void or countersign;
 any member to download), and `legal-sign` needs the link's token plus the
 recipient's email.
 
+## Look
+
+The signed PDF is set in Fira Sans (regular, semibold, and italic for typed
+signatures) under the LV coin. Both are bundled in
+`supabase/functions/_shared/legal-brand/` as base64, so making a PDF never
+depends on a download; only `legal-signs` loads them (`_shared/legal-pdf.ts`).
+The fonts are embedded whole, since pdf-lib's subsetting drops letters from
+Fira Sans, so a signed PDF is about 700 KB. If embedding ever fails, the PDF is
+made in Helvetica rather than failing the countersignature.
+
+The emails show the coin from https://marketing.lvbranding.com/lv-logo.png and
+ask for Fira Sans; Apple Mail and iOS show it, Gmail and Outlook fall back to
+Arial.
+
 ## How a document moves
 
 | Status | Meaning |

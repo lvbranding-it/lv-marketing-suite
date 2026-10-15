@@ -6,9 +6,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  APP_URL, base64, buildSignedPdf, completedEmail, contentHash, cors, json, newToken, requestOrigin,
+  APP_URL, completedEmail, contentHash, cors, json, newToken, requestOrigin,
   sendEmail, signatureRequestEmail, validSignature, type Content, type Language,
 } from "../_shared/legal-signs.ts";
+import { base64, buildSignedPdf } from "../_shared/legal-pdf.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -151,8 +152,7 @@ serve(async (req) => {
       // The certificate lists the signing steps; wrong-email attempts stay in LegalSigns only.
       const { data: events } = await db.from("legal_document_events").select("event, created_at, actor_label, ip, user_agent")
         .eq("document_id", doc.id).in("event", ["sent", "resent", "viewed", "client_signed", "countersigned"]).order("created_at");
-      const logo = await fetch(`${APP_URL}/lv-logo.png`).then((r) => (r.ok ? r.arrayBuffer() : undefined)).catch(() => undefined);
-      const pdf = await buildSignedPdf(signed, events || [], logo ? new Uint8Array(logo) : undefined);
+      const pdf = await buildSignedPdf(signed, events || []);
       const path = `${doc.org_id}/${doc.id}.pdf`;
       const { error: uploadError } = await db.storage.from("legal-documents").upload(path, pdf, { contentType: "application/pdf", upsert: true });
       if (uploadError) throw uploadError;
