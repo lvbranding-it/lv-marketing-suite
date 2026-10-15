@@ -267,18 +267,22 @@ export function useDeliverableSignedUrl(storagePath: string | undefined) {
  * The contact a session's client is, adding them to the contacts when they
  * are new. A contact chosen without an email gets the one typed for the
  * session. Returns null when the contact could not be added: the session is
- * still saved, just not linked.
+ * still saved, just not linked. LegalSigns links its recipients the same way.
  */
-async function linkClientContact({
+export async function linkClientContact({
   client,
   orgId,
   userId,
   branchId,
+  company,
+  rawData = { from_photo_session: true },
 }: {
   client: SessionClient;
   orgId: string;
   userId: string;
   branchId: string | null;
+  company?: string;
+  rawData?: Record<string, unknown>;
 }): Promise<string | null> {
   const email = client.email.trim();
   try {
@@ -309,10 +313,11 @@ async function linkClientContact({
         created_by: userId,
         ...splitName(client.name),
         email: email || null,
+        company: company?.trim() || null,
         source: "manual",
         pipeline_stage: "won",
         signals: [],
-        raw_data: { from_photo_session: true },
+        raw_data: rawData as import("@/integrations/supabase/types").Json,
       })
       .select("id")
       .single();

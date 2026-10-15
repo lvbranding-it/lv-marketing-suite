@@ -449,6 +449,16 @@ verify_jwt = false
 # function checks the link's token itself before it signs or records anything.
 verify_jwt = false
 
+[functions.legal-signs]
+# The team's LegalSigns actions. The function checks the user's session and
+# their role in the document's organization itself.
+verify_jwt = false
+
+[functions.legal-sign]
+# Called from the public /sign/:token page, where the recipient is not signed
+# in. The function checks the link's token and the recipient's email itself.
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

@@ -35,6 +35,7 @@ import {
   PenTool,
   CalendarDays,
   Share2,
+  FileSignature,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
@@ -69,6 +70,7 @@ const NAV_ITEMS = [
   { to: "/contacts",  labelKey: "nav.contacts", icon: Users },
   { to: "/lead-forms", labelKey: "nav.leadForms", icon: Link2 },
   { to: "/ccs", labelKey: "nav.collaboration", icon: ShieldCheck },
+  { to: "/legal-signs", labelKey: "nav.legalSigns", icon: FileSignature },
   { to: "/intake",    labelKey: "nav.intake", icon: ClipboardList },
   { to: "/campaigns", labelKey: "nav.campaigns", icon: Mail },
   { to: "/social-publisher", labelKey: "nav.socialPublisher", icon: Share2 },

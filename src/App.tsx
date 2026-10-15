@@ -37,6 +37,8 @@ const ClientPhotoSelection = lazy(() => import("@/pages/ClientPhotoSelection"));
 const BossRedirect         = lazy(() => import("@/components/boss/BossHeader").then((m) => ({ default: m.BossRedirect })));
 const FileDrop             = lazy(() => import("@/pages/FileDrop"));
 const ClientUpload         = lazy(() => import("@/pages/ClientUpload"));
+const LegalSigns           = lazy(() => import("@/pages/LegalSigns"));
+const SignDocument         = lazy(() => import("@/pages/SignDocument"));
 const Contests             = lazy(() => import("@/pages/Contests"));
 const ContestDetail        = lazy(() => import("@/pages/ContestDetail"));
 const VotingPage           = lazy(() => import("@/pages/VotingPage"));
@@ -324,6 +326,19 @@ function AppRoutes() {
             <Suspense fallback={null}><FileDrop /></Suspense>
           </ProtectedRoute>
         }
+      />
+      {/* LegalSigns: the team's documents (protected), and the page recipients sign on (no auth). */}
+      <Route
+        path="/legal-signs"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={null}><LegalSigns /></Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sign/:token"
+        element={<Suspense fallback={null}><SignDocument /></Suspense>}
       />
       {/* File Drop — public client upload (no auth) */}
       <Route
