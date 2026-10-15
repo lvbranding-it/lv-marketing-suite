@@ -256,7 +256,8 @@ export async function buildSignedPdf(doc: PdfDocumentData, events: { event: stri
 
   for (const block of doc.content.blocks) {
     if (block.kind === "title") { write(block.text.toUpperCase(), bold, 17, { gap: 12 }); continue; }
-    if (block.kind === "heading") { y -= 4; write(block.text, bold, 11, { gap: 4 }); continue; }
+    // A heading starts a new page rather than end one alone: room for it and three lines after.
+    if (block.kind === "heading") { y -= 4; ensure(62); write(block.text, bold, 11, { gap: 4 }); continue; }
     if (block.kind === "meta") {
       ensure(15);
       const label = pdfSafe(`${block.label}: `);

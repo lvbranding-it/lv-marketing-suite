@@ -59,18 +59,29 @@ Sending it again emails a new link and the old one stops working.
 
 ## Templates
 
-`src/lib/legal/templates.ts`. The four releases (photo, media, talent,
-location) and the client approval form are Suite 55's documents with LV
-Branding LLC as producer. A release can be signed by a parent or guardian for
-a minor; the guardian clause and signer line follow the minor's name.
+`src/lib/legal/templates.ts`.
 
-- **Spanish**: the Spanish text was translated for LegalSigns and has not been
-  reviewed by a lawyer. Have a bilingual lawyer review it before relying on it.
-- **NDAs**: the Mutual and One-way NDA entries are placeholders
-  (`available: false`, version "0") until LV Branding's approved NDA wording is
-  added. Add it to `pendingNda` in the templates file, give each a version, set
-  `available: true`, and choose a `countersignerRole` other than "LV Branding
-  LLC" (the PDF already adds the company name after the role).
+- **Mutual and One-way NDAs**: LV Branding's approved English and Spanish
+  text, word for word from `LV_Branding_Mutual_NDA_EN/ES.docx` and
+  `LV_Branding_One_Way_NDA_EN/ES.docx`, kept in `src/lib/legal/ndaText.ts`.
+  Both share one form (`ndaTemplate`); the Mutual NDA names the parties Party 1
+  and Party 2, the One-way NDA the Disclosing Party (LV Branding) and the
+  Receiving Party. The form fills the parties block: the other party is the
+  legal name typed for it, else the Company, else the recipient personally (who
+  then signs personally, as the NDAs say). Their notice email defaults to the
+  recipient's. LV Branding's notice email and address come from `LV_NOTICE` in
+  the templates file; set the address there once so nobody types it on each NDA.
+- **Releases and client approval form**: the four releases (photo, media,
+  talent, location) and the client approval form are Suite 55's documents with
+  LV Branding LLC as producer. A release can be signed by a parent or guardian
+  for a minor; the guardian clause and signer line follow the minor's name.
+  Their Spanish text was translated for LegalSigns and has not been reviewed by
+  a lawyer; the New document dialog says so when Spanish is chosen. Have a
+  bilingual lawyer review it before relying on it.
+- **A new template** can be held back with `available: false` until its
+  wording is approved; the dialog lists it but won't send it. For LV Branding's
+  role, choose a `countersignerRole` other than "LV Branding LLC" (the PDF
+  already adds the company name after the role).
 
 Change a template's `version` whenever its wording changes; the version is
 recorded with every document and printed on the certificate.

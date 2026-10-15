@@ -13,7 +13,7 @@ import { useLegalActions } from "@/hooks/useLegalSigns";
 import { useToast } from "@/hooks/use-toast";
 import { NO_CLIENT, type SessionClient } from "@/lib/photo-sessions/clients";
 import {
-  LEGAL_TEMPLATES, legalTemplate, missingLegalFields, signerRoleFor, type LegalLanguage,
+  fieldDefaults, LEGAL_TEMPLATES, legalTemplate, missingLegalFields, signerRoleFor, type LegalLanguage,
 } from "@/lib/legal/templates";
 import { cn } from "@/lib/utils";
 
@@ -48,10 +48,17 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
     setLanguage("en");
     setClient(NO_CLIENT);
     setCompanyName("");
-    setValues({});
+    setValues(fieldDefaults(legalTemplate(DEFAULT_TEMPLATE)!));
     setTried(false);
     setView("details");
   }, [open]);
+
+  // A template's starting values fill in whatever is still empty.
+  const chooseTemplate = (key: string) => {
+    setTemplateKey(key);
+    const defaults = fieldDefaults(legalTemplate(key)!);
+    setValues((current) => ({ ...defaults, ...Object.fromEntries(Object.entries(current).filter(([, value]) => value.trim())) }));
+  };
 
   // A chosen contact brings their company, unless one was already typed.
   useEffect(() => {
@@ -60,10 +67,12 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
     if (company) setCompanyName((current) => current || company);
   }, [client.contactId, contacts]);
 
-  const blocks = useMemo(
-    () => template.render({ language, companyName, signerName: client.name, values }),
-    [template, language, companyName, client.name, values],
+  const renderInput = useMemo(
+    () => ({ language, companyName, signerName: client.name, recipientEmail: client.email, values }),
+    [language, companyName, client.name, client.email, values],
   );
+  const blocks = useMemo(() => template.render(renderInput), [template, renderInput]);
+  const signerRole = signerRoleFor(template, renderInput);
 
   const problems = useMemo(() => {
     const list: Record<string, string> = {};
@@ -72,7 +81,11 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
     if (!client.email.trim()) list.email = "The signing link goes to this email";
     else if (!EMAIL.test(client.email.trim())) list.email = "Check this email address";
     const missing = missingLegalFields(template, values, "en");
+    const badEmails = template.fields
+      .filter((field) => field.type === "email" && values[field.key]?.trim() && !EMAIL.test(values[field.key].trim()))
+      .map((field) => field.label.en);
     if (missing.length) list.fields = `Fill in: ${missing.join(", ")}`;
+    else if (badEmails.length) list.fields = `Check: ${badEmails.join(", ")}`;
     return list;
   }, [client, template, values]);
   const ready = Object.keys(problems).length === 0;
@@ -92,7 +105,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
     try {
       const result = await send.mutateAsync({
         templateKey, language, client, companyName, values: fieldValues,
-        content: { blocks, signerRole: signerRoleFor(template, values, language), countersignerRole: template.countersignerRole[language] },
+        content: { blocks, signerRole, countersignerRole: template.countersignerRole[language] },
       });
       toast({ title: "Sent for signature", description: `${client.name.trim()} will get an email with a link to sign.` });
       onOpenChange(false);
@@ -141,7 +154,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
                     key={option.key}
                     type="button"
                     disabled={!option.available}
-                    onClick={() => setTemplateKey(option.key)}
+                    onClick={() => chooseTemplate(option.key)}
                     aria-pressed={templateKey === option.key}
                     className={cn(
                       "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -156,7 +169,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
                         {!option.available && <Lock className="h-3 w-3 text-muted-foreground" />}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        {option.available ? option.description.en : "Waiting for LV Branding's approved NDA wording"}
+                        {option.available ? option.description.en : "Waiting for its approved wording"}
                       </span>
                     </span>
                   </button>
@@ -182,7 +195,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
                   </button>
                 ))}
               </div>
-              {language === "es" && (
+              {language === "es" && !template.spanishApproved && (
                 <p className="flex gap-1.5 text-xs text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   The Spanish text is a translation that a bilingual lawyer hasn't reviewed yet.
@@ -231,7 +244,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
                     {field.type === "textarea" ? (
                       <Textarea id={fieldId(field.key)} rows={3} value={values[field.key] ?? ""} placeholder={field.placeholder?.[language]} onChange={(event) => setValue(field.key, event.target.value)} />
                     ) : (
-                      <Input id={fieldId(field.key)} type={field.type === "date" ? "date" : "text"} value={values[field.key] ?? ""} placeholder={field.placeholder?.[language]} onChange={(event) => setValue(field.key, event.target.value)} />
+                      <Input id={fieldId(field.key)} type={field.type === "date" || field.type === "email" ? field.type : "text"} value={values[field.key] ?? ""} placeholder={field.placeholder?.[language]} onChange={(event) => setValue(field.key, event.target.value)} />
                     )}
                     {hint}
                   </div>
@@ -246,7 +259,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
             <LegalDocumentView blocks={blocks} />
             <div className="mt-4 grid gap-3 rounded-lg border border-dashed bg-background/60 p-4 text-sm sm:grid-cols-2">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">{signerRoleFor(template, values, language)}</p>
+                <p className="text-xs font-medium text-muted-foreground">{signerRole}</p>
                 <p className="mt-1">{client.name.trim() || "Recipient"} signs first</p>
               </div>
               <div>

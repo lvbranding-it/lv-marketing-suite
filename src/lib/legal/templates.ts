@@ -1,14 +1,17 @@
 // LegalSigns document templates.
 //
-// The four releases and the client approval form are Suite 55's documents
+// The Mutual and One-way NDAs are LV Branding's approved text in English and
+// Spanish, word for word (ndaText.ts). The four releases and the client
+// approval form are Suite 55's documents
 // (suite55-ai/src/components/documents/*PDF.tsx), with LV Branding LLC as the
-// producer. The Spanish versions are translations made for LegalSigns, not
+// producer; their Spanish versions are translations made for LegalSigns, not
 // approved text: have a bilingual lawyer review them before relying on them.
-// The two NDAs wait for LV Branding's approved wording and cannot be sent yet.
 //
 // A document is rendered to blocks once, when it is sent. The blocks are what
 // the client reads and signs and what the PDF prints, so later edits to a
 // template never change a document already sent.
+
+import { NDA_TEXT } from "./ndaText";
 
 export type LegalLanguage = "en" | "es";
 type Text = Record<LegalLanguage, string>;
@@ -22,11 +25,13 @@ export type LegalBlock =
 export interface LegalField {
   key: string;
   label: Text;
-  type: "text" | "date" | "textarea" | "select";
+  type: "text" | "email" | "date" | "textarea" | "select";
   required?: boolean;
   options?: { value: string; label: Text }[];
   placeholder?: Text;
   hint?: Text;
+  /** What the field starts with on a new document. */
+  defaultValue?: () => string;
 }
 
 export interface LegalTemplate {
@@ -39,8 +44,12 @@ export interface LegalTemplate {
   available: boolean;
   /** Who the client is in this document, shown at their signature. */
   signerRole: Text;
+  /** Who signs, when it depends on the document (the NDA names Party 2). */
+  signerRoleFrom?: (input: LegalRenderInput) => string;
   /** Who LV Branding signs as. */
   countersignerRole: Text;
+  /** The Spanish text is LV Branding's approved wording, not a LegalSigns translation. */
+  spanishApproved?: boolean;
   fields: LegalField[];
   render: (input: LegalRenderInput) => LegalBlock[];
 }
@@ -50,6 +59,8 @@ export interface LegalRenderInput {
   language: LegalLanguage;
   companyName: string;
   signerName: string;
+  /** Where the signing link goes; the NDA's Party 2 notice email unless another is given. */
+  recipientEmail?: string;
   values: Record<string, string>;
 }
 
@@ -359,25 +370,86 @@ const clientApproval: LegalTemplate = {
   },
 };
 
-/** NDAs: kept out of use until LV Branding's approved wording is added here. */
-function pendingNda(key: string, name: Text, description: Text): LegalTemplate {
+/**
+ * LV Branding's side of the NDA's parties block. The address isn't recorded
+ * anywhere yet: until it is set here, it is typed on each NDA.
+ */
+export const LV_NOTICE = { address: "", email: "admin@lvbranding.com" };
+
+/** Today in Houston, as a date field holds it. */
+const todayInHouston = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+
+/** The other party: the legal name typed for it, else the company, else the recipient personally. */
+const otherParty = (input: LegalRenderInput) =>
+  optional(input, "party2Name") || input.companyName.trim() || input.signerName.trim() || BLANK;
+
+/**
+ * An NDA: the approved text with its parties block filled in. Both NDAs share
+ * their form; they differ in their text and in what they call the parties
+ * (Party 1 and 2, or Disclosing and Receiving Party).
+ */
+function ndaTemplate(kind: "mutual" | "oneWay", key: string, description: Text): LegalTemplate {
+  const text = NDA_TEXT[kind];
+  const party = t(text.en.labels.party2, text.es.labels.party2);
   return {
     key,
-    version: "0",
+    version: "1.0",
     kind: "nda",
-    name,
+    name: t(text.en.title, text.es.title),
     description,
-    available: false,
-    signerRole: t("Client", "Cliente"),
-    countersignerRole: t("LV Branding LLC", "LV Branding LLC"),
-    fields: [],
-    render: (input) => [{ kind: "title", text: name[input.language] }],
+    available: true,
+    spanishApproved: true,
+    signerRole: party,
+    signerRoleFrom: (input) => `${party[input.language]} · ${otherParty(input)}`,
+    countersignerRole: t(text.en.labels.party1, text.es.labels.party1),
+    fields: [
+      { key: "effectiveDate", label: t("Effective date", "Fecha de entrada en vigor"), type: "date", required: true, defaultValue: todayInHouston },
+      {
+        key: "businessPurpose", label: t("Business purpose", "Objeto comercial"), type: "textarea", required: true,
+        placeholder: t("Describe the proposed project or relationship", "Describir el proyecto o la relación propuesta"),
+      },
+      {
+        key: "party2Name", label: t(`${party.en} full legal name`, `Nombre legal completo de la ${party.es}`), type: "text",
+        hint: t("Leave empty to use the Company, or the recipient's own name when there is no company.", "Déjelo vacío para usar la Empresa, o el nombre del destinatario si no hay empresa."),
+      },
+      {
+        key: "party2Entity", label: t(`${party.en} entity type and jurisdiction`, `Tipo de entidad y jurisdicción de la ${party.es}`), type: "text",
+        placeholder: t("Texas limited liability company", "Sociedad de responsabilidad limitada de Texas"),
+        hint: t(`Leave empty when the ${party.en} is an individual.`, `Déjelo vacío si la ${party.es} es una persona física.`),
+      },
+      { key: "party2Address", label: t(`${party.en} address`, `Domicilio de la ${party.es}`), type: "text", required: true },
+      {
+        key: "party2Email", label: t(`${party.en} notice email`, `Correo para notificaciones de la ${party.es}`), type: "email",
+        hint: t("Leave empty to use the recipient's email.", "Déjelo vacío para usar el correo del destinatario."),
+      },
+      { key: "lvAddress", label: t("LV Branding address", "Domicilio de LV Branding"), type: "text", required: true, defaultValue: () => LV_NOTICE.address },
+      { key: "lvEmail", label: t("LV Branding notice email", "Correo para notificaciones de LV Branding"), type: "email", required: true, defaultValue: () => LV_NOTICE.email },
+    ],
+    render(input) {
+      const words = text[input.language];
+      const meta = (label: string, value: string): LegalBlock => ({ kind: "meta", label, text: value });
+      return [
+        { kind: "title", text: words.title },
+        { kind: "paragraph", text: words.intro },
+        meta(words.labels.effectiveDate, legalDate(input.values.effectiveDate, input.language)),
+        meta(words.labels.party1, PRODUCER),
+        meta(words.labels.address, value(input, "lvAddress")),
+        meta(words.labels.noticeEmail, value(input, "lvEmail")),
+        meta(words.labels.party2, otherParty(input)),
+        meta(words.labels.entity, optional(input, "party2Entity") || words.notApplicable),
+        meta(words.labels.address, value(input, "party2Address")),
+        meta(words.labels.noticeEmail, optional(input, "party2Email") || input.recipientEmail?.trim() || BLANK),
+        meta(words.labels.purpose, value(input, "businessPurpose")),
+        ...words.sections.flatMap(([heading, body]) => [{ kind: "heading", text: heading }, { kind: "paragraph", text: body }] as LegalBlock[]),
+        { kind: "paragraph", text: words.signingNote },
+      ];
+    },
   };
 }
 
 export const LEGAL_TEMPLATES: LegalTemplate[] = [
-  pendingNda("nda_mutual", t("Mutual NDA", "Acuerdo mutuo de confidencialidad"), t("Both parties protect what they share.", "Ambas partes protegen lo que comparten.")),
-  pendingNda("nda_one_way", t("One-way NDA", "Acuerdo unilateral de confidencialidad"), t("Only one party's information is protected.", "Solo se protege la información de una de las partes.")),
+  ndaTemplate("mutual", "nda_mutual", t("Both parties protect what they share.", "Ambas partes protegen lo que comparten.")),
+  ndaTemplate("oneWay", "nda_one_way", t("Only LV Branding's information is protected.", "Solo se protege la información de LV Branding.")),
   photoRelease,
   mediaRelease,
   talentRelease,
@@ -387,12 +459,21 @@ export const LEGAL_TEMPLATES: LegalTemplate[] = [
 
 export const legalTemplate = (key: string) => LEGAL_TEMPLATES.find((template) => template.key === key);
 
-/** Who signs, as printed under their signature: a guardian when the release is for a minor. */
-export function signerRoleFor(template: LegalTemplate, values: Record<string, string>, language: LegalLanguage) {
-  if (template.fields.some((field) => field.key === "minorName") && values.minorName?.trim()) {
-    return language === "es" ? `Padre, madre o tutor de ${values.minorName.trim()}` : `Parent or guardian of ${values.minorName.trim()}`;
+/** Who signs, as printed with their signature: a guardian when a release is for a minor, Party 2 on the NDA. */
+export function signerRoleFor(template: LegalTemplate, input: LegalRenderInput) {
+  if (template.signerRoleFrom) return template.signerRoleFrom(input);
+  const minor = input.values.minorName?.trim();
+  if (template.fields.some((field) => field.key === "minorName") && minor) {
+    return input.language === "es" ? `Padre, madre o tutor de ${minor}` : `Parent or guardian of ${minor}`;
   }
-  return template.signerRole[language];
+  return template.signerRole[input.language];
+}
+
+/** The values a new document of this template starts with. */
+export function fieldDefaults(template: LegalTemplate) {
+  return Object.fromEntries(
+    template.fields.filter((field) => field.defaultValue).map((field) => [field.key, field.defaultValue!()]),
+  ) as Record<string, string>;
 }
 
 /** The labels of required fields left empty, in the document's language. */
