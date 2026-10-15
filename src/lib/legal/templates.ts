@@ -370,11 +370,8 @@ const clientApproval: LegalTemplate = {
   },
 };
 
-/**
- * LV Branding's side of the NDA's parties block. The address isn't recorded
- * anywhere yet: until it is set here, it is typed on each NDA.
- */
-export const LV_NOTICE = { address: "", email: "admin@lvbranding.com" };
+/** LV Branding's side of the NDAs' parties block; both can still be changed on a document. */
+export const LV_NOTICE = { address: "1755 Crescent Plaza Dr., Houston, Texas 77077", email: "admin@lvbranding.com" };
 
 /** Today in Houston, as a date field holds it. */
 const todayInHouston = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());

@@ -83,8 +83,9 @@ Sending it again emails a new link and the old one stops working.
   Receiving Party. The form fills the parties block: the other party is the
   legal name typed for it, else the Company, else the recipient personally (who
   then signs personally, as the NDAs say). Their notice email defaults to the
-  recipient's. LV Branding's notice email and address come from `LV_NOTICE` in
-  the templates file; set the address there once so nobody types it on each NDA.
+  recipient's. LV Branding's address and notice email are filled in from
+  `LV_NOTICE` in the templates file (1755 Crescent Plaza Dr., Houston, Texas
+  77077 and admin@lvbranding.com); change them there if they ever change.
 - **Releases and client approval form**: the four releases (photo, media,
   talent, location) and the client approval form are Suite 55's documents with
   LV Branding LLC as producer. A release can be signed by a parent or guardian
