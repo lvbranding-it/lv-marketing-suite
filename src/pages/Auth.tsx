@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { FolderKanban, Loader2, Sparkles, Users, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, AtSign, Check, KeyRound, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
 import { safePortalReturn } from "@/lib/portal/invitations";
+import "./Auth.css";
 
 const signInSchema = z.object({
   email: z.string().email("Invalid email"),
@@ -118,191 +119,179 @@ export default function Auth() {
     }
   };
 
+  const showReset = () => {
+    resetForm.setValue("email", signInForm.getValues("email"));
+    setMode("reset");
+    setError(null);
+    signInForm.reset();
+  };
+
+  const showSignIn = () => {
+    setMode("signin");
+    setError(null);
+    setResetSent(false);
+    resetForm.reset();
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-primary" size={24} />
+      <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Loading sign in">
+        <Loader2 className="animate-spin text-primary" size={24} aria-hidden />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel */}
-      <div className="hidden lg:flex w-1/2 bg-lv-charcoal flex-col items-center justify-center p-12 text-white">
-        <LVLogo size={72} className="mb-6" />
-        <h1 className="text-3xl font-bold mb-2 text-white">LV Branding</h1>
-        <p className="text-white/60 text-lg">Marketing Suite</p>
-        <div className="mt-12 space-y-4 max-w-xs w-full">
-          {[
-            { icon: Sparkles, text: "33 AI-powered marketing skills" },
-            { icon: FolderKanban, text: "Organized by project and client" },
-            { icon: Zap, text: "Real-time streaming AI output" },
-            { icon: Users, text: "Team collaboration built in" },
-          ].map(({ icon: Icon, text }) => (
-            <div
-              key={text}
-              className="flex items-center gap-3 text-white/70 text-sm"
-            >
-              <Icon size={18} className="shrink-0 text-white/50" aria-hidden />
-              {text}
+    <main className="auth-scene">
+      <div className="auth-composition">
+        <section className="auth-login-card" aria-labelledby="auth-heading">
+          <header className="auth-brand">
+            <div className="flex items-center gap-2.5">
+              <span aria-hidden="true"><LVLogo size={36} /></span>
+              <span className="text-sm font-medium tracking-tight">LV Branding</span>
             </div>
-          ))}
-        </div>
-      </div>
+            <span className="auth-brand-caption">Marketing Suite</span>
+          </header>
 
-      {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-sm space-y-4 sm:space-y-6">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex flex-col items-center mb-2">
-            <LVLogo size={48} className="mb-2" />
-            <p className="text-muted-foreground text-sm">Marketing Suite</p>
-          </div>
+          <div className="auth-form-content">
+            <div className="auth-heading-row">
+              <h1 id="auth-heading">{mode === "signin" ? "Welcome back." : "Reset password."}</h1>
+              <span className="auth-heading-mark" aria-hidden="true"><Sparkles size={19} strokeWidth={1.5} /></span>
+            </div>
+            <p className="auth-intro">
+              {mode === "signin"
+                ? "Your next great idea starts here."
+                : "Enter your email and we’ll send a reset link."}
+            </p>
 
-          {mode === "signin" && (
-            <>
-              <div>
-                <h2 className="text-2xl font-bold">Welcome back</h2>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Sign in to your Marketing Suite
-                </p>
-              </div>
-
-              <form
-                onSubmit={signInForm.handleSubmit(onSignIn)}
-                className="space-y-4"
-              >
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@lvbranding.com"
-                    {...signInForm.register("email")}
-                  />
-                  {signInForm.formState.errors.email && (
-                    <p className="text-xs text-destructive">
-                      {signInForm.formState.errors.email.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    {...signInForm.register("password")}
-                  />
-                  {signInForm.formState.errors.password && (
-                    <p className="text-xs text-destructive">
-                      {signInForm.formState.errors.password.message}
-                    </p>
-                  )}
-                </div>
-
-                {error && (
-                  <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-                    {error}
-                  </p>
-                )}
-
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting && (
-                    <Loader2 size={14} className="mr-2 animate-spin" />
-                  )}
-                  Sign In
-                </Button>
-              </form>
-
-              <p className="text-center text-sm text-muted-foreground">
-                Forgot your password?{" "}
-                <button
-                  className="text-primary font-medium hover:underline"
-                  onClick={() => {
-                    setMode("reset");
-                    setError(null);
-                    signInForm.reset();
-                  }}
-                >
-                  Reset it
-                </button>
-              </p>
-            </>
-          )}
-
-          {mode === "reset" && (
-            <>
-              <div>
-                <h2 className="text-2xl font-bold">Reset password</h2>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Enter your email and we'll send a reset link.
-                </p>
-              </div>
-
-              {resetSent ? (
-                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg">
-                  Check your inbox — a reset link has been sent.
-                </div>
-              ) : (
-                <form
-                  onSubmit={resetForm.handleSubmit(onReset)}
-                  className="space-y-4"
-                >
-                  <div className="space-y-1.5">
-                    <Label htmlFor="reset-email">Email</Label>
+            {mode === "signin" ? (
+              <form onSubmit={signInForm.handleSubmit(onSignIn)} className="auth-form" noValidate>
+                <div>
+                  <Label htmlFor="email" className="sr-only">Email</Label>
+                  <div className="auth-field">
+                    <span className="auth-field-icon" aria-hidden="true"><AtSign size={18} strokeWidth={1.6} /></span>
                     <Input
-                      id="reset-email"
+                      id="email"
                       type="email"
-                      placeholder="you@lvbranding.com"
-                      {...resetForm.register("email")}
+                      autoComplete="username"
+                      placeholder="Email address"
+                      className="auth-input"
+                      aria-invalid={!!signInForm.formState.errors.email}
+                      aria-describedby={signInForm.formState.errors.email ? "email-error" : undefined}
+                      {...signInForm.register("email")}
                     />
-                    {resetForm.formState.errors.email && (
-                      <p className="text-xs text-destructive">
-                        {resetForm.formState.errors.email.message}
-                      </p>
-                    )}
                   </div>
-
-                  {error && (
-                    <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-                      {error}
-                    </p>
+                  {signInForm.formState.errors.email && (
+                    <p id="email-error" role="alert" className="auth-field-error">{signInForm.formState.errors.email.message}</p>
                   )}
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={submitting}
-                  >
-                    {submitting && (
-                      <Loader2 size={14} className="mr-2 animate-spin" />
-                    )}
-                    Send Reset Link
+                </div>
+                <div>
+                  <Label htmlFor="password" className="sr-only">Password</Label>
+                  <div className="auth-field">
+                    <span className="auth-field-icon" aria-hidden="true"><KeyRound size={18} strokeWidth={1.6} /></span>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Password"
+                      className="auth-input auth-password-input"
+                      aria-invalid={!!signInForm.formState.errors.password}
+                      aria-describedby={signInForm.formState.errors.password ? "password-error" : undefined}
+                      {...signInForm.register("password")}
+                    />
+                    <button type="button" className="auth-forgot" onClick={showReset} disabled={submitting} aria-label="Forgot password? Reset it">I forgot</button>
+                  </div>
+                  {signInForm.formState.errors.password && (
+                    <p id="password-error" role="alert" className="auth-field-error">{signInForm.formState.errors.password.message}</p>
+                  )}
+                </div>
+                {error && <p role="alert" className="auth-error">{error}</p>}
+                <div className="auth-submit-row">
+                  <p>A little inspiration.<br />A lot of possibility.</p>
+                  <Button type="submit" className="auth-submit" disabled={submitting}>
+                    {submitting ? "Signing in" : "Sign in"}
+                    <span className="auth-submit-icon" aria-hidden="true">
+                      {submitting ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                    </span>
                   </Button>
-                </form>
-              )}
+                </div>
+              </form>
+            ) : (
+              <>
+                {resetSent ? (
+                  <div role="status" className="auth-reset-success">
+                    <Check size={22} aria-hidden="true" />
+                    <div><p className="font-medium">Check your inbox.</p><p className="mt-1 text-sm">A password reset link has been sent.</p></div>
+                  </div>
+                ) : (
+                  <form onSubmit={resetForm.handleSubmit(onReset)} className="auth-form" noValidate>
+                    <div>
+                      <Label htmlFor="reset-email" className="sr-only">Email</Label>
+                      <div className="auth-field">
+                        <span className="auth-field-icon" aria-hidden="true"><AtSign size={18} strokeWidth={1.6} /></span>
+                        <Input
+                          id="reset-email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder="Email address"
+                          className="auth-input"
+                          aria-invalid={!!resetForm.formState.errors.email}
+                          aria-describedby={resetForm.formState.errors.email ? "reset-email-error" : undefined}
+                          {...resetForm.register("email")}
+                        />
+                      </div>
+                      {resetForm.formState.errors.email && (
+                        <p id="reset-email-error" role="alert" className="auth-field-error">{resetForm.formState.errors.email.message}</p>
+                      )}
+                    </div>
+                    {error && <p role="alert" className="auth-error">{error}</p>}
+                    <Button type="submit" className="auth-submit self-end" disabled={submitting}>
+                      {submitting ? "Sending link" : "Send reset link"}
+                      <span className="auth-submit-icon" aria-hidden="true">
+                        {submitting ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                      </span>
+                    </Button>
+                  </form>
+                )}
+                <button type="button" className="auth-back" onClick={showSignIn} disabled={submitting}><ArrowLeft size={15} aria-hidden="true" /> Back to sign in</button>
+              </>
+            )}
+          </div>
+          <p className="auth-card-footer">Made for the way you create.</p>
+        </section>
 
-              <p className="text-center text-sm text-muted-foreground">
-                Remember it?{" "}
-                <button
-                  className="text-primary font-medium hover:underline"
-                  onClick={() => {
-                    setMode("signin");
-                    setError(null);
-                    setResetSent(false);
-                    resetForm.reset();
-                  }}
-                >
-                  Back to sign in
-                </button>
-              </p>
-            </>
-          )}
-        </div>
+        <aside className="auth-note-card" aria-label="Your marketing workspace">
+          <div>
+            <p className="auth-note-heading">Less busywork.</p>
+            <p className="auth-note-muted">More possibility.</p>
+          </div>
+          <div className="auth-note-bottom">
+            <span>Strategy First, Always.</span>
+            <Sparkles size={22} strokeWidth={1.3} aria-hidden="true" />
+          </div>
+        </aside>
+
+        <aside className="auth-feature-card" aria-label="Marketing Suite features">
+          <div className="auth-feature-orb" aria-hidden="true" />
+          <div className="auth-feature-glass" aria-hidden="true" />
+          <div className="auth-feature-top">
+            <div>
+              <p className="auth-feature-number">33<span className="text-primary">.</span></p>
+              <p className="auth-feature-label">AI-powered<br />marketing skills</p>
+            </div>
+            <p className="auth-feature-caption">Your vision.<br />One workspace.</p>
+          </div>
+          <div className="auth-feature-message">
+            <h2>Think big.<br /><span>Create more.</span></h2>
+            <p>From the first spark<br />to your next big launch.</p>
+          </div>
+          <div className="auth-feature-bottom">
+            <div className="auth-feature-signature"><span aria-hidden="true"><LVLogo size={40} /></span><span>LV Branding</span></div>
+            <span className="auth-feature-tag"><span />Built for your team</span>
+          </div>
+        </aside>
+        <footer className="auth-page-footer"><span>LV Branding © {new Date().getFullYear()}</span><span>Ideas into impact.</span></footer>
       </div>
-    </div>
+    </main>
   );
 }
