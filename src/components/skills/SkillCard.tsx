@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { type Skill, CATEGORY_RAIL_COLORS } from "@/data/skills";
+import { type Skill, CATEGORY_TITLE_COLORS } from "@/data/skills";
 import { useLanguage } from "@/hooks/useLanguage";
 import { localizeSkill } from "@/data/skillTranslations";
 
@@ -23,9 +23,7 @@ export const requiredInputs = (skill: Skill) =>
 /**
  * One skill, as a card or as a row.
  *
- * The category used to be stated three times on this page: the section heading,
- * a coloured border, and a badge on every card. Only the rail survives here,
- * which leaves the card's own words to say something the heading did not.
+ * The skill title carries its category color in both grid and list layouts.
  */
 export default function SkillCard({
   skill,
@@ -52,14 +50,6 @@ export default function SkillCard({
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CB2039]/50 focus-visible:ring-offset-1",
   );
 
-  /** The one place the category is still encoded on a card. */
-  const rail = (
-    <span
-      aria-hidden
-      className={cn("absolute inset-y-0 left-0 w-[3px]", CATEGORY_RAIL_COLORS[skill.category])}
-    />
-  );
-
   const ran = lastUsed
     ? t("skills.lastRun", {
         when: formatDistanceToNow(new Date(lastUsed), { addSuffix: true }),
@@ -73,13 +63,12 @@ export default function SkillCard({
 
   if (layout === "list") {
     return (
-      <button onClick={open} className={cn(shell, "flex items-center gap-3 rounded-lg py-2.5 pl-5 pr-3")}>
-        {rail}
+      <button onClick={open} className={cn(shell, "flex items-center gap-3 rounded-lg py-2.5 px-3")}>
         {/* Stacked on a phone, side by side once there is room. Hiding the
             description below sm left a list of bare names, which is the one
             thing a denser view must not cost. */}
         <span className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-2.5">
-          <span className="block truncate text-[15px] font-semibold leading-tight tracking-tight transition-colors group-hover:text-[#CB2039] sm:shrink-0">
+          <span className={cn("block truncate text-[15px] font-semibold leading-tight tracking-tight group-hover:underline sm:shrink-0", CATEGORY_TITLE_COLORS[skill.category])}>
             {localized.name}
           </span>
           <span className="block truncate text-xs text-muted-foreground">
@@ -98,9 +87,8 @@ export default function SkillCard({
   }
 
   return (
-    <button onClick={open} className={cn(shell, "flex h-full flex-col rounded-xl p-4 pl-5")}>
-      {rail}
-      <h3 className="text-[17px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover:text-[#CB2039]">
+    <button onClick={open} className={cn(shell, "flex h-full flex-col rounded-xl p-4")}>
+      <h3 className={cn("text-[17px] font-semibold leading-snug tracking-tight group-hover:underline", CATEGORY_TITLE_COLORS[skill.category])}>
         {localized.name}
       </h3>
       <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">

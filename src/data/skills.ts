@@ -96,8 +96,7 @@ export const CATEGORY_BORDER_COLORS: Record<SkillCategory, string> = {
 };
 
 /**
- * The category as a solid fill, for the rail down a card and the dot beside a
- * section heading. A background rather than a border so one value serves both.
+ * Category dots beside section headings.
  */
 export const CATEGORY_RAIL_COLORS: Record<SkillCategory, string> = {
   foundation: 'bg-amber-400',
@@ -110,6 +109,20 @@ export const CATEGORY_RAIL_COLORS: Record<SkillCategory, string> = {
   growth: 'bg-indigo-400',
   strategy: 'bg-teal-400',
   sales: 'bg-slate-400',
+};
+
+/** Category-colored skill titles use deeper shades for legibility on cards. */
+export const CATEGORY_TITLE_COLORS: Record<SkillCategory, string> = {
+  foundation: 'text-amber-700',
+  conversion: 'text-blue-700',
+  content: 'text-purple-700',
+  seo: 'text-green-700',
+  paid: 'text-orange-700',
+  measurement: 'text-cyan-800',
+  retention: 'text-rose-700',
+  growth: 'text-indigo-700',
+  strategy: 'text-teal-700',
+  sales: 'text-slate-700',
 };
 
 /** The order categories are presented in, foundation first as the prerequisite. */
