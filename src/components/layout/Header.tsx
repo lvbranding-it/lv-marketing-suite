@@ -13,7 +13,7 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
   const displaySubtitle = translateLiteral(subtitle);
 
   return (
-    <div className="flex items-center justify-between flex-wrap px-3 sm:px-6 py-3 sm:py-4 border-b bg-background">
+    <div className="suite-header flex items-center justify-between gap-3 flex-wrap px-3 sm:px-6 py-3 sm:py-4 border-b bg-background">
       <div>
         <h1 className="text-lg sm:text-xl font-semibold text-foreground">{displayTitle}</h1>
         {displaySubtitle && (

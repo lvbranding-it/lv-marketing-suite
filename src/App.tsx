@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import SuiteTheme from "@/components/layout/SuiteTheme";
 import { OrgProvider } from "@/hooks/useOrg";
 import { LanguageProvider } from "@/hooks/useLanguage";
 
@@ -109,7 +110,7 @@ function ProtectedRoute({ children, portal = false }: { children: React.ReactNod
   if (!session) return <Navigate to="/auth" replace />;
   if(!portal && access.isPending)return null;
   if(!portal && (access.isError||access.data))return <Navigate to="/portal" replace/>;
-  return <>{children}</>;
+  return <SuiteTheme>{children}</SuiteTheme>;
 }
 
 function WebsiteAuditLocaleRedirectRoute() {

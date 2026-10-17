@@ -108,13 +108,13 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
+    <div className="suite-sidebar flex flex-col h-full bg-sidebar text-sidebar-foreground">
       {/* Header */}
       <div className={cn("flex items-center gap-3 p-4", collapsed && "justify-center")}>
         <LVLogo size={32} className="shrink-0" />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white leading-tight">LV Branding</p>
+            <p className="text-sm font-semibold text-sidebar-foreground leading-tight">LV Branding</p>
             <p className="text-xs text-sidebar-foreground/60 leading-tight">Marketing Suite</p>
           </div>
         )}
@@ -468,7 +468,8 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                onClick={handleSignOut}
+                aria-label="Sign out"
+              onClick={handleSignOut}
               >
                 <LogOut size={14} />
               </Button>
@@ -479,6 +480,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              aria-label="Sign out"
               onClick={handleSignOut}
             >
               <LogOut size={14} />
@@ -503,11 +505,11 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
     // dvh, not vh: on a phone, 100vh includes the strip behind the browser's
     // own toolbar, so anything pinned to the bottom of a page (a chat's Send
     // button) sat underneath it. dvh is the height actually visible.
-    <div className="flex h-dvh overflow-hidden">
+    <div className="suite-shell flex h-dvh overflow-hidden">
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "hidden md:flex flex-col relative shrink-0 border-r border-sidebar-border transition-all duration-200",
+          "suite-sidebar-frame hidden md:flex flex-col relative shrink-0 border-r border-sidebar-border transition-all duration-200",
           collapsed ? "w-16" : "w-56"
         )}
       >
@@ -515,7 +517,9 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
         {/* Collapse toggle, always anchored to the sidebar's right edge */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-20 bg-sidebar border border-l-0 border-sidebar-border rounded-r-md p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          className="suite-sidebar-toggle absolute right-0 top-1/2 -translate-y-1/2 translate-x-full z-20 bg-sidebar border border-l-0 border-sidebar-border rounded-r-md p-1 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -533,13 +537,13 @@ export default function AppShell({ children, noPadding }: AppShellProps) {
             <Menu size={20} />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64 bg-sidebar border-sidebar-border">
+        <SheetContent side="left" className="suite-mobile-sidebar p-0 w-64 bg-sidebar border-sidebar-border">
           <SidebarContent />
         </SheetContent>
       </Sheet>
 
       {/* Main content */}
-      <main className={cn("flex-1 pt-14 md:pt-0", noPadding ? "overflow-hidden" : "overflow-auto")}>
+      <main className={cn("suite-main min-w-0 flex-1 pt-14 md:pt-0", noPadding ? "overflow-hidden" : "overflow-auto")}>
         {children}
       </main>
     </div>
