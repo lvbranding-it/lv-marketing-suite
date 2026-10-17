@@ -113,16 +113,16 @@ export const CATEGORY_RAIL_COLORS: Record<SkillCategory, string> = {
 
 /** Category-colored skill titles use deeper shades for legibility on cards. */
 export const CATEGORY_TITLE_COLORS: Record<SkillCategory, string> = {
-  foundation: 'text-amber-700',
-  conversion: 'text-blue-700',
-  content: 'text-purple-700',
-  seo: 'text-green-700',
-  paid: 'text-orange-700',
-  measurement: 'text-cyan-800',
-  retention: 'text-rose-700',
-  growth: 'text-indigo-700',
-  strategy: 'text-teal-700',
-  sales: 'text-slate-700',
+  foundation: 'text-amber-700 dark:text-amber-300',
+  conversion: 'text-blue-700 dark:text-blue-300',
+  content: 'text-purple-700 dark:text-purple-300',
+  seo: 'text-green-700 dark:text-green-300',
+  paid: 'text-orange-700 dark:text-orange-300',
+  measurement: 'text-cyan-800 dark:text-cyan-300',
+  retention: 'text-rose-700 dark:text-rose-300',
+  growth: 'text-indigo-700 dark:text-indigo-300',
+  strategy: 'text-teal-700 dark:text-teal-300',
+  sales: 'text-slate-700 dark:text-slate-300',
 };
 
 /** The order categories are presented in, foundation first as the prerequisite. */

@@ -34,6 +34,25 @@ async function mockWorkspace(page: Page) {
 
 test.beforeEach(async ({ page }) => mockWorkspace(page));
 
+test("dark mode persists across suite pages and themes portaled dialogs", async ({ page }) => {
+  await page.goto("/projects");
+  const toggle = page.getByRole("switch", { name: "Dark mode" });
+  await expect(toggle).toHaveAttribute("data-state", "unchecked");
+  await toggle.click();
+  await expect(page.locator("body")).toHaveClass(/dark/);
+  await expect(toggle).toHaveAttribute("data-state", "checked");
+  await expect(page.locator(".suite-main")).toHaveCSS("color", "rgb(240, 240, 240)");
+  await page.screenshot({ path: "/private/tmp/lv-suite-dark-projects.png", animations: "disabled" });
+  await page.getByRole("button", { name: "New Project", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCSS("color", "rgb(240, 240, 240)");
+  await page.screenshot({ path: "/private/tmp/lv-suite-dark-dialog.png", animations: "disabled" });
+  await page.reload();
+  await expect(page.locator("body")).toHaveClass(/dark/);
+  await expect(page.getByRole("switch", { name: "Dark mode" })).toHaveAttribute("data-state", "checked");
+  await page.getByRole("switch", { name: "Dark mode" }).click();
+  await expect(page.locator("body")).not.toHaveClass(/dark/);
+});
+
 test("workspace theme spans navigation and portaled forms without changing their behavior", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/dashboard");
@@ -85,9 +104,11 @@ test("mobile menu and dialog fit the viewport", async ({ page }) => {
 test("signing out removes the workspace theme and preserves the sign-in design", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page.locator("body")).toHaveAttribute("data-suite-theme", "glass");
+  await page.getByRole("switch", { name: "Dark mode" }).click();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
   await expect(page.locator("body")).not.toHaveAttribute("data-suite-theme");
+  await expect(page.locator("body")).not.toHaveClass(/dark/);
   await expect(page.locator(".auth-scene")).toHaveCSS("background-image", /lv-auth-background/);
 });
 
@@ -100,4 +121,7 @@ test("protected ambassador portal shares the light workspace theme", async ({ pa
   await expect(page.locator(".suite-portal > aside")).toHaveCSS("color", /rgb\(35, 31, 3[12]\)/);
   await expect(page.locator(".suite-portal > aside nav button[aria-current='page']")).toBeVisible();
   await page.screenshot({ path: "/private/tmp/lv-suite-portal.png", fullPage: true, animations: "disabled" });
+  await page.getByRole("switch", { name: "Dark mode" }).click();
+  await expect(page.locator("body")).toHaveClass(/dark/);
+  await page.screenshot({ path: "/private/tmp/lv-suite-dark-portal.png", fullPage: true, animations: "disabled" });
 });

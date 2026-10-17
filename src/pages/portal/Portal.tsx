@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import LVLogo from "@/components/LVLogo";
 import LanguageSwitcher from "@/components/layout/LanguageSwitcher";
+import ThemeSwitch from "@/components/layout/ThemeSwitch";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -288,6 +289,7 @@ function PortalWorkspaceView({
             <p className="font-semibold tracking-wide">LV Branding</p>
             <p className="text-xs text-white/60 mt-0.5">{p("title")}</p>
           </div>
+          <ThemeSwitch collapsed className="ml-auto md:hidden" />
         </div>
         <div className="hidden md:block mx-5 border-t border-white/10 mb-6" />
         <nav
@@ -323,6 +325,7 @@ function PortalWorkspaceView({
             <span className="block text-white mt-1">{p(role)}</span>
           </p>
           <LanguageSwitcher collapsed={menuCollapsed} />
+          <ThemeSwitch collapsed={menuCollapsed} className="px-0 text-sidebar-foreground" />
           {!preview && (
             <button
               aria-label={p("signOut")}

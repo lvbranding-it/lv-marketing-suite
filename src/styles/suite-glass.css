@@ -256,3 +256,107 @@ body[data-suite-theme="glass"] .suite-portal select {
   box-shadow: inset 0 2px 4px hsl(var(--lv-charcoal) / .05), 0 3px 9px hsl(var(--lv-charcoal) / .04);
 }
 body[data-suite-theme="glass"] .suite-portal select:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+
+/* Dark mode keeps the same glass treatment and LV red accents. The body class
+   also enables existing Tailwind dark variants inside the suite and portals. */
+body[data-suite-theme="glass"].dark {
+  --background: 0 5% 10%;
+  --foreground: 0 0% 94%;
+  --card: 0 4% 15%;
+  --card-foreground: 0 0% 94%;
+  --popover: 0 4% 16%;
+  --popover-foreground: 0 0% 94%;
+  --secondary: 0 3% 21%;
+  --secondary-foreground: 0 0% 94%;
+  --muted: 0 3% 21%;
+  --muted-foreground: 0 0% 70%;
+  --accent: 351 55% 20%;
+  --accent-foreground: 0 0% 96%;
+  --border: 0 2% 30%;
+  --input: 0 2% 34%;
+  --sidebar-background: 0 4% 14%;
+  --sidebar-foreground: 0 0% 94%;
+  --sidebar-accent: 0 3% 24%;
+  --sidebar-border: 0 2% 30%;
+  --glass-surface: linear-gradient(145deg, rgb(53 49 50 / .94), rgb(38 35 36 / .84));
+  --glass-edge: rgb(255 255 255 / .16);
+  --glass-shadow: inset 0 1px 1px rgb(255 255 255 / .12), inset 0 -1px 1px rgb(0 0 0 / .25), 0 12px 28px rgb(0 0 0 / .25);
+  --glass-control-shadow: inset 0 1px 1px rgb(255 255 255 / .1), inset 0 -2px 3px rgb(0 0 0 / .2), 0 5px 12px rgb(0 0 0 / .22);
+  --workspace-backdrop: radial-gradient(ellipse 65% 65% at 90% 2%, hsl(var(--primary) / .19), transparent 75%), radial-gradient(ellipse 65% 75% at 5% 95%, hsl(var(--primary) / .09), transparent 75%), linear-gradient(135deg, #292426, #1d1b1c 55%, #282325);
+  background: #1d1b1c;
+  background-image: var(--workspace-backdrop);
+}
+body[data-suite-theme="glass"].dark .suite-main {
+  border-color: var(--glass-edge);
+  background: linear-gradient(rgb(0 0 0 / .09), rgb(0 0 0 / .09)), var(--workspace-backdrop);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .1);
+}
+body[data-suite-theme="glass"].dark .suite-header {
+  background: linear-gradient(120deg, rgb(65 59 61 / .8), rgb(35 32 33 / .65));
+  border-color: var(--glass-edge);
+}
+body[data-suite-theme="glass"].dark .suite-sidebar a:hover { background: rgb(255 255 255 / .09); border-color: var(--glass-edge); }
+body[data-suite-theme="glass"].dark .suite-sidebar a.bg-sidebar-primary,
+body[data-suite-theme="glass"].dark .suite-sidebar a[aria-current="page"] {
+  background: linear-gradient(145deg, hsl(var(--primary) / .27), hsl(var(--primary) / .12));
+  border-color: hsl(var(--primary) / .28);
+  color: #ff9aaa;
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / .1), 0 3px 8px rgb(0 0 0 / .18);
+}
+body[data-suite-theme="glass"].dark .suite-sidebar-toggle,
+body[data-suite-theme="glass"].dark .suite-portal > aside > button:first-child {
+  border-color: var(--glass-edge);
+  background: #383435;
+  color: hsl(var(--foreground));
+  box-shadow: 0 3px 8px rgb(0 0 0 / .3);
+}
+body[data-suite-theme="glass"].dark .suite-mobile-sidebar { background: #292526; }
+body[data-suite-theme="glass"].dark :is(.suite-button-outline, .suite-button-secondary):hover,
+body[data-suite-theme="glass"].dark .suite-tab[data-state="active"] {
+  background: linear-gradient(145deg, #484244, #342f31);
+  border-color: hsl(var(--primary) / .35);
+  color: hsl(var(--foreground));
+}
+body[data-suite-theme="glass"].dark :is(.suite-input, .suite-select, .suite-textarea) {
+  border-color: var(--glass-edge);
+  background: linear-gradient(175deg, rgb(25 23 24 / .7), rgb(58 53 55 / .85));
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / .18), 0 3px 9px rgb(0 0 0 / .14);
+}
+body[data-suite-theme="glass"].dark .suite-tabs {
+  border-color: var(--glass-edge);
+  background: linear-gradient(180deg, rgb(15 14 14 / .5), rgb(65 59 61 / .65));
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / .2), 0 3px 8px rgb(0 0 0 / .15);
+}
+body[data-suite-theme="glass"].dark .suite-switch { border-color: var(--glass-edge); }
+body[data-suite-theme="glass"].dark .suite-switch > span { background: #f7f4f5; }
+body[data-suite-theme="glass"].dark .suite-overlay { background: rgb(0 0 0 / .57); }
+body[data-suite-theme="glass"].dark :is(.suite-dialog, .suite-popup, .suite-sheet, .suite-toast:not(.destructive)) {
+  background: linear-gradient(145deg, #383435, #262324);
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / .12), 0 20px 60px rgb(0 0 0 / .45);
+}
+body[data-suite-theme="glass"].dark .suite-portal { background: #1d1b1c; background-image: var(--workspace-backdrop); }
+body[data-suite-theme="glass"].dark .suite-portal > aside {
+  border-color: var(--glass-edge);
+  background: linear-gradient(145deg, #353031, #242122);
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / .1), 5px 0 18px rgb(0 0 0 / .2);
+}
+body[data-suite-theme="glass"].dark .suite-portal > aside :is(.text-white\/60, .text-white\/70, .text-white\/40) { color: hsl(var(--sidebar-foreground) / .74); }
+body[data-suite-theme="glass"].dark .suite-portal > aside nav button:hover:not([aria-current="page"]) { background: rgb(255 255 255 / .1); }
+body[data-suite-theme="glass"].dark .suite-portal > main > header { border-color: var(--glass-edge); background: rgb(45 41 42 / .82); }
+body[data-suite-theme="glass"].dark .suite-portal .bg-white.border:is(.rounded-xl, .rounded-2xl) { border-color: var(--glass-edge); background: var(--glass-surface); }
+body[data-suite-theme="glass"].dark .suite-portal > aside p > span.text-white { color: hsl(var(--foreground)); }
+body[data-suite-theme="glass"].dark .suite-portal select {
+  border-color: var(--glass-edge);
+  background: linear-gradient(175deg, #302c2d, #454041);
+  color: hsl(var(--foreground));
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / .15), 0 3px 9px rgb(0 0 0 / .18);
+}
+/* Some older suite screens use literal white utility classes for panels. */
+body[data-suite-theme="glass"].dark :is(.suite-main, .suite-portal) [class~="bg-white"] { background-color: hsl(var(--card)); }
+body[data-suite-theme="glass"].dark :is(.suite-main, .suite-portal) [class~="bg-gray-50"] { background-color: hsl(var(--secondary)); }
+body[data-suite-theme="glass"].dark .suite-main [class~="text-gray-900"] { color: hsl(var(--foreground)); }
+body[data-suite-theme="glass"].dark .suite-main [class~="text-gray-700"] { color: hsl(var(--muted-foreground)); }
+
+@media (prefers-reduced-transparency: reduce) {
+  body[data-suite-theme="glass"].dark { --glass-surface: linear-gradient(145deg, #353132, #282526); }
+}

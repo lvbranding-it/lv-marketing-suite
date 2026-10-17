@@ -40,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import LVLogo from "@/components/LVLogo";
 import LanguageSwitcher from "@/components/layout/LanguageSwitcher";
+import ThemeSwitch from "@/components/layout/ThemeSwitch";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useOrg } from "@/hooks/useOrg";
@@ -431,6 +432,7 @@ function SidebarContent({ collapsed = false }: SidebarContentProps) {
       {/* Footer */}
       <div className={cn("p-3 space-y-1", collapsed && "flex flex-col items-center")}>
         <LanguageSwitcher collapsed={collapsed} className={collapsed ? undefined : "mb-2"} />
+        <ThemeSwitch collapsed={collapsed} />
 
         <NavLink
           to="/settings"
