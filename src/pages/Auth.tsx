@@ -283,14 +283,11 @@ export default function Auth() {
           </div>
           <div className="auth-feature-message">
             <h2>Think big.<br /><span>Create more.</span></h2>
-            <p>From the first spark<br />to your next big launch.</p>
-          </div>
-          <div className="auth-feature-bottom">
-            <div className="auth-feature-signature"><span aria-hidden="true"><LVLogo size={40} /></span><span>LV Branding</span></div>
-            <span className="auth-feature-tag"><span />Built for your team</span>
           </div>
         </aside>
-        <footer className="auth-page-footer"><span>LV Branding © {new Date().getFullYear()}</span><span>Ideas into impact.</span></footer>
+        <footer className="auth-page-footer">
+          <span><a href="https://www.lvbranding.com">LV Branding</a> © {new Date().getFullYear()}</span>
+        </footer>
       </div>
     </main>
   );
