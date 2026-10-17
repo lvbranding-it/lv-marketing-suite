@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import LegalDocumentView from "@/components/legal/LegalDocumentView";
+import ReviseLegalDocumentDialog from "@/components/legal/ReviseLegalDocumentDialog";
 import LegalStageBadge from "@/components/legal/LegalStageBadge";
 import SignaturePad from "@/components/legal/SignaturePad";
 import { useAuth } from "@/hooks/useAuth";
@@ -167,11 +168,13 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
   const actions = useLegalActions();
   const events = useLegalEvents(doc?.id ?? null);
   const [countersignOpen, setCountersignOpen] = useState(false);
+  const [reviseOpen, setReviseOpen] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
 
   useEffect(() => {
     setCountersignOpen(false);
+    setReviseOpen(false);
     setVoidOpen(false);
     setVoidReason("");
   }, [doc?.id]);
@@ -186,6 +189,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
   };
 
   const stage = doc ? legalStage(doc) : null;
+  const deliveryFailed = events.data?.[events.data.length - 1]?.event === "delivery_failed";
 
   return (
     <Sheet open={!!doc} onOpenChange={onOpenChange}>
@@ -201,6 +205,12 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
             </SheetHeader>
 
             <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
+              {deliveryFailed && (stage === "waiting" || stage === "expired") && (
+                <div className="flex gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                  <p>The last email did not go out. The previous signing link is invalid. Use Send again to deliver a fresh link.</p>
+                </div>
+              )}
               {stage === "countersign" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
                   <p className="text-sm font-medium">{doc.client_signer_name} signed {when(doc.client_signed_at!)}.</p>
@@ -226,6 +236,11 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
               )}
 
               <div className="flex flex-wrap gap-2">
+                {canManage && (stage === "waiting" || stage === "expired") && !doc.client_signed_at && !doc.lv_signed_at && (
+                  <Button variant="outline" onClick={() => setReviseOpen(true)}>
+                    <PenLine className="mr-2 h-4 w-4" />Edit and resend
+                  </Button>
+                )}
                 {stage === "completed" && (
                   <Button onClick={() => run(actions.download.mutateAsync(doc.id), "")} disabled={actions.download.isPending}>
                     {actions.download.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
@@ -233,7 +248,16 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
                   </Button>
                 )}
                 {canManage && (stage === "waiting" || stage === "expired") && (
-                  <Button variant="outline" onClick={() => run(actions.resend.mutateAsync(doc.id), `Sent again to ${doc.recipient_email}`)} disabled={actions.resend.isPending}>
+                  <Button variant="outline" onClick={async () => {
+                    try {
+                      const result = await actions.resend.mutateAsync(doc.id);
+                      toast(result.emailed
+                        ? { title: `Sent again to ${doc.recipient_email}` }
+                        : { title: "Email delivery failed", description: "The old link no longer works. Try Send again to deliver a fresh link.", variant: "destructive" });
+                    } catch (error) {
+                      toast({ title: "That didn't work", description: error instanceof Error ? error.message : "Try again in a moment.", variant: "destructive" });
+                    }
+                  }} disabled={actions.resend.isPending}>
                     {actions.resend.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                     Send again
                   </Button>
@@ -290,6 +314,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
             </div>
 
             <CountersignDialog doc={doc} open={countersignOpen} onOpenChange={setCountersignOpen} />
+            <ReviseLegalDocumentDialog doc={doc} open={reviseOpen} onOpenChange={setReviseOpen} />
             <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>

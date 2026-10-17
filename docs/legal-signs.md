@@ -56,13 +56,20 @@ Arial.
 
 "Expired" is not stored: it is a `sent` or `viewed` document past `expires_at`.
 Sending it again emails a new link and the old one stops working.
+Before either party signs, an owner, administrator or manager can edit the
+document wording and send a revision. This saves a new content hash, resets
+the viewed state, invalidates the previous link, and emails a new 30-day link.
+The previous text and hash are recorded in the audit trail. Signed
+documents cannot be revised. If email delivery fails after a revision, the
+new wording stays saved and the team can use **Send again** to retry.
 
 ## What makes a signature hold up
 
-- The document's text is rendered once, when it is sent, and stored as
-  `content` with its SHA-256 (`content_hash`). Later template edits never change
-  a sent document, and countersigning refuses content that no longer matches
-  its hash. The hash is printed on the certificate.
+- The document's text is stored as `content` with its SHA-256
+  (`content_hash`). Later template edits never change a sent document. An
+  explicit revision before signing replaces the snapshot and hash, and
+  countersigning refuses content that no longer matches its hash. The final
+  hash is printed on the certificate.
 - The link token is stored only as a hash. Opening the document also needs the
   address it was sent to; after 8 wrong addresses in an hour the link pauses for
   that hour.

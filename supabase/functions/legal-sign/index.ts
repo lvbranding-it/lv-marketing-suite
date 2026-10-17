@@ -62,8 +62,13 @@ async function handle(req: Request) {
 
   if (input.action === "open") {
     if (doc.status === "sent") {
-      await db.from("legal_documents").update({ status: "viewed", viewed_at: new Date().toISOString() }).eq("id", doc.id);
+      const { data: opened } = await db.from("legal_documents").update({ status: "viewed", viewed_at: new Date().toISOString() })
+        .eq("id", doc.id).eq("token_hash", doc.token_hash).eq("status", "sent").select("id").maybeSingle();
+      if (!opened) return json({ error: "not_found" }, 404);
       await log("viewed", `${doc.recipient_name} <${doc.recipient_email}>`);
+    } else {
+      const { data: current } = await db.from("legal_documents").select("id").eq("id", doc.id).eq("token_hash", doc.token_hash).maybeSingle();
+      if (!current) return json({ error: "not_found" }, 404);
     }
     return json({
       document: {
@@ -85,7 +90,7 @@ async function handle(req: Request) {
       status: "client_signed", client_signed_at: signedAt, client_signer_name: signerName,
       client_signer_title: text(input.signer_title, 120) || null, client_signature: signature,
       client_ip: origin.ip, client_user_agent: origin.userAgent, viewed_at: doc.viewed_at ?? signedAt,
-    }).eq("id", doc.id).in("status", ["sent", "viewed"]).select("id").maybeSingle();
+    }).eq("id", doc.id).eq("token_hash", doc.token_hash).in("status", ["sent", "viewed"]).select("id").maybeSingle();
     if (error) throw error;
     // Two tabs signing at once: the first one counts.
     if (!updated) return json({ error: "already_signed" }, 409);

@@ -39,6 +39,8 @@ const PDF_TEXT = {
 const EVENT_LABELS: Record<string, Record<Language, string>> = {
   sent: { en: "Sent for signature", es: "Enviado para firma" },
   resent: { en: "Sent again", es: "Enviado de nuevo" },
+  revised: { en: "Document revised; previous link invalidated", es: "Documento revisado; enlace anterior invalidado" },
+  revision_sent: { en: "Revised document sent", es: "Documento revisado enviado" },
   viewed: { en: "Opened by the recipient", es: "Abierto por el destinatario" },
   client_signed: { en: "Signed by the recipient", es: "Firmado por el destinatario" },
   countersigned: { en: "Countersigned by LV Branding", es: "Firmado por LV Branding" },

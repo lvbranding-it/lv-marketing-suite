@@ -1,4 +1,4 @@
-// LegalSigns, the team's side: send a document for signature, send it again,
+// LegalSigns, the team's side: send a document for signature, revise or resend,
 // void it, countersign it (which makes the signed PDF and emails it to both
 // parties), and download the signed PDF. Owners, administrators and managers
 // may act; any member may download.
@@ -108,16 +108,66 @@ serve(async (req) => {
 
     if (!ACTING_ROLES.includes(role)) return json({ error: "Only owners, administrators and managers can do this" }, 403);
 
+    if (input.action === "revise") {
+      if (!["sent", "viewed"].includes(doc.status) || doc.client_signed_at || doc.lv_signed_at) {
+        return json({ error: "A document can only be edited before anyone signs it" }, 409);
+      }
+      const title = text(input.title, 200);
+      const content = validContent(input.content);
+      if (!title || !content || content.blocks.some((block) => !block.text.trim())) {
+        return json({ error: "Add a title and text for every document section" }, 400);
+      }
+      const nextHash = await contentHash(content);
+      if (title === doc.title && nextHash === doc.content_hash) return json({ error: "Make a change before sending a revision" }, 400);
+
+      // Claim the unsigned version and rotate its link in one conditional update.
+      // Signing also checks the token hash, so whichever write wins excludes the other.
+      const { token, hash } = await newToken();
+      const sentAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
+      const { data: revised, error: updateError } = await db.from("legal_documents").update({
+        title, content, content_hash: nextHash, token_hash: hash, status: "sent",
+        sent_at: sentAt, viewed_at: null, expires_at: expiresAt,
+      }).eq("id", doc.id).eq("token_hash", doc.token_hash).in("status", ["sent", "viewed"])
+        .is("client_signed_at", null).is("lv_signed_at", null).select("id").maybeSingle();
+      if (updateError) throw updateError;
+      if (!revised) return json({ error: "This document changed or was signed. Reload it before editing." }, 409);
+      await log(doc, "revised", {
+        previous_title: doc.title, previous_content: doc.content, previous_content_hash: doc.content_hash,
+        title, content_hash: nextHash, to: doc.recipient_email,
+      });
+      try {
+        const email = signatureRequestEmail({ ...doc, title, content, expires_at: expiresAt }, `${APP_URL}/sign/${token}`);
+        await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...email });
+        await log(doc, "revision_sent", { to: doc.recipient_email });
+        return json({ ok: true, emailed: true });
+      } catch (emailError) {
+        console.error("Revised document email failed", emailError);
+        await log(doc, "delivery_failed", { to: doc.recipient_email });
+        return json({ ok: true, emailed: false });
+      }
+    }
+
     if (input.action === "resend") {
       if (!["sent", "viewed"].includes(doc.status)) return json({ error: "Only a document waiting for its signature can be sent again" }, 409);
       // A fresh link: the earlier one stops working, in case it went astray.
       const { token, hash } = await newToken();
       const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
+      const { data: rotated, error: rotateError } = await db.from("legal_documents").update({ token_hash: hash, expires_at: expiresAt, sent_at: new Date().toISOString(), status: "sent", viewed_at: null })
+        .eq("id", doc.id).eq("token_hash", doc.token_hash).in("status", ["sent", "viewed"])
+        .is("client_signed_at", null).select("id").maybeSingle();
+      if (rotateError) throw rotateError;
+      if (!rotated) return json({ error: "This document changed or was signed. Reload it before sending again." }, 409);
       const email = signatureRequestEmail({ ...doc, expires_at: expiresAt }, `${APP_URL}/sign/${token}`);
-      await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...email });
-      await db.from("legal_documents").update({ token_hash: hash, expires_at: expiresAt }).eq("id", doc.id);
-      await log(doc, "resent", { to: doc.recipient_email });
-      return json({ ok: true });
+      try {
+        await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...email });
+        await log(doc, "resent", { to: doc.recipient_email });
+        return json({ ok: true, emailed: true });
+      } catch (emailError) {
+        console.error("Resend email failed", emailError);
+        await log(doc, "delivery_failed", { to: doc.recipient_email });
+        return json({ ok: true, emailed: false });
+      }
     }
 
     if (input.action === "void") {
@@ -151,7 +201,7 @@ serve(async (req) => {
 
       // The certificate lists the signing steps; wrong-email attempts stay in LegalSigns only.
       const { data: events } = await db.from("legal_document_events").select("event, created_at, actor_label, ip, user_agent")
-        .eq("document_id", doc.id).in("event", ["sent", "resent", "viewed", "client_signed", "countersigned"]).order("created_at");
+        .eq("document_id", doc.id).in("event", ["sent", "resent", "revised", "revision_sent", "viewed", "client_signed", "countersigned"]).order("created_at");
       const pdf = await buildSignedPdf(signed, events || []);
       const path = `${doc.org_id}/${doc.id}.pdf`;
       const { error: uploadError } = await db.storage.from("legal-documents").upload(path, pdf, { contentType: "application/pdf", upsert: true });

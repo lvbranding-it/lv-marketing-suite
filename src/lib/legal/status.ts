@@ -58,6 +58,9 @@ export function matchesSearch(doc: { title: string; recipient_name: string; reci
 const EVENT_LABELS: Record<string, string> = {
   sent: "Sent for signature",
   resent: "Sent again with a new link",
+  revised: "Document revised; previous link invalidated",
+  revision_sent: "Revised document emailed with a new link",
+  delivery_failed: "Email delivery failed; send again to retry",
   viewed: "Opened by the recipient",
   client_signed: "Signed by the recipient",
   countersigned: "Countersigned",

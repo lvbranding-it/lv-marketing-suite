@@ -141,8 +141,13 @@ export function useLegalActions() {
       onSuccess: () => refresh(),
     }),
     resend: useMutation({
-      mutationFn: (id: string) => invoke({ action: "resend", id }),
+      mutationFn: (id: string) => invoke<{ ok: true; emailed: boolean }>({ action: "resend", id }),
       onSuccess: (_data, id) => refresh(id),
+    }),
+    revise: useMutation({
+      mutationFn: (input: { id: string; title: string; content: LegalDocument["content"] }) =>
+        invoke<{ ok: true; emailed: boolean }>({ action: "revise", ...input }),
+      onSuccess: (_data, { id }) => refresh(id),
     }),
     void: useMutation({
       mutationFn: ({ id, reason }: { id: string; reason: string }) => invoke({ action: "void", id, reason }),
