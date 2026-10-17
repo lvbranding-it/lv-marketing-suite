@@ -6,6 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { TextStyle, Color, BackgroundColor, FontSize } from "@tiptap/extension-text-style";
 import { TaskList, TaskItem } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
+import { WorkspaceImage } from "@/components/workspace/WorkspaceImage";
 
 /**
  * Everything a workspace document can contain.
@@ -32,6 +33,7 @@ export function workspaceExtensions(placeholder = "Start writing, or paste anyth
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: false } }),
+    WorkspaceImage,
     Placeholder.configure({ placeholder }),
   ];
 }

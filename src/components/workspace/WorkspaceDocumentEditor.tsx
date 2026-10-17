@@ -10,11 +10,13 @@ import {
   Code2,
   Copy,
   Highlighter,
+  ImagePlus,
   Italic,
   Link2,
   List,
   ListOrdered,
   ListTodo,
+  Loader2,
   Minus,
   Quote,
   Redo2,
@@ -38,7 +40,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useSaveWorkspaceDocument } from "@/hooks/useWorkspace";
+import { useSaveWorkspaceDocument, useUploadWorkspaceAsset, WORKSPACE_ASSET_BUCKET } from "@/hooks/useWorkspace";
+import { supabase } from "@/integrations/supabase/client";
 import { looksLikeMarkdown, markdownToHtml } from "@/lib/workspace/document";
 import { workspaceExtensions } from "@/lib/workspace/editorExtensions";
 import { documentPlainText } from "@/lib/workspace/plainText";
@@ -53,6 +56,7 @@ export interface DocumentSaveState {
 
 const SAVE_DELAY_MS = 800;
 const RETRY_DELAY_MS = 5000;
+const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const TEXT_COLORS = [
   { label: "LV red", value: "#CB2039" },
@@ -117,8 +121,14 @@ export default function WorkspaceDocumentEditor({
   onStateChange?: (state: DocumentSaveState) => void;
 }) {
   const saveDocument = useSaveWorkspaceDocument();
+  const uploadImage = useUploadWorkspaceAsset();
   const saveRef = useRef(saveDocument);
   saveRef.current = saveDocument;
+  const uploadRef = useRef(uploadImage);
+  uploadRef.current = uploadImage;
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadingImagesRef = useRef(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const pending = useRef<{ html: string; text: string } | null>(null);
   const inFlight = useRef(false);
@@ -176,6 +186,51 @@ export default function WorkspaceDocumentEditor({
     [report, send],
   );
 
+  const insertImages = useCallback(async (files: File[], position: number, target: Editor) => {
+    if (uploadingImagesRef.current) {
+      toast({ title: "Image upload in progress", description: "Wait for it to finish before adding more images." });
+      return;
+    }
+    const images = files.filter((file) => IMAGE_MIME_TYPES.has(file.type));
+    if (!images.length) {
+      toast({ title: "Unsupported image", description: "Use a JPG, PNG, WebP, or GIF image.", variant: "destructive" });
+      return;
+    }
+
+    uploadingImagesRef.current = true;
+    setUploadingImages(true);
+    // Map the drop/cursor position through edits made while uploads are running.
+    let insertAt = position;
+    const trackPosition = ({ transaction }: { transaction: typeof target.state.tr }) => {
+      insertAt = transaction.mapping.map(insertAt, 1);
+    };
+    target.on("transaction", trackPosition);
+    try {
+      for (const file of images) {
+        const asset = await uploadRef.current.mutateAsync({ pageId, file, category: "reference" });
+        const { data, error } = await supabase.storage.from(WORKSPACE_ASSET_BUCKET).createSignedUrl(asset.storage_path, 3600);
+        if (error || !data) throw error ?? new Error("Image could not be opened after upload.");
+        if (target.isDestroyed) break;
+        target.commands.insertContentAt(Math.min(insertAt, target.state.doc.content.size), {
+          type: "image",
+          attrs: { src: data.signedUrl, storagePath: asset.storage_path, alt: file.name },
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Image could not be inserted",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      target.off("transaction", trackPosition);
+      uploadingImagesRef.current = false;
+      setUploadingImages(false);
+    }
+  }, [pageId]);
+  const insertImagesRef = useRef(insertImages);
+  insertImagesRef.current = insertImages;
+
   const editor = useEditor({
     extensions: workspaceExtensions(),
     content: initialHtml,
@@ -188,6 +243,17 @@ export default function WorkspaceDocumentEditor({
        * The editor's default spaced every table row and cell with blank lines.
        */
       clipboardTextSerializer: (slice) => documentPlainText(slice.content),
+      handleDrop: (view, event) => {
+        const transfer = event.dataTransfer;
+        if (!transfer?.files.length || transfer.types.includes("application/x-prosemirror-slice")) return false;
+        const files = Array.from(transfer.files);
+        if (!files.some((file) => IMAGE_MIME_TYPES.has(file.type))) return false;
+        event.preventDefault();
+        const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from;
+        const current = editorRef.current;
+        if (current) void insertImagesRef.current(files, position, current);
+        return true;
+      },
       /**
        * Text copied from an AI chat usually arrives as raw Markdown with no
        * formatted version alongside it, which is how pages filled up with
@@ -197,6 +263,13 @@ export default function WorkspaceDocumentEditor({
        */
       handlePaste: (view, event) => {
         const data = event.clipboardData;
+        const images = Array.from(data?.files ?? []).filter((file) => IMAGE_MIME_TYPES.has(file.type));
+        if (images.length) {
+          event.preventDefault();
+          const current = editorRef.current;
+          if (current) void insertImagesRef.current(images, view.state.selection.from, current);
+          return true;
+        }
         if (!data || data.types.includes("text/html")) return false;
         const text = data.getData("text/plain");
         if (!looksLikeMarkdown(text)) return false;
@@ -247,8 +320,21 @@ export default function WorkspaceDocumentEditor({
   if (!editor) return null;
 
   return (
-    <div>
-      <Toolbar editor={editor} />
+    <div className="workspace-paper">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        multiple
+        className="sr-only"
+        aria-label="Choose document images"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          if (files.length) void insertImagesRef.current(files, editor.state.selection.from, editor);
+        }}
+      />
+      <Toolbar editor={editor} uploadingImages={uploadingImages} onAddImages={() => imageInputRef.current?.click()} />
       <EditorContent editor={editor} />
     </div>
   );
@@ -344,7 +430,7 @@ function Swatches({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, uploadingImages, onAddImages }: { editor: Editor; uploadingImages: boolean; onAddImages: () => void }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
 
@@ -414,7 +500,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   return (
     // One row that swipes sideways on a phone. Wrapped, its tools took three or
     // four rows, and pinned to the top they covered a third of the screen.
-    <div className="sticky top-0 z-10 -mx-1 flex items-center gap-0.5 overflow-x-auto border-b border-border bg-background/95 px-1 py-1.5 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
+    <div className="workspace-toolbar sticky top-0 z-10 flex items-center gap-0.5 overflow-x-auto border-b border-border bg-background/95 px-1 py-1.5 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
       <ToolButton label="Undo" shortcut="⌘Z" disabled={!s.canUndo} onClick={() => chain().undo().run()}>
         <Undo2 size={15} />
       </ToolButton>
@@ -546,6 +632,10 @@ function Toolbar({ editor }: { editor: Editor }) {
       </ToolButton>
       <ToolButton label="Divider" onClick={() => chain().setHorizontalRule().run()}>
         <Minus size={15} />
+      </ToolButton>
+
+      <ToolButton label={uploadingImages ? "Uploading image" : "Insert image"} disabled={uploadingImages} onClick={onAddImages}>
+        {uploadingImages ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
       </ToolButton>
 
       <DropdownMenu>

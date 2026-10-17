@@ -23,6 +23,14 @@ describe("a document as plain text", () => {
     expect(documentPlainText(doc(para(text("One")), para(text("Two"))))).toBe("One\n\nTwo");
   });
 
+  it("keeps an image reference at its position in the document", () => {
+    expect(documentPlainText(doc(
+      para(text("Before")),
+      { type: "image", attrs: { src: "https://example.test/image.png", storagePath: "org/page/image.png", alt: "Storyboard" } },
+      para(text("After")),
+    ))).toBe("Before\n\n[Image: Storyboard]\n\nAfter");
+  });
+
   it("keeps a line break inside a paragraph as a line break", () => {
     const withBreak = doc(para(text("With love,"), { type: "hardBreak" }, text("Andreza")));
     expect(documentPlainText(withBreak)).toBe("With love,\nAndreza");

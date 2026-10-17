@@ -48,6 +48,8 @@ function walk(node: ProseMirrorNode, blocks: string[]) {
     blocks.push(node.textContent);
   } else if (name === "horizontalRule") {
     blocks.push("———");
+  } else if (name === "image") {
+    blocks.push(`[Image: ${node.attrs.alt || "Reference image"}]`);
   } else if (LISTS.has(name)) {
     blocks.push(listText(node, ""));
   } else if (name === "table") {

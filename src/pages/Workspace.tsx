@@ -1096,10 +1096,10 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState<{ name: string; progress: number } | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  // Folded on a phone, where the upload box alone filled the screen above the
-  // document; open on wider screens, as it always was.
-  const [open, setOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 768);
+  // Keep the writing sheet in view first; the library is one click away.
+  const [open, setOpen] = useState(false);
   const { data: assets = [], isLoading } = useWorkspaceAssets(pageId);
+  const { data: workspaceDocument } = useWorkspaceDocument(pageId);
   const uploadAsset = useUploadWorkspaceAsset();
   const deleteAsset = useDeleteWorkspaceAsset();
   const grouped = ASSET_CATEGORIES.map((item) => ({
@@ -1254,13 +1254,21 @@ function WorkspaceAssetsPanel({ pageId }: { pageId: string }) {
                           asset={asset}
                           deleting={deleteAsset.isPending}
                           onOpen={() => setPreviewIndex(ordered.findIndex((item) => item.id === asset.id))}
-                          onDelete={() => deleteAsset.mutate(asset, {
-                            onError: (error) => toast({
-                              title: "Asset was not deleted",
-                              description: error instanceof Error ? error.message : "Please try again.",
-                              variant: "destructive",
-                            }),
-                          })}
+                          onDelete={() => {
+                            const inline = Array.from(window.document.querySelectorAll(".workspace-paper [data-workspace-image-path]"))
+                              .some((element) => element.getAttribute("data-workspace-image-path") === asset.storage_path);
+                            if (inline || workspaceDocument?.html.includes(asset.storage_path)) {
+                              toast({ title: "Image is in this document", description: "Remove it from the writing sheet before deleting the file." });
+                              return;
+                            }
+                            deleteAsset.mutate(asset, {
+                              onError: (error) => toast({
+                                title: "Asset was not deleted",
+                                description: error instanceof Error ? error.message : "Please try again.",
+                                variant: "destructive",
+                              }),
+                            });
+                          }}
                         />
                       ))}
                     </div>

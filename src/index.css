@@ -883,6 +883,75 @@
    The page body is one rich document (prose-sm). These rules fit the typography
    plugin to an editor people write in, rather than an article they read. */
 
+/* Keep the writing sheet white even while the surrounding suite is dark. */
+.workspace-paper {
+  --background: 0 0% 100%;
+  --foreground: 0 6% 13%;
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 42%;
+  --border: 0 0% 85%;
+  color-scheme: light;
+  color: #231f20;
+  background: #fff;
+  border: 1px solid #e1ddde;
+  border-radius: 16px;
+  box-shadow: 0 12px 34px rgb(35 31 32 / .1);
+  overflow: visible;
+}
+.workspace-paper .workspace-toolbar { border-radius: 16px 16px 0 0; }
+.workspace-paper .workspace-doc {
+  padding: 2rem clamp(1.25rem, 5vw, 4rem) 6rem;
+  color: #231f20;
+  --tw-prose-body: #231f20;
+  --tw-prose-headings: #231f20;
+  --tw-prose-bold: #231f20;
+  --tw-prose-counters: #6b6264;
+  --tw-prose-bullets: #6b6264;
+  --tw-prose-quotes: #231f20;
+  --tw-prose-code: #231f20;
+  --tw-prose-th-borders: #ddd7d9;
+  --tw-prose-td-borders: #e7e2e4;
+}
+.workspace-paper .workspace-doc p.is-editor-empty:first-child::before { color: #8a8385; }
+.workspace-paper .workspace-doc th { background: #f4f2f3; }
+.workspace-paper .workspace-doc :not(pre) > code { background: #f4f2f3; }
+.workspace-inline-image {
+  width: fit-content;
+  max-width: 100%;
+  margin: 1.5rem 0;
+  cursor: grab;
+}
+.workspace-inline-image img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.workspace-inline-image--selected img { outline: 3px solid #cb2039; outline-offset: 3px; }
+.workspace-inline-image figcaption { margin-top: .45rem; font-size: .78rem; color: #6b6264; }
+.workspace-inline-image__loading {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-width: 12rem;
+  min-height: 7rem;
+  padding: 1rem;
+  border: 1px dashed #d7d0d2;
+  border-radius: 8px;
+  color: #6b6264;
+  background: #f8f6f7;
+}
+body[data-suite-theme="glass"].dark .workspace-paper {
+  background: #fff;
+  border-color: #dcd6d8;
+  box-shadow: 0 18px 48px rgb(0 0 0 / .35);
+}
+@media (max-width: 640px) {
+  .workspace-paper .workspace-doc { padding: 1.25rem 1.25rem 5rem; }
+}
+
 .workspace-doc > :first-child { margin-top: 0; }
 
 /* The empty-page prompt, shown only while the page has no content. */
