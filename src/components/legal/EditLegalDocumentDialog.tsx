@@ -126,7 +126,7 @@ export default function EditLegalDocumentDialog({ doc, open, screen: initialScre
     { name: client.name, email: client.email },
     ...parties.map((party) => ({ name: party.client.name, email: party.client.email })),
   ];
-  const emails = signers.map((signer) => signer.email.trim()).filter(Boolean);
+  const emails = signers.map((signer) => signer.email.trim().toLowerCase()).filter(Boolean);
   const before = JSON.stringify([doc.title, doc.content.blocks, doc.signers.map((signer) => [signer.name, signer.email, signer.company_name])]);
   const after = JSON.stringify([title.trim(), blocks, [
     [client.name.trim(), client.email.trim().toLowerCase(), companyName.trim()],

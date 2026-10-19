@@ -70,7 +70,7 @@ export default function NewLegalDocumentDialog({ open, onOpenChange, onSent }: N
   const blocks = useMemo(() => template.render(renderInput), [template, renderInput]);
   const signerRoles = signerRolesFor(template, renderInput);
   const signerNames = [client.name, ...parties.map((party) => party.client.name)].map((name) => name.trim());
-  const signerEmails = [client.email, ...parties.map((party) => party.client.email)].map((email) => email.trim()).filter((email) => EMAIL.test(email));
+  const signerEmails = [client.email, ...parties.map((party) => party.client.email)].map((email) => email.trim().toLowerCase()).filter((email) => EMAIL.test(email));
 
   const problems = useMemo(() => {
     const list = partiesProblems(template, client, values, parties);

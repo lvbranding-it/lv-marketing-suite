@@ -93,7 +93,9 @@ interface OpenDocument {
   language: LegalLanguage;
   company_name: string;
   recipient_name: string;
-  content: { blocks: LegalBlock[]; signerRole: string; countersignerRole: string };
+  content: { blocks: LegalBlock[]; signerRole: string; signerRoles?: string[]; countersignerRole: string };
+  /** Which signer this link is for, from 1; their role is signerRoles[position - 1]. */
+  position?: number;
   state: State;
   client_signed_at: string | null;
 }
@@ -276,7 +278,7 @@ export default function SignDocument() {
 
       <section className="mt-6 rounded-lg border border-black/5 bg-white p-5 shadow-sm sm:p-8" aria-labelledby="sign-heading">
         <h2 id="sign-heading" className="text-lg font-semibold">{words.signTitle}</h2>
-        <p className="mt-0.5 text-sm text-neutral-500">{doc.content.signerRole}</p>
+        <p className="mt-0.5 text-sm text-neutral-500">{doc.content.signerRoles?.[(doc.position ?? 1) - 1] ?? doc.content.signerRole}</p>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="sign-name">{words.fullName}</Label>

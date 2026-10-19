@@ -43,15 +43,12 @@ export function fieldProblem(fields: LegalField[], values: Record<string, string
 /** Problems with who signs, keyed main.name, main.email, main.fields, party0.name, and so on. */
 export function partiesProblems(template: LegalTemplate, client: SessionClient, values: Record<string, string>, parties: PartyDraft[]) {
   const list: Record<string, string> = {};
-  const seen = new Set<string>();
   const check = (prefix: string, signer: SessionClient, fields: LegalField[], fieldValues: Record<string, string>, main: boolean) => {
     if (!signer.contactId && !signer.adding) list[`${prefix}.name`] = "Choose who signs, or add them";
     else if (!signer.name.trim()) list[`${prefix}.name`] = "Add the signer's name";
     const email = signer.email.trim().toLowerCase();
     if (!email) list[`${prefix}.email`] = main ? "The signing link goes to this email" : "Their signing link goes to this email";
     else if (!EMAIL.test(email)) list[`${prefix}.email`] = "Check this email address";
-    else if (seen.has(email)) list[`${prefix}.email`] = "Each party needs its own signer email";
-    seen.add(email);
     const problem = fieldProblem(fields, fieldValues);
     if (problem) list[`${prefix}.fields`] = problem;
   };
@@ -106,6 +103,8 @@ interface PartyCardProps {
   fields: LegalField[];
   values: Record<string, string>;
   errors: { name?: string; email?: string; fields?: string } | null;
+  /** Shown under who signs, such as when they also sign for another party. */
+  note?: string;
   onClient: (client: SessionClient) => void;
   onCompany: (companyName: string) => void;
   onValue: (key: string, value: string) => void;
@@ -113,7 +112,7 @@ interface PartyCardProps {
 }
 
 /** A party: who signs for it, its company and its lines in the agreement. */
-function PartyCard({ idPrefix, title, language, client, companyName, fields, values, errors, onClient, onCompany, onValue, onRemove }: PartyCardProps) {
+function PartyCard({ idPrefix, title, language, client, companyName, fields, values, errors, note, onClient, onCompany, onValue, onRemove }: PartyCardProps) {
   const { data: contacts = [] } = useImportedContacts();
   // A chosen contact brings their company, unless one was already typed.
   useEffect(() => {
@@ -134,6 +133,7 @@ function PartyCard({ idPrefix, title, language, client, companyName, fields, val
         )}
       </div>
       <SessionClientFields idPrefix={idPrefix} value={client} onChange={onClient} errors={errors} labels={SIGNER_LABELS} />
+      {note && <p className="-mt-2 text-xs text-muted-foreground">{note}</p>}
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-company`}>Company</Label>
         <Input id={`${idPrefix}-company`} value={companyName} placeholder="Their company, if any" onChange={(event) => onCompany(event.target.value)} />
@@ -180,6 +180,15 @@ export default function LegalPartiesForm({
   const errorsFor = (prefix: string) => (problems ? {
     name: problems[`${prefix}.name`], email: problems[`${prefix}.email`], fields: problems[`${prefix}.fields`],
   } : null);
+  // Someone who also signs for an earlier party: allowed, one link per party.
+  const emails = [client.email, ...parties.map((party) => party.client.email)].map((email) => email.trim().toLowerCase());
+  const sharedNote = (index: number) => {
+    const email = emails[index + 1];
+    const first = email && EMAIL.test(email) ? emails.indexOf(email) : -1;
+    if (first < 0 || first > index) return undefined;
+    const other = first === 0 ? (max ? roleLabel(0) || "the recipient" : "the recipient") : title(first - 1);
+    return `Same signer as ${other}. They get a separate link for each party and sign for each.`;
+  };
   const update = (key: string, patch: Partial<PartyDraft>) =>
     onPartiesChange((current) => current.map((party) => (party.key === key ? { ...party, ...patch } : party)));
 
@@ -217,6 +226,7 @@ export default function LegalPartiesForm({
           fields={template.partyFields ?? []}
           values={party.values}
           errors={errorsFor(`party${index}`)}
+          note={sharedNote(index)}
           onClient={(next) => update(party.key, { client: next })}
           onCompany={(next) => update(party.key, { companyName: next })}
           onValue={(key, next) => update(party.key, { values: { ...party.values, [key]: next } })}

@@ -95,9 +95,9 @@ export function deviceName(userAgent: string | null) {
   return [device, browser].filter(Boolean).join(" · ");
 }
 
-/** "Ana", "Ana and Leo", "Ana, Leo and Mia". */
+/** "Ana", "Ana and Leo", "Ana, Leo and Mia"; each name once. */
 export function listNames(names: string[]) {
-  const named = names.filter(Boolean);
+  const named = [...new Set(names.filter(Boolean))];
   if (named.length < 2) return named[0] ?? "";
   return `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
 }

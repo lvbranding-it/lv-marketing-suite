@@ -47,8 +47,9 @@ export interface Signer {
   user_agent: string | null;
 }
 
-/** "Ana Ruiz", "Ana Ruiz and Leo Díaz", "Ana Ruiz, Leo Díaz and Mia Chen". */
-export function listNames(names: string[], language: Language = "en") {
+/** "Ana Ruiz", "Ana Ruiz and Leo Díaz", "Ana Ruiz, Leo Díaz and Mia Chen"; each name once. */
+export function listNames(all: string[], language: Language = "en") {
+  const names = [...new Set(all.filter(Boolean))];
   if (names.length < 2) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} ${language === "es" ? "y" : "and"} ${names[names.length - 1]}`;
 }
@@ -145,19 +146,27 @@ const button = (href: string, label: string) =>
 export const longDate = (iso: string, language: Language) =>
   new Intl.DateTimeFormat(language === "es" ? "es-US" : "en-US", { dateStyle: "long", timeZone: "America/Chicago" }).format(new Date(iso));
 
-export function signatureRequestEmail(doc: { title: string; recipient_name: string; company_name: string; language: Language; expires_at: string }, link: string) {
+/**
+ * The signing link. role ("Party 3 · Studio North LLC") when the document has
+ * more than one signer: one person can sign for two parties, one link each,
+ * and each email says which party it is for.
+ */
+export function signatureRequestEmail(doc: { title: string; recipient_name: string; company_name: string; language: Language; expires_at: string }, link: string, role?: string) {
   const es = doc.language === "es";
   const company = doc.company_name ? (es ? ` para ${escapeHtml(doc.company_name)}` : ` for ${escapeHtml(doc.company_name)}`) : "";
+  const as = role
+    ? `<p style="margin:0 0 4px;padding:10px 14px;border-radius:8px;background:#f6f5f5">${es ? "Firma como" : "You sign as"} <strong>${escapeHtml(role)}</strong>.</p>`
+    : "";
   return {
-    subject: es ? `LV Branding le envió un documento para firmar: ${doc.title}` : `LV Branding sent you a document to sign: ${doc.title}`,
+    subject: (es ? `LV Branding le envió un documento para firmar: ${doc.title}` : `LV Branding sent you a document to sign: ${doc.title}`) + (role ? ` (${role})` : ""),
     html: emailLayout(es
       ? `<p>Hola ${escapeHtml(doc.recipient_name)}:</p>
 <p>LV Branding le envió <strong>${escapeHtml(doc.title)}</strong>${company} para revisar y firmar en línea.</p>
-${button(link, "Revisar y firmar")}
+${as}${button(link, "Revisar y firmar")}
 <p style="font-size:13px;color:#6b6668">El enlace es personal y vence el ${escapeHtml(longDate(doc.expires_at, "es"))}. Si no esperaba este documento, puede ignorar este correo.</p>`
       : `<p>Hi ${escapeHtml(doc.recipient_name)},</p>
 <p>LV Branding has sent you the <strong>${escapeHtml(doc.title)}</strong>${company} to review and sign online.</p>
-${button(link, "Review and sign")}
+${as}${button(link, "Review and sign")}
 <p style="font-size:13px;color:#6b6668">This link is personal and expires on ${escapeHtml(longDate(doc.expires_at, "en"))}. If you weren't expecting this document, you can ignore this email.</p>`),
   };
 }

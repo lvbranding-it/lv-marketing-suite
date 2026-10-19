@@ -84,5 +84,7 @@ describe("several parties", () => {
     expect(listNames(["Ana"])).toBe("Ana");
     expect(listNames(["Ana", "Leo"])).toBe("Ana and Leo");
     expect(listNames(["Ana", "", "Leo", "Mia"])).toBe("Ana, Leo and Mia");
+    // One person signing for two parties is named once.
+    expect(listNames(["David Lopez", "David Lopez", "Mia"])).toBe("David Lopez and Mia");
   });
 });

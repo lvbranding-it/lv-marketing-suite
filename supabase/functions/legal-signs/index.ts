@@ -65,7 +65,7 @@ function signersFrom(input: Record<string, unknown>): NewSigner[] | string {
   }));
   const bad = signers.find((signer) => !signer.name || !EMAIL.test(signer.email));
   if (bad) return `Add a name and a valid email for every signer${bad.email ? ` (${bad.email})` : ""}`;
-  if (new Set(signers.map((signer) => signer.email)).size !== signers.length) return "Each signer needs their own email address";
+  // One person may sign for more than one party: each party still has its own link.
   return signers;
 }
 
@@ -128,7 +128,8 @@ serve(async (req) => {
       const failed: string[] = [];
       for (const [index, signer] of signers.entries()) {
         try {
-          const email = signatureRequestEmail({ ...doc, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links[index].token}`);
+          const role = signers.length > 1 ? signerRolesOf(content)[index] : undefined;
+          const email = signatureRequestEmail({ ...doc, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links[index].token}`, role);
           await sendEmail({ to: { email: signer.email, name: signer.name }, ...email });
           await log(doc, "sent", { to: signer.email, signer_id: (rows as { id: string; position: number }[]).find((row) => row.position === index + 1)?.id });
         } catch (emailError) {
@@ -155,9 +156,11 @@ serve(async (req) => {
     /** A new link for each of these signers, emailed; returns the addresses it could not reach. */
     const emailLinks = async (targets: Signer[], links: Map<string, string>, docForEmail: typeof doc, event: string) => {
       const failed: string[] = [];
+      const roles = signerRolesOf(docForEmail.content as Content);
       for (const signer of targets) {
         try {
-          const email = signatureRequestEmail({ ...docForEmail, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links.get(signer.id)}`);
+          const role = roles.length > 1 ? roles[signer.position - 1] : undefined;
+          const email = signatureRequestEmail({ ...docForEmail, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links.get(signer.id)}`, role);
           await sendEmail({ to: { email: signer.email, name: signer.name }, ...email });
           await log(doc, event, { to: signer.email, signer_id: signer.id });
         } catch (emailError) {
@@ -303,12 +306,16 @@ serve(async (req) => {
       const attachment = { content: base64(pdf), filename: `${doc.title} - ${doc.recipient_name}.pdf`.replace(/[\\/:*?"<>|]+/g, "-"), type: "application/pdf" };
       const failures: string[] = [];
       const parties = signers.length + 1;
+      // One copy per address, even for someone who signed for more than one party.
+      const emailed = new Set<string>();
       for (const signer of signers) {
+        if (emailed.has(signer.email)) continue;
+        emailed.add(signer.email);
         await sendEmail({ to: { email: signer.email, name: signer.name }, ...completedEmail({ ...doc, recipient_name: signer.name }, doc.language, false, parties), attachments: [attachment] })
           .catch((error) => failures.push(`${signer.email}: ${error.message}`));
       }
       const team = doc.created_by ? (await db.auth.admin.getUserById(doc.created_by)).data.user?.email : null;
-      const withWhom = signers.map((signer) => signer.name).join(", ");
+      const withWhom = [...new Set(signers.map((signer) => signer.name))].join(", ");
       await sendEmail({ to: { email: team || "admin@lvbranding.com" }, ...completedEmail({ ...doc, recipient_name: withWhom }, "en", true, parties), attachments: [attachment] })
         .catch((error) => failures.push(`team: ${error.message}`));
       return json({ ok: true, emailed: failures.length === 0, ...(failures.length ? { email_problems: failures } : {}) });
