@@ -41,7 +41,16 @@ function validContent(value: unknown): Content | null {
   };
 }
 
-type NewSigner = { name: string; email: string; contact_id: string | null; company_name: string };
+type NewSigner = { name: string; email: string; contact_id: string | null; company_name: string; party_values: Record<string, string> };
+
+/** A party's lines from the form: short strings only. */
+function partyValues(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([key, item]) => /^[a-zA-Z0-9_]{1,40}$/.test(key) && typeof item === "string")
+    .slice(0, 20)
+    .map(([key, item]) => [key, (item as string).trim().slice(0, 500)]));
+}
 
 /** The signers to send to: input.signers, or the single recipient the older page sends. */
 function signersFrom(input: Record<string, unknown>): NewSigner[] | string {
@@ -52,6 +61,7 @@ function signersFrom(input: Record<string, unknown>): NewSigner[] | string {
   const signers = list.map((item) => ({
     name: text(item?.name, 160), email: text(item?.email, 320).toLowerCase(),
     contact_id: UUID.test(text(item?.contact_id, 40)) ? text(item?.contact_id, 40) : null, company_name: text(item?.company_name, 200),
+    party_values: partyValues(item?.party_values),
   }));
   const bad = signers.find((signer) => !signer.name || !EMAIL.test(signer.email));
   if (bad) return `Add a name and a valid email for every signer${bad.email ? ` (${bad.email})` : ""}`;
@@ -107,7 +117,8 @@ serve(async (req) => {
       const links = await Promise.all(signers.map(() => newToken()));
       const { data: rows, error: signerError } = await db.from("legal_document_signers").insert(signers.map((signer, index) => ({
         document_id: doc.id, org_id: orgId, position: index + 1, contact_id: signer.contact_id,
-        name: signer.name, email: signer.email, company_name: signer.company_name, token_hash: links[index].hash,
+        name: signer.name, email: signer.email, company_name: signer.company_name, party_values: signer.party_values,
+        token_hash: links[index].hash,
       }))).select("id, position");
       if (signerError || !rows) {
         await db.from("legal_documents").delete().eq("id", doc.id);
@@ -178,30 +189,42 @@ serve(async (req) => {
       if (!title || !content || content.blocks.some((block) => !block.text.trim())) {
         return json({ error: "Add a title and text for every document section" }, 400);
       }
-      if (signerRolesOf(content).length !== signers.length) return json({ error: "Each signer needs their role in the document" }, 400);
+      // The parties as edited, or (from a page that only edits the text) the ones it has.
+      const nextSigners: NewSigner[] | string = Array.isArray(input.signers)
+        ? signersFrom(input)
+        : signers.map((signer) => ({
+          name: signer.name, email: signer.email, contact_id: signer.contact_id, company_name: signer.company_name,
+          party_values: signer.party_values ?? {},
+        }));
+      if (typeof nextSigners === "string") return json({ error: nextSigners }, 400);
+      if (signerRolesOf(content).length !== nextSigners.length) return json({ error: "Each signer needs their role in the document" }, 400);
+      const fieldValues = input.field_values && typeof input.field_values === "object" && !Array.isArray(input.field_values) ? input.field_values : null;
+      if (fieldValues && JSON.stringify(fieldValues).length > 30_000) return json({ error: "The document's fields are too long" }, 400);
       const nextHash = await contentHash(content);
-      if (title === doc.title && nextHash === doc.content_hash) return json({ error: "Make a change before sending a revision" }, 400);
+      const samePeople = JSON.stringify(nextSigners.map((signer) => [signer.name, signer.email, signer.company_name]))
+        === JSON.stringify(signers.map((signer) => [signer.name, signer.email, signer.company_name]));
+      if (title === doc.title && nextHash === doc.content_hash && samePeople) return json({ error: "Make a change before sending a revision" }, 400);
 
-      // The text and every signer's link change together, and not at all if
-      // someone signed first (legal_revise_document).
-      const links = new Map<string, string>();
-      const hashes: Record<string, string> = {};
-      for (const signer of signers) {
-        const { token, hash } = await newToken();
-        links.set(signer.id, token);
-        hashes[signer.id] = hash;
-      }
+      // The text, the details and every signer, each with a new link, change
+      // together, and not at all if someone signed first (legal_edit_document).
+      const links = await Promise.all(nextSigners.map(() => newToken()));
       const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
-      const { data: revised, error: reviseError } = await db.rpc("legal_revise_document", {
-        p_document_id: doc.id, p_title: title, p_content: content, p_content_hash: nextHash, p_expires_at: expiresAt, p_token_hashes: hashes,
+      const { data: revised, error: reviseError } = await db.rpc("legal_edit_document", {
+        p_document_id: doc.id, p_title: title, p_content: content, p_content_hash: nextHash, p_expires_at: expiresAt,
+        p_field_values: fieldValues,
+        p_signers: nextSigners.map((signer, index) => ({ ...signer, position: index + 1, token_hash: links[index].hash })),
       });
       if (reviseError && !reviseError.message.includes("legal_revise_conflict")) throw reviseError;
       if (!revised) return json({ error: "This document changed or was signed. Reload it before editing." }, 409);
       await log(doc, "revised", {
         previous_title: doc.title, previous_content: doc.content, previous_content_hash: doc.content_hash,
-        title, content_hash: nextHash, to: signers.map((signer) => signer.email),
+        previous_signers: signers.map((signer) => signer.email), title, content_hash: nextHash, to: nextSigners.map((signer) => signer.email),
       });
-      const failed = await emailLinks(signers, links, { ...doc, title, content, expires_at: expiresAt }, "revision_sent");
+
+      const { data: newRows } = await db.from("legal_document_signers").select("*").eq("document_id", doc.id).order("position");
+      const linkFor = new Map<string, string>();
+      for (const row of (newRows ?? []) as Signer[]) linkFor.set(row.id, links[row.position - 1].token);
+      const failed = await emailLinks((newRows ?? []) as Signer[], linkFor, { ...doc, title, content, expires_at: expiresAt }, "revision_sent");
       return json({ ok: true, emailed: failed.length === 0, ...(failed.length ? { failed } : {}) });
     }
 

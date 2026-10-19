@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Ban, CheckCircle2, Clock3, Download, FileText, Loader2, Mail, PenLine, RefreshCw, ShieldAlert,
+  Ban, CheckCircle2, Clock3, Download, FileText, Loader2, Mail, PenLine, RefreshCw, ShieldAlert, Users,
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import LegalDocumentView from "@/components/legal/LegalDocumentView";
-import ReviseLegalDocumentDialog from "@/components/legal/ReviseLegalDocumentDialog";
+import EditLegalDocumentDialog, { type EditScreen } from "@/components/legal/EditLegalDocumentDialog";
 import LegalStageBadge from "@/components/legal/LegalStageBadge";
 import SignaturePad from "@/components/legal/SignaturePad";
 import { useAuth } from "@/hooks/useAuth";
@@ -227,13 +227,13 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
   const actions = useLegalActions();
   const events = useLegalEvents(doc?.id ?? null);
   const [countersignOpen, setCountersignOpen] = useState(false);
-  const [reviseOpen, setReviseOpen] = useState(false);
+  const [editing, setEditing] = useState<EditScreen | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
 
   useEffect(() => {
     setCountersignOpen(false);
-    setReviseOpen(false);
+    setEditing(null);
     setVoidOpen(false);
     setVoidReason("");
   }, [doc?.id]);
@@ -304,9 +304,14 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
 
               <div className="flex flex-wrap gap-2">
                 {canManage && (stage === "waiting" || stage === "expired") && !anySigned && !doc.lv_signed_at && (
-                  <Button variant="outline" onClick={() => setReviseOpen(true)}>
-                    <PenLine className="mr-2 h-4 w-4" />Edit and resend
-                  </Button>
+                  <>
+                    <Button variant="outline" onClick={() => setEditing("parties")}>
+                      <Users className="mr-2 h-4 w-4" />Edit parties
+                    </Button>
+                    <Button variant="outline" onClick={() => setEditing("document")}>
+                      <PenLine className="mr-2 h-4 w-4" />Edit document
+                    </Button>
+                  </>
                 )}
                 {stage === "completed" && (
                   <Button onClick={() => run(actions.download.mutateAsync(doc.id), "")} disabled={actions.download.isPending}>
@@ -388,7 +393,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
             </div>
 
             <CountersignDialog doc={doc} open={countersignOpen} onOpenChange={setCountersignOpen} />
-            <ReviseLegalDocumentDialog doc={doc} open={reviseOpen} onOpenChange={setReviseOpen} />
+            <EditLegalDocumentDialog doc={doc} open={!!editing} screen={editing ?? "parties"} onOpenChange={(next) => !next && setEditing(null)} />
             <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>

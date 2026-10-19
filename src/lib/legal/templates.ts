@@ -32,6 +32,8 @@ export interface LegalField {
   hint?: Text;
   /** What the field starts with on a new document. */
   defaultValue?: () => string;
+  /** "party": one of the main recipient's lines in the agreement, asked with who signs. */
+  group?: "party";
 }
 
 export interface LegalTemplate {
@@ -450,17 +452,17 @@ function ndaTemplate(kind: "mutual" | "oneWay", key: string, description: Text):
         placeholder: t("Describe the proposed project or relationship", "Describir el proyecto o la relación propuesta"),
       },
       {
-        key: "party2Name", label: t(`${party.en} full legal name`, `Nombre legal completo de la ${party.es}`), type: "text",
+        key: "party2Name", label: t(`${party.en} full legal name`, `Nombre legal completo de la ${party.es}`), type: "text", group: "party",
         hint: t("Leave empty to use the Company, or the recipient's own name when there is no company.", "Déjelo vacío para usar la Empresa, o el nombre del destinatario si no hay empresa."),
       },
       {
-        key: "party2Entity", label: t(`${party.en} entity type and jurisdiction`, `Tipo de entidad y jurisdicción de la ${party.es}`), type: "text",
+        key: "party2Entity", label: t(`${party.en} entity type and jurisdiction`, `Tipo de entidad y jurisdicción de la ${party.es}`), type: "text", group: "party",
         placeholder: t("Texas limited liability company", "Sociedad de responsabilidad limitada de Texas"),
         hint: t(`Leave empty when the ${party.en} is an individual.`, `Déjelo vacío si la ${party.es} es una persona física.`),
       },
-      { key: "party2Address", label: t(`${party.en} address`, `Domicilio de la ${party.es}`), type: "text", required: true },
+      { key: "party2Address", label: t(`${party.en} address`, `Domicilio de la ${party.es}`), type: "text", required: true, group: "party" },
       {
-        key: "party2Email", label: t(`${party.en} notice email`, `Correo para notificaciones de la ${party.es}`), type: "email",
+        key: "party2Email", label: t(`${party.en} notice email`, `Correo para notificaciones de la ${party.es}`), type: "email", group: "party",
         hint: t("Leave empty to use the recipient's email.", "Déjelo vacío para usar el correo del destinatario."),
       },
       { key: "lvAddress", label: t("LV Branding address", "Domicilio de LV Branding"), type: "text", required: true, defaultValue: () => LV_NOTICE.address },

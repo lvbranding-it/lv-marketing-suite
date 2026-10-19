@@ -16,7 +16,9 @@ an error):
 1. Apply the migrations in the SQL editor, in order:
    `20261015120000_legal_signs.sql`, then `20261019120000_legal_document_signers.sql`
    (the signers table; it copies every existing document's recipient into it,
-   link included, so links already sent keep working).
+   link included, so links already sent keep working), then
+   `20261020120000_legal_document_editing.sql` (each party's details, and
+   `legal_edit_document` for editing parties).
 2. Deploy both functions right after, before anyone sends or resends a
    document:
 
@@ -67,14 +69,27 @@ or `viewed` document past `expires_at`. **Send again** emails a new link to
 everyone who hasn't signed (or, from the Parties list, to one of them); their
 old links stop working.
 
-Before anyone signs, an owner, administrator or manager can edit the document
-wording and send a revision. This saves a new content hash, resets the viewed
-state, replaces every signer's link, and emails each of them a new 30-day link.
-`legal_revise_document` does it in one locked step and undoes it if a signature
+Before anyone signs, an owner, administrator or manager can edit a document
+from its panel, on two screens:
+
+- **Edit parties**: who signs, each party's lines in the agreement, and (on the
+  NDAs) adding or removing parties, up to four besides LV Branding.
+- **Edit document**: the document's name and details (dates, business purpose,
+  project and so on). The document is made again from its template, so the
+  parties block always matches the parties. **Change the wording**, closed by
+  default, edits the text itself for that one document; hand-edited wording is
+  kept when parties or details change, unless a change adds or removes a
+  section.
+
+Saving replaces the text, the details and the signers together, each signer
+with a new 30-day link, emailed to every signer; earlier links stop working.
+`legal_edit_document` does it in one locked step and undoes it if a signature
 arrived first, so no one's signature can end up on text they didn't see. The
-previous text and hash are recorded in the audit trail. Once anyone has signed,
-the document cannot be revised. If email delivery fails, the change stays saved
-and the team can use **Send again** to retry.
+previous text, hash and signers are recorded in the audit trail. Once anyone
+has signed, the document cannot be edited. If an email fails, the change stays
+saved and the team can use **Send again** to retry. Each additional party's
+lines are kept in `legal_document_signers.party_values`; the main recipient's
+are in `legal_documents.field_values`.
 
 ## What makes a signature hold up
 

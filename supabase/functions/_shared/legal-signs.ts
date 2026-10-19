@@ -31,9 +31,12 @@ export interface Signer {
   document_id: string;
   org_id: string;
   position: number;
+  contact_id: string | null;
   name: string;
   email: string;
   company_name: string;
+  /** This party's lines from the form (legal name, entity, address, email); the main recipient's are in field_values. */
+  party_values: Record<string, string>;
   token_hash: string | null;
   viewed_at: string | null;
   signed_at: string | null;

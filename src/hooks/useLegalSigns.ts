@@ -60,6 +60,8 @@ export interface LegalSigner {
   name: string;
   email: string;
   company_name: string;
+  /** This party's lines from the form; the main recipient's are in the document's field_values. */
+  party_values: Record<string, string>;
   sent_at: string;
   viewed_at: string | null;
   signed_at: string | null;
@@ -103,7 +105,7 @@ export function useLegalDocuments() {
     queryKey: ["legal-documents", org?.id],
     queryFn: async () => {
       const { data, error } = await db.from("legal_documents")
-        .select("*, signers:legal_document_signers(id, position, contact_id, name, email, company_name, sent_at, viewed_at, signed_at, signer_name, signer_title, signature)")
+        .select("*, signers:legal_document_signers(id, position, contact_id, name, email, company_name, party_values, sent_at, viewed_at, signed_at, signer_name, signer_title, signature)")
         .eq("org_id", org!.id).order("created_at", { ascending: false });
       if (error) throw error;
       return ((data ?? []) as LegalDocument[]).map((doc) => ({
@@ -128,10 +130,11 @@ export function useLegalEvents(documentId: string | null) {
   });
 }
 
-/** Who signs for a party: chosen from Contacts or added to them, and their company. */
+/** Who signs for a party: chosen from Contacts or added to them, their company and, for additional parties, their lines. */
 export interface LegalSignerInput {
   client: SessionClient;
   companyName: string;
+  partyValues?: Record<string, string>;
 }
 
 export interface SendLegalInput {
@@ -152,22 +155,30 @@ export function useLegalActions() {
     if (id) qc.invalidateQueries({ queryKey: ["legal-document-events", id] });
   };
 
+  /** The signers as the function takes them, adding new people to Contacts. */
+  const signersPayload = async (signers: LegalSignerInput[]) => {
+    if (!org || !user) throw new Error("Sign in to send documents");
+    const payload = [];
+    for (const signer of signers) {
+      const contactId = await linkClientContact({
+        client: signer.client, orgId: org.id, userId: user.id, branchId: null,
+        company: signer.companyName, rawData: { from_legal_signs: true },
+      });
+      payload.push({
+        name: signer.client.name.trim(), email: signer.client.email.trim(), contact_id: contactId,
+        company_name: signer.companyName.trim(), party_values: signer.partyValues ?? {},
+      });
+    }
+    return payload;
+  };
+
   return {
     send: useMutation({
       mutationFn: async (input: SendLegalInput) => {
         if (!org || !user) throw new Error("Sign in to send documents");
         const template = legalTemplate(input.templateKey);
         if (!template?.available) throw new Error("This document can't be sent yet");
-        const signers = [];
-        for (const signer of input.signers) {
-          const contactId = await linkClientContact({
-            client: signer.client, orgId: org.id, userId: user.id, branchId: null,
-            company: signer.companyName, rawData: { from_legal_signs: true },
-          });
-          signers.push({
-            name: signer.client.name.trim(), email: signer.client.email.trim(), contact_id: contactId, company_name: signer.companyName.trim(),
-          });
-        }
+        const signers = await signersPayload(input.signers);
         return invoke<{ id: string; failed?: string[] }>({
           action: "send", org_id: org.id, template_key: template.key, template_version: template.version,
           language: input.language, title: template.name[input.language],
@@ -183,8 +194,15 @@ export function useLegalActions() {
       onSuccess: (_data, { id }) => refresh(id),
     }),
     revise: useMutation({
-      mutationFn: (input: { id: string; title: string; content: LegalDocument["content"] }) =>
-        invoke<{ ok: true; emailed: boolean; failed?: string[] }>({ action: "revise", ...input }),
+      /** New text, and optionally new details and signers; everyone gets a new link. */
+      mutationFn: async (input: {
+        id: string; title: string; content: LegalDocument["content"];
+        fieldValues?: Record<string, string>; signers?: LegalSignerInput[];
+      }) => invoke<{ ok: true; emailed: boolean; failed?: string[] }>({
+        action: "revise", id: input.id, title: input.title, content: input.content,
+        ...(input.fieldValues ? { field_values: input.fieldValues } : {}),
+        ...(input.signers ? { signers: await signersPayload(input.signers) } : {}),
+      }),
       onSuccess: (_data, { id }) => refresh(id),
     }),
     void: useMutation({
