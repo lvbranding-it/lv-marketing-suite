@@ -29,7 +29,7 @@ export interface LegalDocument {
   recipient_name: string;
   recipient_email: string;
   field_values: Record<string, string>;
-  content: { blocks: LegalBlock[]; signerRole: string; countersignerRole: string };
+  content: { blocks: LegalBlock[]; signerRole: string; signerRoles?: string[]; countersignerRole: string };
   status: LegalStatus;
   expires_at: string;
   sent_at: string;
@@ -48,7 +48,29 @@ export interface LegalDocument {
   void_reason: string | null;
   created_at: string;
   updated_at: string;
+  /** Everyone who signs besides LV Branding, in signing order. */
+  signers: LegalSigner[];
 }
+
+/** A party who signs besides LV Branding, through their own link. */
+export interface LegalSigner {
+  id: string;
+  position: number;
+  contact_id: string | null;
+  name: string;
+  email: string;
+  company_name: string;
+  sent_at: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signer_name: string | null;
+  signer_title: string | null;
+  signature: LegalSignature | null;
+}
+
+/** Each signer's role in the document, in signing order. */
+export const signerRolesOf = (content: LegalDocument["content"]) =>
+  (content.signerRoles?.length ? content.signerRoles : [content.signerRole]);
 
 export interface LegalEvent {
   id: string;
@@ -80,9 +102,13 @@ export function useLegalDocuments() {
   return useQuery<LegalDocument[]>({
     queryKey: ["legal-documents", org?.id],
     queryFn: async () => {
-      const { data, error } = await db.from("legal_documents").select("*").eq("org_id", org!.id).order("created_at", { ascending: false });
+      const { data, error } = await db.from("legal_documents")
+        .select("*, signers:legal_document_signers(id, position, contact_id, name, email, company_name, sent_at, viewed_at, signed_at, signer_name, signer_title, signature)")
+        .eq("org_id", org!.id).order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return ((data ?? []) as LegalDocument[]).map((doc) => ({
+        ...doc, signers: [...(doc.signers ?? [])].sort((a, b) => a.position - b.position),
+      }));
     },
     enabled: !!org,
     // A recipient signing shows up without a reload.
@@ -102,11 +128,17 @@ export function useLegalEvents(documentId: string | null) {
   });
 }
 
+/** Who signs for a party: chosen from Contacts or added to them, and their company. */
+export interface LegalSignerInput {
+  client: SessionClient;
+  companyName: string;
+}
+
 export interface SendLegalInput {
   templateKey: string;
   language: LegalLanguage;
-  client: SessionClient;
-  companyName: string;
+  /** The main recipient first, then any additional parties. */
+  signers: LegalSignerInput[];
   values: Record<string, string>;
   content: LegalDocument["content"];
 }
@@ -126,27 +158,33 @@ export function useLegalActions() {
         if (!org || !user) throw new Error("Sign in to send documents");
         const template = legalTemplate(input.templateKey);
         if (!template?.available) throw new Error("This document can't be sent yet");
-        const contactId = await linkClientContact({
-          client: input.client, orgId: org.id, userId: user.id, branchId: null,
-          company: input.companyName, rawData: { from_legal_signs: true },
-        });
-        const recipient = input.client.name.trim();
-        return invoke<{ id: string }>({
+        const signers = [];
+        for (const signer of input.signers) {
+          const contactId = await linkClientContact({
+            client: signer.client, orgId: org.id, userId: user.id, branchId: null,
+            company: signer.companyName, rawData: { from_legal_signs: true },
+          });
+          signers.push({
+            name: signer.client.name.trim(), email: signer.client.email.trim(), contact_id: contactId, company_name: signer.companyName.trim(),
+          });
+        }
+        return invoke<{ id: string; failed?: string[] }>({
           action: "send", org_id: org.id, template_key: template.key, template_version: template.version,
-          language: input.language, title: template.name[input.language], contact_id: contactId,
-          company_name: input.companyName.trim(), recipient_name: recipient, recipient_email: input.client.email.trim(),
-          field_values: input.values, content: input.content,
+          language: input.language, title: template.name[input.language],
+          signers, field_values: input.values, content: input.content,
         });
       },
       onSuccess: () => refresh(),
     }),
     resend: useMutation({
-      mutationFn: (id: string) => invoke<{ ok: true; emailed: boolean }>({ action: "resend", id }),
-      onSuccess: (_data, id) => refresh(id),
+      /** To everyone who hasn't signed, or just signerId. */
+      mutationFn: ({ id, signerId }: { id: string; signerId?: string }) =>
+        invoke<{ ok: true; emailed: boolean; sent_to: string[]; failed?: string[] }>({ action: "resend", id, signer_id: signerId }),
+      onSuccess: (_data, { id }) => refresh(id),
     }),
     revise: useMutation({
       mutationFn: (input: { id: string; title: string; content: LegalDocument["content"] }) =>
-        invoke<{ ok: true; emailed: boolean }>({ action: "revise", ...input }),
+        invoke<{ ok: true; emailed: boolean; failed?: string[] }>({ action: "revise", ...input }),
       onSuccess: (_data, { id }) => refresh(id),
     }),
     void: useMutation({

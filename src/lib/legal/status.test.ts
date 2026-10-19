@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deviceName, legalStage, matchesFilter, matchesSearch } from "./status";
+import { deviceName, legalStage, listNames, matchesFilter, matchesSearch, stageDetail } from "./status";
 import { signatureReady, strokeBounds, tooSmall } from "./signature";
 
 const NOW = Date.parse("2026-10-15T12:00:00Z");
@@ -58,5 +58,31 @@ describe("deviceName", () => {
     expect(deviceName("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36 Edg/140.0")).toBe("Windows · Edge");
     expect(deviceName("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36")).toBe("Mac · Chrome");
     expect(deviceName(null)).toBe("");
+  });
+});
+
+describe("several parties", () => {
+  const later = "2026-11-14T12:00:00Z";
+  it("counts signatures while waiting, and says when every party signed", () => {
+    const signers = [{ signed_at: "2026-10-16T12:00:00Z" }, { signed_at: null }];
+    expect(stageDetail({ status: "viewed", expires_at: later, viewed_at: "x", signers })).toBe("1 of 2 signed");
+    expect(stageDetail({ status: "client_signed", expires_at: later, viewed_at: "x", signers })).toBe("Every party signed. Your signature completes it.");
+    expect(stageDetail({ status: "sent", expires_at: later, viewed_at: null, signers: [{ signed_at: null }] })).toBe("Not opened yet");
+  });
+
+  it("finds a document by any party", () => {
+    const doc = {
+      title: "Mutual Nondisclosure Agreement", recipient_name: "Ana Ruiz", recipient_email: "ana@casa.com", company_name: "Casa Melilla",
+      signers: [{ name: "Mia Chen", email: "mia@studio.com", company_name: "Studio North" }],
+    };
+    expect(matchesSearch(doc, "studio")).toBe(true);
+    expect(matchesSearch(doc, "mia chen")).toBe(true);
+    expect(matchesSearch(doc, "acme")).toBe(false);
+  });
+
+  it("lists names the way a sentence does", () => {
+    expect(listNames(["Ana"])).toBe("Ana");
+    expect(listNames(["Ana", "Leo"])).toBe("Ana and Leo");
+    expect(listNames(["Ana", "", "Leo", "Mia"])).toBe("Ana, Leo and Mia");
   });
 });

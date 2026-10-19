@@ -22,8 +22,8 @@ const WORDS = {
     expired: "This signing link expired.",
     expiredHelp: "Ask LV Branding to send it again and you'll get a new link.",
     alreadySigned: "This document is already signed.",
-    alreadySignedHelp: "LV Branding will email you the copy signed by both sides.",
-    completedHelp: "The copy signed by both sides was emailed to you.",
+    alreadySignedHelp: "LV Branding will email you the final copy once every party has signed.",
+    completedHelp: "The copy signed by every party was emailed to you.",
     confirmTitle: "Confirm your email",
     confirmHelp: (hint: string) => `To open this document, type the email address it was sent to (${hint}).`,
     email: "Email address",
@@ -41,7 +41,8 @@ const WORDS = {
     sign: "Sign document",
     signing: "Signing",
     signedTitle: "Signed. Thank you.",
-    signedHelp: "LV Branding will countersign next. We'll email you the final copy signed by both sides.",
+    signedHelp: "LV Branding will countersign next. We'll email you the final copy signed by every party.",
+    signedWaitingHelp: "The other parties still have to sign. Once they do, LV Branding will countersign, and we'll email you the final copy signed by every party.",
     signedAt: "Signed",
     footer: "LV Branding LLC · Houston, Texas",
     signatureRequired: "Add your full name and signature.",
@@ -57,8 +58,8 @@ const WORDS = {
     expired: "Este enlace de firma venció.",
     expiredHelp: "Pida a LV Branding que se lo envíe de nuevo y recibirá un enlace nuevo.",
     alreadySigned: "Este documento ya está firmado.",
-    alreadySignedHelp: "LV Branding le enviará por correo la copia firmada por ambas partes.",
-    completedHelp: "La copia firmada por ambas partes se le envió por correo.",
+    alreadySignedHelp: "LV Branding le enviará por correo la copia final cuando todas las partes hayan firmado.",
+    completedHelp: "La copia firmada por todas las partes se le envió por correo.",
     confirmTitle: "Confirme su correo",
     confirmHelp: (hint: string) => `Para abrir este documento, escriba el correo al que se envió (${hint}).`,
     email: "Correo electrónico",
@@ -76,7 +77,8 @@ const WORDS = {
     sign: "Firmar documento",
     signing: "Firmando",
     signedTitle: "Firmado. Gracias.",
-    signedHelp: "LV Branding lo firmará a continuación. Le enviaremos por correo la copia final firmada por ambas partes.",
+    signedHelp: "LV Branding lo firmará a continuación. Le enviaremos por correo la copia final firmada por todas las partes.",
+    signedWaitingHelp: "Las demás partes todavía deben firmar. Cuando lo hagan, LV Branding lo firmará y le enviaremos por correo la copia final firmada por todas las partes.",
     signedAt: "Firmado",
     footer: "LV Branding LLC · Houston, Texas",
     signatureRequired: "Agregue su nombre completo y su firma.",
@@ -152,6 +154,7 @@ export default function SignDocument() {
   const [signError, setSignError] = useState("");
   const [signing, setSigning] = useState(false);
   const [signed, setSigned] = useState(false);
+  const [othersPending, setOthersPending] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -159,6 +162,7 @@ export default function SignDocument() {
     setLoadError(null);
     setDoc(null);
     setSigned(false);
+    setOthersPending(false);
     call<Peek>({ action: "peek", token }).then(({ data, error }) => {
       if (!alive) return;
       if (data) setPeek(data);
@@ -192,11 +196,12 @@ export default function SignDocument() {
     if (!agreed) return setSignError(words.consentRequired);
     setSigning(true);
     setSignError("");
-    const { data, error } = await call<{ ok: true }>({
+    const { data, error } = await call<{ ok: true; others_pending?: boolean }>({
       action: "sign", token, email: email.trim(), signer_name: name.trim(), signer_title: title.trim(), signature, consent: true,
     });
     setSigning(false);
     if (data || error === "already_signed") {
+      setOthersPending(!!data?.others_pending);
       setSigned(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -224,7 +229,7 @@ export default function SignDocument() {
   }
 
   const state = peek!.state;
-  if (signed) return <Shell language={language}><Notice icon={CheckCircle2} tone="good" title={words.signedTitle} help={words.signedHelp} /></Shell>;
+  if (signed) return <Shell language={language}><Notice icon={CheckCircle2} tone="good" title={words.signedTitle} help={othersPending ? words.signedWaitingHelp : words.signedHelp} /></Shell>;
   if (state === "voided") return <Shell language={language}><Notice icon={AlertCircle} title={words.voided} help={words.voidedHelp} /></Shell>;
   if (state === "expired") return <Shell language={language}><Notice icon={Clock3} title={words.expired} help={words.expiredHelp} /></Shell>;
   if (state === "client_signed" || state === "completed" || doc?.state === "client_signed" || doc?.state === "completed") {

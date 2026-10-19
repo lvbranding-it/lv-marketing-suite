@@ -15,8 +15,39 @@ export type Block =
 /** What a document says, fixed when it is sent; content_hash is its SHA-256. */
 export interface Content {
   blocks: Block[];
+  /** The first signer's role; signerRoles has everyone's when there are more. */
   signerRole: string;
+  /** Each signer's role, in signing order (documents with more than one signer). */
+  signerRoles?: string[];
   countersignerRole: string;
+}
+
+/** Everyone who signs besides LV Branding, by role, in signing order. */
+export const signerRolesOf = (content: Content) => (content.signerRoles?.length ? content.signerRoles : [content.signerRole]);
+
+/** A party who signs besides LV Branding, with their own link. */
+export interface Signer {
+  id: string;
+  document_id: string;
+  org_id: string;
+  position: number;
+  name: string;
+  email: string;
+  company_name: string;
+  token_hash: string | null;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signer_name: string | null;
+  signer_title: string | null;
+  signature: { type: "draw" | "type"; value: string } | null;
+  ip: string | null;
+  user_agent: string | null;
+}
+
+/** "Ana Ruiz", "Ana Ruiz and Leo Díaz", "Ana Ruiz, Leo Díaz and Mia Chen". */
+export function listNames(names: string[], language: Language = "en") {
+  if (names.length < 2) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} ${language === "es" ? "y" : "and"} ${names[names.length - 1]}`;
 }
 
 export const APP_URL = Deno.env.get("APP_URL") || "https://marketing.lvbranding.com";
@@ -33,7 +64,7 @@ export const json = (body: unknown, status = 200) =>
 
 export async function sha256Hex(text: string | Uint8Array) {
   const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource));
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -128,33 +159,49 @@ ${button(link, "Review and sign")}
   };
 }
 
-export function signedByClientEmail(doc: { id: string; title: string; recipient_name: string; company_name: string }) {
+/** To the team when the last signer has signed. */
+export function signedByClientEmail(doc: { id: string; title: string }, signers: { name: string; company_name: string }[]) {
+  const who = signers.length === 1
+    ? `<strong>${escapeHtml(signers[0].name)}</strong>${signers[0].company_name ? ` (${escapeHtml(signers[0].company_name)})` : ""} signed`
+    : `Every party signed: <strong>${escapeHtml(listNames(signers.map((signer) => signer.name)))}</strong> signed`;
   return {
-    subject: `${doc.recipient_name} signed ${doc.title}. Countersign to complete it`,
-    html: emailLayout(`<p><strong>${escapeHtml(doc.recipient_name)}</strong>${doc.company_name ? ` (${escapeHtml(doc.company_name)})` : ""} signed the <strong>${escapeHtml(doc.title)}</strong>.</p>
-<p>It is complete once LV Branding countersigns it; both sides then get the signed PDF.</p>
+    subject: signers.length === 1
+      ? `${signers[0].name} signed ${doc.title}. Countersign to complete it`
+      : `Every party signed ${doc.title}. Countersign to complete it`,
+    html: emailLayout(`<p>${who} the <strong>${escapeHtml(doc.title)}</strong>.</p>
+<p>It is complete once LV Branding countersigns it; ${signers.length === 1 ? "both sides" : "every party"} then gets the signed PDF.</p>
 ${button(`${APP_URL}/legal-signs?document=${doc.id}`, "Countersign in LegalSigns")}`),
   };
 }
 
-export function clientReceiptEmail(doc: { title: string; recipient_name: string; language: Language }) {
+/** To a signer once they have signed; othersPending when other parties still have to. */
+export function clientReceiptEmail(doc: { title: string; recipient_name: string; language: Language }, othersPending = false) {
   const es = doc.language === "es";
+  const next = othersPending
+    ? (es
+      ? "Cuando las demás partes firmen, LV Branding lo firmará y le enviaremos por correo la copia final firmada por todas las partes."
+      : "Once the other parties sign, LV Branding will countersign it, and we'll email you the final copy signed by every party.")
+    : (es
+      ? "LV Branding lo firmará a continuación y le enviaremos por correo la copia final firmada por todas las partes."
+      : "LV Branding will countersign it next, and we'll email you the final copy signed by every party.");
   return {
     subject: es ? `Recibimos su firma: ${doc.title}` : `We received your signature: ${doc.title}`,
     html: emailLayout(es
-      ? `<p>Hola ${escapeHtml(doc.recipient_name)}:</p><p>Gracias por firmar <strong>${escapeHtml(doc.title)}</strong>. LV Branding lo firmará a continuación y le enviaremos por correo la copia final firmada por ambas partes.</p>`
-      : `<p>Hi ${escapeHtml(doc.recipient_name)},</p><p>Thank you for signing the <strong>${escapeHtml(doc.title)}</strong>. LV Branding will countersign it next, and we'll email you the final copy signed by both sides.</p>`),
+      ? `<p>Hola ${escapeHtml(doc.recipient_name)}:</p><p>Gracias por firmar <strong>${escapeHtml(doc.title)}</strong>. ${next}</p>`
+      : `<p>Hi ${escapeHtml(doc.recipient_name)},</p><p>Thank you for signing the <strong>${escapeHtml(doc.title)}</strong>. ${next}</p>`),
   };
 }
 
-export function completedEmail(doc: { title: string; recipient_name: string }, language: Language, forTeam: boolean) {
+/** With the signed PDF, to a signer or (forTeam) to LV Branding. */
+export function completedEmail(doc: { title: string; recipient_name: string }, language: Language, forTeam: boolean, parties = 2) {
   const es = language === "es";
+  const all = parties > 2 ? (es ? "todas las partes" : "every party") : (es ? "ambas partes" : "both sides");
   return {
     subject: es ? `Documento firmado: ${doc.title}` : `Signed: ${doc.title}`,
     html: emailLayout(forTeam
-      ? `<p>The <strong>${escapeHtml(doc.title)}</strong> with ${escapeHtml(doc.recipient_name)} is signed by both sides. The signed PDF is attached and saved in LegalSigns.</p>`
+      ? `<p>The <strong>${escapeHtml(doc.title)}</strong> with ${escapeHtml(doc.recipient_name)} is signed by ${all}. The signed PDF is attached and saved in LegalSigns.</p>`
       : es
-        ? `<p>Hola ${escapeHtml(doc.recipient_name)}:</p><p><strong>${escapeHtml(doc.title)}</strong> ya está firmado por ambas partes. Adjuntamos la copia final en PDF para sus archivos.</p>`
-        : `<p>Hi ${escapeHtml(doc.recipient_name)},</p><p>The <strong>${escapeHtml(doc.title)}</strong> is now signed by both sides. The final PDF is attached for your records.</p>`),
+        ? `<p>Hola ${escapeHtml(doc.recipient_name)}:</p><p><strong>${escapeHtml(doc.title)}</strong> ya está firmado por ${all}. Adjuntamos la copia final en PDF para sus archivos.</p>`
+        : `<p>Hi ${escapeHtml(doc.recipient_name)},</p><p>The <strong>${escapeHtml(doc.title)}</strong> is now signed by ${all}. The final PDF is attached for your records.</p>`),
   };
 }

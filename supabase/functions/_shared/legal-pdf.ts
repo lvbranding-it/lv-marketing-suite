@@ -5,7 +5,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "https://esm.sh/pdf-lib@1.17.1";
 import fontkit from "https://esm.sh/@pdf-lib/fontkit@1.1.1";
 import { drawnWidth, keepDrawable, pdfSafe, wrapText, type Signature } from "./legal-text.ts";
-import type { Content, Language } from "./legal-signs.ts";
+import { signerRolesOf, type Content, type Language } from "./legal-signs.ts";
 import firaItalic from "./legal-brand/fira-sans-italic.ts";
 import firaRegular from "./legal-brand/fira-sans-regular.ts";
 import firaSemiBold from "./legal-brand/fira-sans-semibold.ts";
@@ -25,6 +25,7 @@ const PDF_TEXT = {
     recipient: "Sent to", trail: "Audit trail", ip: "IP address", device: "Device", page: "Page",
     of: "of", languageName: "English",
     note: "Both parties agreed to sign this document electronically. This certificate records each step, when it happened and where it came from. The fingerprint changes if a single character of the signed content does.",
+    noteMany: "Every party agreed to sign this document electronically. This certificate records each step, when it happened and where it came from. The fingerprint changes if a single character of the signed content does.",
   },
   es: {
     signatures: "Firmas", name: "Nombre", title: "Cargo", email: "Correo", signed: "Firmado",
@@ -33,6 +34,7 @@ const PDF_TEXT = {
     recipient: "Enviado a", trail: "Registro de auditoría", ip: "Dirección IP", device: "Dispositivo", page: "Página",
     of: "de", languageName: "Español",
     note: "Ambas partes aceptaron firmar este documento electrónicamente. Este certificado registra cada paso, cuándo ocurrió y desde dónde. La huella cambia si cambia un solo carácter del contenido firmado.",
+    noteMany: "Todas las partes aceptaron firmar este documento electrónicamente. Este certificado registra cada paso, cuándo ocurrió y desde dónde. La huella cambia si cambia un solo carácter del contenido firmado.",
   },
 };
 
@@ -60,18 +62,23 @@ export interface PdfDocumentData {
   language: Language;
   template_key: string;
   template_version: string;
-  recipient_name: string;
-  recipient_email: string;
   content: Content;
   content_hash: string;
-  client_signer_name: string;
-  client_signer_title: string | null;
-  client_signature: Signature;
-  client_signed_at: string;
+  /** Everyone who signed besides LV Branding, in signing order. */
+  signers: PdfSigner[];
   lv_signer_name: string;
   lv_signer_title: string | null;
   lv_signature: Signature;
   lv_signed_at: string;
+}
+
+export interface PdfSigner {
+  name: string;
+  email: string;
+  signer_name: string;
+  signer_title: string | null;
+  signature: Signature;
+  signed_at: string;
 }
 
 export type PdfEvent = { event: string; created_at: string; actor_label: string | null; ip: string | null; user_agent: string | null };
@@ -96,7 +103,7 @@ async function renderPdf(doc: PdfDocumentData, events: PdfEvent[], fonts: "fira"
   pdf.setAuthor("LV Branding LLC");
   pdf.setProducer("LV Branding LegalSigns");
   // Typed signatures are set in the italic; it is only embedded when there is one.
-  const typed = doc.client_signature.type === "type" || doc.lv_signature.type === "type";
+  const typed = doc.lv_signature.type === "type" || doc.signers.some((signer) => signer.signature.type === "type");
   let regular: PDFFont, bold: PDFFont, script: PDFFont;
   if (fonts === "fira") {
     pdf.registerFontkit(fontkit);
@@ -178,7 +185,8 @@ async function renderPdf(doc: PdfDocumentData, events: PdfEvent[], fonts: "fira"
     write(block.text, regular, 10.5, { gap: 4 });
   }
 
-  // Signatures side by side, the client's first, and never split across pages.
+  // Signatures two to a row, the other parties' first and LV Branding's last;
+  // a row is never split across pages.
   const images = new Map<string, PDFImage>();
   const signatureArt = async (signature: Signature) => {
     if (signature.type !== "draw") return undefined;
@@ -217,13 +225,30 @@ async function renderPdf(doc: PdfDocumentData, events: PdfEvent[], fonts: "fira"
     }
     return top;
   };
+  const roles = signerRolesOf(doc.content);
+  const blocks = [
+    ...doc.signers.map((signer, index) => ({
+      role: roles[index] ?? roles[0], signature: signer.signature, name: signer.signer_name, title: signer.signer_title,
+      signedAt: signer.signed_at, email: signer.email as string | undefined,
+    })),
+    {
+      role: `${doc.content.countersignerRole} · LV Branding LLC`, signature: doc.lv_signature, name: doc.lv_signer_name,
+      title: doc.lv_signer_title, signedAt: doc.lv_signed_at, email: undefined,
+    },
+  ];
   y -= 14;
-  // The heading and the taller of the two blocks.
+  // The heading and the taller of the first row's blocks.
   ensure(200);
   write(words.signatures, bold, 12, { gap: 10 });
-  const clientBottom = await signatureBlock(margin, doc.content.signerRole, doc.client_signature, doc.client_signer_name, doc.client_signer_title, doc.client_signed_at, doc.recipient_email);
-  const lvBottom = await signatureBlock(margin + columnWidth + gutter, `${doc.content.countersignerRole} · LV Branding LLC`, doc.lv_signature, doc.lv_signer_name, doc.lv_signer_title, doc.lv_signed_at);
-  y = Math.min(clientBottom, lvBottom) - 10;
+  for (let index = 0; index < blocks.length; index += 2) {
+    if (index) ensure(170);
+    const row = blocks.slice(index, index + 2);
+    const bottoms: number[] = [];
+    for (const [column, block] of row.entries()) {
+      bottoms.push(await signatureBlock(margin + column * (columnWidth + gutter), block.role, block.signature, block.name, block.title, block.signedAt, block.email));
+    }
+    y = Math.min(...bottoms) - 18;
+  }
 
   // Certificate of completion, on its own page.
   page = pdf.addPage([width, height]);
@@ -235,7 +260,7 @@ async function renderPdf(doc: PdfDocumentData, events: PdfEvent[], fonts: "fira"
     [words.document, doc.title],
     [words.version, `${doc.template_key} ${doc.template_version}`],
     [words.language, words.languageName],
-    [words.recipient, `${doc.recipient_name} <${doc.recipient_email}>`],
+    [words.recipient, doc.signers.map((signer) => `${signer.name} <${signer.email}>`).join("\n")],
     [words.fingerprint, doc.content_hash],
   ]) {
     write(label, bold, 9, { color: MUTED });
@@ -255,7 +280,7 @@ async function renderPdf(doc: PdfDocumentData, events: PdfEvent[], fonts: "fira"
     y -= 6;
   }
   y -= 8;
-  write(words.note, regular, 8.5, { color: MUTED });
+  write(doc.signers.length > 1 ? words.noteMany : words.note, regular, 8.5, { color: MUTED });
 
   // Page numbers, once every page exists.
   const pages = pdf.getPages();

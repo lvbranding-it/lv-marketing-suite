@@ -1,17 +1,24 @@
 # LegalSigns
 
-Send releases and NDAs for signature from `/legal-signs`. The recipient signs
-on a public page (`/sign/:token`) reached from their email, LV Branding
-countersigns, and the signed PDF, with a certificate of completion, is saved in
-the module and emailed to both sides.
+Send releases and NDAs for signature from `/legal-signs`. Each signer signs on
+a public page (`/sign/:token`) reached from their own email, LV Branding
+countersigns once all of them have signed, and the signed PDF, with a
+certificate of completion, is saved in the module and emailed to every party.
+
+An NDA can have up to four signers besides LV Branding (the main recipient and
+up to three more parties); the releases and the client approval form have one.
 
 ## Apply and deploy
 
 In this order (a function deployed before its tables answers every call with
 an error):
 
-1. Apply `supabase/migrations/20261015120000_legal_signs.sql` in the SQL editor.
-2. Deploy both functions:
+1. Apply the migrations in the SQL editor, in order:
+   `20261015120000_legal_signs.sql`, then `20261019120000_legal_document_signers.sql`
+   (the signers table; it copies every existing document's recipient into it,
+   link included, so links already sent keep working).
+2. Deploy both functions right after, before anyone sends or resends a
+   document:
 
    ```sh
    npx supabase functions deploy legal-signs legal-sign --project-ref kgdeqwjuspiqraxrlcew
@@ -48,20 +55,26 @@ Arial.
 
 | Status | Meaning |
 | --- | --- |
-| `sent` | Emailed with a personal link that works for 30 days |
-| `viewed` | The recipient confirmed their email and opened it |
-| `client_signed` | The recipient signed; waiting for LV Branding |
+| `sent` | Emailed to each signer with their own link, which works for 30 days |
+| `viewed` | A signer confirmed their email and opened it |
+| `client_signed` | Every signer signed; waiting for LV Branding |
 | `completed` | Countersigned; the PDF is in the `legal-documents` bucket |
 | `voided` | Cancelled by the team; the link no longer opens it |
 
-"Expired" is not stored: it is a `sent` or `viewed` document past `expires_at`.
-Sending it again emails a new link and the old one stops working.
-Before either party signs, an owner, administrator or manager can edit the
-document wording and send a revision. This saves a new content hash, resets
-the viewed state, invalidates the previous link, and emails a new 30-day link.
-The previous text and hash are recorded in the audit trail. Signed
-documents cannot be revised. If email delivery fails after a revision, the
-new wording stays saved and the team can use **Send again** to retry.
+Each signer's progress (opened, signed) is kept in `legal_document_signers`,
+one row per signer with their own link. "Expired" is not stored: it is a `sent`
+or `viewed` document past `expires_at`. **Send again** emails a new link to
+everyone who hasn't signed (or, from the Parties list, to one of them); their
+old links stop working.
+
+Before anyone signs, an owner, administrator or manager can edit the document
+wording and send a revision. This saves a new content hash, resets the viewed
+state, replaces every signer's link, and emails each of them a new 30-day link.
+`legal_revise_document` does it in one locked step and undoes it if a signature
+arrived first, so no one's signature can end up on text they didn't see. The
+previous text and hash are recorded in the audit trail. Once anyone has signed,
+the document cannot be revised. If email delivery fails, the change stays saved
+and the team can use **Send again** to retry.
 
 ## What makes a signature hold up
 
@@ -70,13 +83,14 @@ new wording stays saved and the team can use **Send again** to retry.
   explicit revision before signing replaces the snapshot and hash, and
   countersigning refuses content that no longer matches its hash. The final
   hash is printed on the certificate.
-- The link token is stored only as a hash. Opening the document also needs the
-  address it was sent to; after 8 wrong addresses in an hour the link pauses for
-  that hour.
+- Each link token is stored only as a hash. Opening the document also needs the
+  address that link was sent to; after 8 wrong addresses in an hour that link
+  pauses for the hour.
 - Each step is recorded in `legal_document_events` with time, IP address and
   device, and printed on the certificate. Wrong-email attempts stay in
   LegalSigns and are left off the certificate.
-- Both signers tick an electronic-signature consent before signing.
+- Every signer, LV Branding included, ticks an electronic-signature consent
+  before signing.
 
 ## Templates
 
@@ -90,7 +104,10 @@ new wording stays saved and the team can use **Send again** to retry.
   Receiving Party. The form fills the parties block: the other party is the
   legal name typed for it, else the Company, else the recipient personally (who
   then signs personally, as the NDAs say). Their notice email defaults to the
-  recipient's. LV Branding's address and notice email are filled in from
+  recipient's. More parties keep the approved wording: on the Mutual NDA they
+  are Party 3 to 5, on the One-way NDA each is another Receiving Party, each
+  with its own lines in the parties block and its own signature. LV Branding's
+  address and notice email are filled in from
   `LV_NOTICE` in the templates file (1755 Crescent Plaza Dr., Houston, Texas
   77077 and admin@lvbranding.com); change them there if they ever change.
 - **Releases and client approval form**: the four releases (photo, media,

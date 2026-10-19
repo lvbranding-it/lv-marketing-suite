@@ -18,9 +18,9 @@ import ReviseLegalDocumentDialog from "@/components/legal/ReviseLegalDocumentDia
 import LegalStageBadge from "@/components/legal/LegalStageBadge";
 import SignaturePad from "@/components/legal/SignaturePad";
 import { useAuth } from "@/hooks/useAuth";
-import { useLegalActions, useLegalEvents, type LegalDocument, type LegalEvent } from "@/hooks/useLegalSigns";
+import { signerRolesOf, useLegalActions, useLegalEvents, type LegalDocument, type LegalEvent, type LegalSigner } from "@/hooks/useLegalSigns";
 import { useToast } from "@/hooks/use-toast";
-import { deviceName, eventLabel, legalStage } from "@/lib/legal/status";
+import { deviceName, eventLabel, legalStage, listNames } from "@/lib/legal/status";
 import { signatureReady, type LegalSignature } from "@/lib/legal/signature";
 import { cn } from "@/lib/utils";
 
@@ -37,11 +37,19 @@ function SignatureShown({ signature }: { signature: LegalSignature }) {
   );
 }
 
-/** Sent, signed by the recipient, countersigned: the order a document goes through. */
+/** Sent, signed by every party, countersigned: the order a document goes through. */
 function Steps({ doc }: { doc: LegalDocument }) {
+  const many = doc.signers.length > 1;
+  const signed = doc.signers.filter((signer) => signer.signed_at).length;
+  const only = doc.signers[0];
   const steps = [
-    { label: "Sent", at: doc.sent_at, detail: doc.recipient_email },
-    { label: "Signed by the recipient", at: doc.client_signed_at, detail: doc.client_signer_name ? `as ${doc.client_signer_name}` : doc.viewed_at ? `Opened ${when(doc.viewed_at)}` : "" },
+    { label: "Sent", at: doc.sent_at, detail: many ? `To ${doc.signers.length} parties` : doc.recipient_email },
+    many
+      ? { label: `Signed by every party (${signed} of ${doc.signers.length})`, at: doc.client_signed_at, detail: "" }
+      : {
+        label: "Signed by the recipient", at: doc.client_signed_at,
+        detail: only?.signer_name ? `as ${only.signer_name}` : only?.viewed_at ? `Opened ${when(only.viewed_at)}` : "",
+      },
     { label: "Countersigned and completed", at: doc.completed_at, detail: doc.lv_signer_name ? `by ${doc.lv_signer_name}` : "" },
   ];
   return (
@@ -62,6 +70,57 @@ function Steps({ doc }: { doc: LegalDocument }) {
         );
       })}
     </ol>
+  );
+}
+
+/** Each party, where their signature stands, and a fresh link for one who hasn't signed. */
+function Parties({ doc, canResend }: { doc: LegalDocument; canResend: boolean }) {
+  const { toast } = useToast();
+  const { resend } = useLegalActions();
+  const roles = signerRolesOf(doc.content);
+  const [sending, setSending] = useState<string | null>(null);
+
+  const sendAgain = async (signer: LegalSigner) => {
+    setSending(signer.id);
+    try {
+      const result = await resend.mutateAsync({ id: doc.id, signerId: signer.id });
+      toast(result.emailed
+        ? { title: `Sent again to ${signer.email}`, description: "Their earlier link no longer works." }
+        : { title: "Email delivery failed", description: `The email to ${signer.email} didn't go out. Try again.`, variant: "destructive" });
+    } catch (error) {
+      toast({ title: "That didn't work", description: error instanceof Error ? error.message : "Try again in a moment.", variant: "destructive" });
+    } finally {
+      setSending(null);
+    }
+  };
+
+  return (
+    <ul className="divide-y rounded-lg border">
+      {doc.signers.map((signer, index) => (
+        <li key={signer.id} className="flex items-center gap-3 px-3 py-2.5">
+          <span className={cn(
+            "grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold",
+            signer.signed_at ? "border-emerald-500 bg-emerald-500 text-white" : "text-muted-foreground",
+          )}>
+            {signer.signed_at ? <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={3} /> : index + 1}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{signer.name}{signer.company_name && <span className="font-normal text-muted-foreground"> · {signer.company_name}</span>}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {[roles[index]?.split(" · ")[0], signer.email,
+                signer.signed_at ? `Signed ${when(signer.signed_at)}` : signer.viewed_at ? `Opened ${when(signer.viewed_at)}` : "Not opened yet",
+              ].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+          {canResend && !signer.signed_at && (
+            <Button variant="ghost" size="sm" className="h-8 shrink-0 px-2" onClick={() => sendAgain(signer)} disabled={resend.isPending}>
+              {sending === signer.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+              Send again
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -108,7 +167,7 @@ function CountersignDialog({ doc, open, onOpenChange }: { doc: LegalDocument; op
     try {
       const result = await countersign.mutateAsync({ id: doc.id, signerName: name.trim(), signerTitle: title.trim(), signature });
       toast(result.emailed
-        ? { title: "Completed", description: `The signed PDF is saved here and emailed to ${doc.recipient_name} and you.` }
+        ? { title: "Completed", description: `The signed PDF is saved here and emailed to ${listNames(doc.signers.map((signer) => signer.name))} and you.` }
         : { title: "Completed, but an email didn't go out", description: "The signed PDF is saved here. Download it and send it yourself.", variant: "destructive" });
       onOpenChange(false);
     } catch (error) {
@@ -122,7 +181,7 @@ function CountersignDialog({ doc, open, onOpenChange }: { doc: LegalDocument; op
         <DialogHeader>
           <DialogTitle>Countersign {doc.title}</DialogTitle>
           <DialogDescription>
-            Signs for LV Branding LLC as {doc.content.countersignerRole}. The signed PDF is then saved here and emailed to {doc.recipient_name} and you.
+            Signs for LV Branding LLC as {doc.content.countersignerRole}. The signed PDF is then saved here and emailed to {listNames(doc.signers.map((signer) => signer.name))} and you.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -189,7 +248,12 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
   };
 
   const stage = doc ? legalStage(doc) : null;
-  const deliveryFailed = events.data?.[events.data.length - 1]?.event === "delivery_failed";
+  const lastEvent = events.data?.[events.data.length - 1];
+  const deliveryFailed = lastEvent?.event === "delivery_failed";
+  const failedTo = typeof lastEvent?.metadata?.to === "string" ? lastEvent.metadata.to : "";
+  const anySigned = !!doc?.signers.some((signer) => signer.signed_at);
+  const many = (doc?.signers.length ?? 0) > 1;
+  const lastSigner = doc?.signers.find((signer) => signer.signed_at === doc.client_signed_at) ?? doc?.signers[0];
 
   return (
     <Sheet open={!!doc} onOpenChange={onOpenChange}>
@@ -200,7 +264,8 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
               <LegalStageBadge stage={stage} />
               <SheetTitle className="text-balance">{doc.title}</SheetTitle>
               <SheetDescription>
-                {doc.recipient_name}{doc.company_name ? ` · ${doc.company_name}` : ""} · {doc.language === "es" ? "Spanish" : "English"}
+                {doc.recipient_name}{doc.company_name ? ` · ${doc.company_name}` : ""}
+                {many ? ` and ${doc.signers.length - 1} more ${doc.signers.length === 2 ? "party" : "parties"}` : ""} · {doc.language === "es" ? "Spanish" : "English"}
               </SheetDescription>
             </SheetHeader>
 
@@ -208,13 +273,15 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
               {deliveryFailed && (stage === "waiting" || stage === "expired") && (
                 <div className="flex gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
                   <Mail className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
-                  <p>The last email did not go out. The previous signing link is invalid. Use Send again to deliver a fresh link.</p>
+                  <p>The last email{failedTo ? ` to ${failedTo}` : ""} did not go out, and the previous link no longer works. Use Send again to deliver a fresh link.</p>
                 </div>
               )}
               {stage === "countersign" && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-                  <p className="text-sm font-medium">{doc.client_signer_name} signed {when(doc.client_signed_at!)}.</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">Your signature completes it and sends both sides the signed PDF.</p>
+                  <p className="text-sm font-medium">
+                    {many ? `Every party signed; the last signature came in ${when(doc.client_signed_at!)}.` : `${lastSigner?.signer_name ?? doc.recipient_name} signed ${when(doc.client_signed_at!)}.`}
+                  </p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">Your signature completes it and sends {many ? "every party" : "both sides"} the signed PDF.</p>
                   {canManage ? (
                     <Button className="mt-3" onClick={() => setCountersignOpen(true)}><PenLine className="mr-2 h-4 w-4" />Countersign</Button>
                   ) : (
@@ -236,7 +303,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
               )}
 
               <div className="flex flex-wrap gap-2">
-                {canManage && (stage === "waiting" || stage === "expired") && !doc.client_signed_at && !doc.lv_signed_at && (
+                {canManage && (stage === "waiting" || stage === "expired") && !anySigned && !doc.lv_signed_at && (
                   <Button variant="outline" onClick={() => setReviseOpen(true)}>
                     <PenLine className="mr-2 h-4 w-4" />Edit and resend
                   </Button>
@@ -250,16 +317,16 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
                 {canManage && (stage === "waiting" || stage === "expired") && (
                   <Button variant="outline" onClick={async () => {
                     try {
-                      const result = await actions.resend.mutateAsync(doc.id);
+                      const result = await actions.resend.mutateAsync({ id: doc.id });
                       toast(result.emailed
-                        ? { title: `Sent again to ${doc.recipient_email}` }
+                        ? { title: `Sent again to ${listNames(result.sent_to)}`, description: "Their earlier links no longer work." }
                         : { title: "Email delivery failed", description: "The old link no longer works. Try Send again to deliver a fresh link.", variant: "destructive" });
                     } catch (error) {
                       toast({ title: "That didn't work", description: error instanceof Error ? error.message : "Try again in a moment.", variant: "destructive" });
                     }
                   }} disabled={actions.resend.isPending}>
                     {actions.resend.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Send again
+                    {many ? "Send again to everyone who hasn't signed" : "Send again"}
                   </Button>
                 )}
                 {canManage && stage !== "completed" && stage !== "voided" && (
@@ -274,15 +341,22 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
                 <Steps doc={doc} />
               </section>
 
-              {(doc.client_signature || doc.lv_signature) && (
+              {many && (
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Parties</h3>
+                  <Parties doc={doc} canResend={canManage && (stage === "waiting" || stage === "expired")} />
+                </section>
+              )}
+
+              {(anySigned || doc.lv_signature) && (
                 <section className="grid gap-3 sm:grid-cols-2">
-                  {doc.client_signature && (
-                    <div className="space-y-1.5">
-                      <p className="text-xs text-muted-foreground">{doc.content.signerRole}</p>
-                      <SignatureShown signature={doc.client_signature} />
-                      <p className="text-xs">{doc.client_signer_name}{doc.client_signer_title ? `, ${doc.client_signer_title}` : ""}</p>
+                  {doc.signers.map((signer, index) => signer.signature && (
+                    <div key={signer.id} className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">{signerRolesOf(doc.content)[index]}</p>
+                      <SignatureShown signature={signer.signature} />
+                      <p className="text-xs">{signer.signer_name}{signer.signer_title ? `, ${signer.signer_title}` : ""}</p>
                     </div>
-                  )}
+                  ))}
                   {doc.lv_signature && (
                     <div className="space-y-1.5">
                       <p className="text-xs text-muted-foreground">{doc.content.countersignerRole} · LV Branding LLC</p>
@@ -305,7 +379,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
                     {(events.data ?? []).some((event) => event.event === "email_mismatch") && (
                       <p className="mt-3 flex gap-1.5 text-xs text-muted-foreground">
                         <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        Someone with the link typed an email that isn't the recipient's. After 8 tries in an hour the link pauses for that hour.
+                        Someone with a signing link typed an email that isn't the one it was sent to. After 8 tries in an hour that link pauses for the hour.
                       </p>
                     )}
                   </AccordionContent>
@@ -320,7 +394,7 @@ export default function LegalDocumentSheet({ doc, onOpenChange, canManage }: Leg
                 <AlertDialogHeader>
                   <AlertDialogTitle>Void {doc.title}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {doc.recipient_name}'s link stops working and the document can't be signed or completed. It stays in LegalSigns, marked voided.
+                    {many ? "Every signing link stops working" : `${doc.recipient_name}'s link stops working`} and the document can't be signed or completed. It stays in LegalSigns, marked voided.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="space-y-1.5">

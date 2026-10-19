@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LegalDocumentView from "@/components/legal/LegalDocumentView";
 import { useLegalActions, type LegalDocument } from "@/hooks/useLegalSigns";
+import { listNames } from "@/lib/legal/status";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
@@ -30,13 +31,14 @@ export default function ReviseLegalDocumentDialog({ doc, open, onOpenChange }: P
   const changed = title.trim() !== doc.title || JSON.stringify(blocks) !== JSON.stringify(doc.content.blocks);
   const ready = changed && !!title.trim() && blocks.every((block) => !!block.text.trim());
 
+  const emails = listNames(doc.signers.map((signer) => signer.email));
   const submit = async () => {
     if (!ready) return;
     try {
       const result = await revise.mutateAsync({ id: doc.id, title: title.trim(), content: { ...doc.content, blocks } });
       toast(result.emailed
-        ? { title: "Revision sent", description: `A new signing link was emailed to ${doc.recipient_email}. The old link no longer works.` }
-        : { title: "Revision saved, but email delivery failed", description: "The old link no longer works. Use Send again in LegalSigns to deliver a new link.", variant: "destructive" });
+        ? { title: "Revision sent", description: `A new signing link was emailed to ${emails}. The old ${doc.signers.length > 1 ? "links no longer work" : "link no longer works"}.` }
+        : { title: "Revision saved, but an email didn't go out", description: `${result.failed?.length ? `The email to ${listNames(result.failed)} failed. ` : ""}Old links no longer work. Use Send again in LegalSigns to deliver new ones.`, variant: "destructive" });
       onOpenChange(false);
     } catch (error) {
       toast({ title: "Revision not saved", description: error instanceof Error ? error.message : "Try again in a moment.", variant: "destructive" });
@@ -49,7 +51,7 @@ export default function ReviseLegalDocumentDialog({ doc, open, onOpenChange }: P
         <DialogHeader>
           <DialogTitle>Revise document</DialogTitle>
           <DialogDescription>
-            Edit the wording before anyone signs. Saving replaces the old signing link and emails a fresh copy to {doc.recipient_name} ({doc.recipient_email}).
+            Edit the wording before anyone signs. Saving replaces the old {doc.signers.length > 1 ? "signing links" : "signing link"} and emails a fresh copy to {emails}.
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 gap-5 overflow-y-auto py-1 lg:grid-cols-2 lg:overflow-hidden">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, vi } from "vitest";
 import { NDA_TEXT } from "./ndaText";
-import { fieldDefaults, LEGAL_TEMPLATES, legalDate, legalTemplate, LV_NOTICE, missingLegalFields, PRODUCER, signerRoleFor } from "./templates";
+import { fieldDefaults, LEGAL_TEMPLATES, legalDate, legalTemplate, LV_NOTICE, missingLegalFields, missingPartyFields, PRODUCER, signerRoleFor, signerRolesFor } from "./templates";
 
 const base = { companyName: "Casa Melilla", signerName: "Ana Ruiz" };
 
@@ -141,5 +141,50 @@ describe("mutual NDA", () => {
     vi.setSystemTime(new Date("2026-10-16T03:30:00Z")); // still the 15th in Houston
     expect(fieldDefaults(nda)).toEqual({ effectiveDate: "2026-10-15", lvAddress: LV_NOTICE.address, lvEmail: LV_NOTICE.email });
     expect(missingLegalFields(nda, {}, "en")).toEqual(["Effective date", "Business purpose", "Party 2 address", "LV Branding address", "LV Branding notice email"]);
+  });
+});
+
+describe("NDAs with more parties", () => {
+  const values = { effectiveDate: "2026-10-20", businessPurpose: "A joint campaign", party2Address: "100 Main St, Houston, TX 77002", lvAddress: LV_NOTICE.address, lvEmail: LV_NOTICE.email };
+  const studio = { signerName: "Mia Chen", signerEmail: "mia@studio.com", companyName: "Studio North", values: { name: "Studio North LLC", entity: "Texas limited liability company", address: "9 Oak Ave, Austin, TX" } };
+  const freelancer = { signerName: "Leo Díaz", signerEmail: "leo@example.com", companyName: "", values: { address: "5 Elm St, Houston, TX" } };
+
+  it("adds each party to the Mutual NDA as Party 3, Party 4, with their own lines", () => {
+    const nda = legalTemplate("nda_mutual")!;
+    const blocks = nda.render({ ...base, language: "en", recipientEmail: "ana@casa.com", values, additionalParties: [studio, freelancer] });
+    const metas = blocks.filter((block) => block.kind === "meta").map((block) => `${(block as { label: string }).label}: ${block.text}`);
+    expect(metas).toEqual(expect.arrayContaining([
+      "Party 2: Casa Melilla",
+      "Party 3: Studio North LLC",
+      "Entity type and jurisdiction, if applicable: Texas limited liability company",
+      "Address: 9 Oak Ave, Austin, TX",
+      "Notice email: mia@studio.com",
+      "Party 4: Leo Díaz",
+      "Entity type and jurisdiction, if applicable: Not applicable",
+      "Notice email: leo@example.com",
+    ]));
+    // Party 3 and 4 come before the business purpose, in order.
+    expect(metas.indexOf("Party 3: Studio North LLC")).toBeLessThan(metas.indexOf("Party 4: Leo Díaz"));
+    expect(metas.findIndex((line) => line.startsWith("Business purpose"))).toBeGreaterThan(metas.indexOf("Party 4: Leo Díaz"));
+    expect(signerRolesFor(nda, { ...base, language: "en", values, additionalParties: [studio, freelancer] }))
+      .toEqual(["Party 2 · Casa Melilla", "Party 3 · Studio North LLC", "Party 4 · Leo Díaz"]);
+    expect(signerRolesFor(nda, { ...base, language: "es", values, additionalParties: [studio] })).toEqual(["Parte 2 · Casa Melilla", "Parte 3 · Studio North LLC"]);
+  });
+
+  it("calls each One-way NDA party another Receiving Party, and keeps the approved wording", () => {
+    const oneWay = legalTemplate("nda_one_way")!;
+    const input = { ...base, language: "en" as const, values, additionalParties: [studio] };
+    expect(oneWay.render(input)).toContainEqual({ kind: "meta", label: "Receiving Party", text: "Studio North LLC" });
+    expect(signerRolesFor(oneWay, input)).toEqual(["Receiving Party · Casa Melilla", "Receiving Party · Studio North LLC"]);
+    const withoutParties = oneWay.render({ ...input, additionalParties: [] }).filter((block) => block.kind !== "meta");
+    expect(oneWay.render(input).filter((block) => block.kind !== "meta")).toEqual(withoutParties);
+  });
+
+  it("lets only the NDAs take up to three more parties, and asks each for an address", () => {
+    expect(LEGAL_TEMPLATES.filter((template) => template.maxAdditionalParties).map((template) => [template.key, template.maxAdditionalParties]))
+      .toEqual([["nda_mutual", 3], ["nda_one_way", 3]]);
+    expect(missingPartyFields(legalTemplate("nda_mutual")!, {}, "en")).toEqual(["Address"]);
+    expect(missingPartyFields(legalTemplate("photo_release")!, {}, "en")).toEqual([]);
+    expect(signerRolesFor(legalTemplate("photo_release")!, { ...base, language: "en", values: {} })).toEqual(["Subject"]);
   });
 });

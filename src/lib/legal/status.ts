@@ -23,9 +23,18 @@ export const STAGE_LABELS: Record<LegalStage, string> = {
 };
 
 /** The one line under a document: what happened last. */
-export function stageDetail(doc: LegalStatusSource & { viewed_at: string | null }, stage = legalStage(doc)) {
-  if (stage === "waiting") return doc.viewed_at ? "Opened, not signed yet" : "Not opened yet";
-  if (stage === "countersign") return "Signed by the recipient. Your signature completes it.";
+export function stageDetail(
+  doc: LegalStatusSource & { viewed_at: string | null; signers?: { signed_at: string | null }[] },
+  stage = legalStage(doc),
+) {
+  const signers = doc.signers ?? [];
+  if (stage === "waiting") {
+    if (signers.length > 1) return `${signers.filter((signer) => signer.signed_at).length} of ${signers.length} signed`;
+    return doc.viewed_at ? "Opened, not signed yet" : "Not opened yet";
+  }
+  if (stage === "countersign") {
+    return signers.length > 1 ? "Every party signed. Your signature completes it." : "Signed by the recipient. Your signature completes it.";
+  }
   if (stage === "expired") return "Send it again for a new link";
   return "";
 }
@@ -47,11 +56,15 @@ export function matchesFilter(stage: LegalStage, filter: LegalFilter) {
 
 const fold = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-/** Every word of the search in the title, recipient, company or email, accents ignored. */
-export function matchesSearch(doc: { title: string; recipient_name: string; recipient_email: string; company_name: string }, query: string) {
+/** Every word of the search in the title, or any party's name, company or email, accents ignored. */
+export function matchesSearch(
+  doc: { title: string; recipient_name: string; recipient_email: string; company_name: string; signers?: { name: string; email: string; company_name: string }[] },
+  query: string,
+) {
   const words = fold(query).split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const text = fold([doc.title, doc.recipient_name, doc.recipient_email, doc.company_name].join(" "));
+  const parties = (doc.signers ?? []).flatMap((signer) => [signer.name, signer.email, signer.company_name]);
+  const text = fold([doc.title, doc.recipient_name, doc.recipient_email, doc.company_name, ...parties].join(" "));
   return words.every((word) => text.includes(word));
 }
 
@@ -80,4 +93,11 @@ export function deviceName(userAgent: string | null) {
   const browser = /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox"
     : /CriOS\/|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
   return [device, browser].filter(Boolean).join(" · ");
+}
+
+/** "Ana", "Ana and Leo", "Ana, Leo and Mia". */
+export function listNames(names: string[]) {
+  const named = names.filter(Boolean);
+  if (named.length < 2) return named[0] ?? "";
+  return `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
 }

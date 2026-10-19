@@ -1,13 +1,14 @@
-// LegalSigns, the team's side: send a document for signature, revise or resend,
-// void it, countersign it (which makes the signed PDF and emails it to both
-// parties), and download the signed PDF. Owners, administrators and managers
-// may act; any member may download.
+// LegalSigns, the team's side: send a document for signature to one or more
+// signers, revise or resend it, void it, countersign it once every signer has
+// signed (which makes the signed PDF and emails it to every party), and
+// download the signed PDF. Owners, administrators and managers may act; any
+// member may download.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   APP_URL, completedEmail, contentHash, cors, json, newToken, requestOrigin,
-  sendEmail, signatureRequestEmail, validSignature, type Content, type Language,
+  sendEmail, signatureRequestEmail, signerRolesOf, validSignature, type Content, type Language, type Signer,
 } from "../_shared/legal-signs.ts";
 import { base64, buildSignedPdf } from "../_shared/legal-pdf.ts";
 
@@ -18,6 +19,8 @@ const LINK_DAYS = 30;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTING_ROLES = ["owner", "admin", "manager"];
+/** Signers besides LV Branding: the main recipient and up to three more parties. */
+const MAX_SIGNERS = 4;
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
@@ -29,7 +32,31 @@ function validContent(value: unknown): Content | null {
     block && kinds.includes(block.kind) && typeof block.text === "string" && block.text.length <= 10_000
     && (block.kind !== "meta" || typeof (block as { label?: unknown }).label === "string"));
   if (!blocksOk || typeof content.signerRole !== "string" || typeof content.countersignerRole !== "string") return null;
-  return { blocks: content.blocks, signerRole: content.signerRole.slice(0, 120), countersignerRole: content.countersignerRole.slice(0, 120) };
+  const roles = content.signerRoles;
+  if (roles !== undefined && (!Array.isArray(roles) || roles.length > MAX_SIGNERS || roles.some((role) => typeof role !== "string"))) return null;
+  return {
+    blocks: content.blocks, signerRole: content.signerRole.slice(0, 120),
+    ...(roles?.length ? { signerRoles: roles.map((role) => role.slice(0, 160)) } : {}),
+    countersignerRole: content.countersignerRole.slice(0, 120),
+  };
+}
+
+type NewSigner = { name: string; email: string; contact_id: string | null; company_name: string };
+
+/** The signers to send to: input.signers, or the single recipient the older page sends. */
+function signersFrom(input: Record<string, unknown>): NewSigner[] | string {
+  const list = Array.isArray(input.signers) ? input.signers as Record<string, unknown>[] : [{
+    name: input.recipient_name, email: input.recipient_email, contact_id: input.contact_id, company_name: input.company_name,
+  }];
+  if (list.length === 0 || list.length > MAX_SIGNERS) return `A document goes to between 1 and ${MAX_SIGNERS} signers`;
+  const signers = list.map((item) => ({
+    name: text(item?.name, 160), email: text(item?.email, 320).toLowerCase(),
+    contact_id: UUID.test(text(item?.contact_id, 40)) ? text(item?.contact_id, 40) : null, company_name: text(item?.company_name, 200),
+  }));
+  const bad = signers.find((signer) => !signer.name || !EMAIL.test(signer.email));
+  if (bad) return `Add a name and a valid email for every signer${bad.email ? ` (${bad.email})` : ""}`;
+  if (new Set(signers.map((signer) => signer.email)).size !== signers.length) return "Each signer needs their own email address";
+  return signers;
 }
 
 serve(async (req) => {
@@ -57,45 +84,79 @@ serve(async (req) => {
       const orgId = text(input.org_id, 40);
       if (!UUID.test(orgId) || !ACTING_ROLES.includes((await roleIn(orgId)) ?? "")) return json({ error: "Only owners, administrators and managers can send documents" }, 403);
       const language: Language = input.language === "es" ? "es" : "en";
-      const recipientEmail = text(input.recipient_email, 320).toLowerCase();
-      const recipientName = text(input.recipient_name, 160);
       const title = text(input.title, 200);
       const content = validContent(input.content);
-      const contactId = UUID.test(text(input.contact_id, 40)) ? text(input.contact_id, 40) : null;
       const fieldValues = input.field_values && typeof input.field_values === "object" ? input.field_values : {};
-      if (!EMAIL.test(recipientEmail) || !recipientName || !title || !content || !text(input.template_key, 60)) {
-        return json({ error: "The document is missing its recipient, title or content" }, 400);
-      }
+      const signers = signersFrom(input);
+      if (typeof signers === "string") return json({ error: signers }, 400);
+      if (!title || !content || !text(input.template_key, 60)) return json({ error: "The document is missing its title or content" }, 400);
+      if (signerRolesOf(content).length !== signers.length) return json({ error: "Each signer needs their role in the document" }, 400);
       if (JSON.stringify(fieldValues).length > 30_000) return json({ error: "The document's fields are too long" }, 400);
 
-      const { token, hash } = await newToken();
       const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
+      const first = signers[0];
       const { data: doc, error } = await db.from("legal_documents").insert({
         org_id: orgId, created_by: user.id,
         template_key: text(input.template_key, 60), template_version: text(input.template_version, 20) || "1.0",
-        language, title, contact_id: contactId, company_name: text(input.company_name, 200),
-        recipient_name: recipientName, recipient_email: recipientEmail,
-        field_values: fieldValues, content, content_hash: await contentHash(content),
-        token_hash: hash, expires_at: expiresAt,
+        language, title, contact_id: first.contact_id, company_name: first.company_name,
+        recipient_name: first.name, recipient_email: first.email,
+        field_values: fieldValues, content, content_hash: await contentHash(content), expires_at: expiresAt,
       }).select("*").single();
       if (error) throw error;
 
-      try {
-        const email = signatureRequestEmail(doc, `${APP_URL}/sign/${token}`);
-        await sendEmail({ to: { email: recipientEmail, name: recipientName }, ...email });
-      } catch (emailError) {
-        // An unsent document is not left behind looking sent.
+      const links = await Promise.all(signers.map(() => newToken()));
+      const { data: rows, error: signerError } = await db.from("legal_document_signers").insert(signers.map((signer, index) => ({
+        document_id: doc.id, org_id: orgId, position: index + 1, contact_id: signer.contact_id,
+        name: signer.name, email: signer.email, company_name: signer.company_name, token_hash: links[index].hash,
+      }))).select("id, position");
+      if (signerError || !rows) {
         await db.from("legal_documents").delete().eq("id", doc.id);
-        throw emailError;
+        throw signerError ?? new Error("The signers could not be saved");
       }
-      await log(doc, "sent", { to: recipientEmail });
-      return json({ ok: true, id: doc.id });
+
+      const failed: string[] = [];
+      for (const [index, signer] of signers.entries()) {
+        try {
+          const email = signatureRequestEmail({ ...doc, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links[index].token}`);
+          await sendEmail({ to: { email: signer.email, name: signer.name }, ...email });
+          await log(doc, "sent", { to: signer.email, signer_id: (rows as { id: string; position: number }[]).find((row) => row.position === index + 1)?.id });
+        } catch (emailError) {
+          console.error("Signature request email failed", signer.email, emailError);
+          failed.push(signer.email);
+        }
+      }
+      if (failed.length === signers.length) {
+        // Nobody got a link: an unsent document is not left behind looking sent.
+        await db.from("legal_documents").delete().eq("id", doc.id);
+        throw new Error(`The email to ${failed.join(", ")} could not be sent`);
+      }
+      for (const email of failed) await log(doc, "delivery_failed", { to: email });
+      return json({ ok: true, id: doc.id, ...(failed.length ? { failed } : {}) });
     }
 
     if (!UUID.test(text(input.id, 40))) return json({ error: "Document not found" }, 404);
     const { data: doc } = await db.from("legal_documents").select("*").eq("id", input.id).maybeSingle();
     const role = doc ? await roleIn(doc.org_id) : undefined;
     if (!doc || !role) return json({ error: "Document not found" }, 404);
+    const { data: signerRows } = await db.from("legal_document_signers").select("*").eq("document_id", doc.id).order("position");
+    const signers = (signerRows ?? []) as Signer[];
+    const unsigned = signers.filter((signer) => !signer.signed_at);
+    /** A new link for each of these signers, emailed; returns the addresses it could not reach. */
+    const emailLinks = async (targets: Signer[], links: Map<string, string>, docForEmail: typeof doc, event: string) => {
+      const failed: string[] = [];
+      for (const signer of targets) {
+        try {
+          const email = signatureRequestEmail({ ...docForEmail, recipient_name: signer.name, company_name: signer.company_name }, `${APP_URL}/sign/${links.get(signer.id)}`);
+          await sendEmail({ to: { email: signer.email, name: signer.name }, ...email });
+          await log(doc, event, { to: signer.email, signer_id: signer.id });
+        } catch (emailError) {
+          console.error("Signing link email failed", signer.email, emailError);
+          await log(doc, "delivery_failed", { to: signer.email, signer_id: signer.id });
+          failed.push(signer.email);
+        }
+      }
+      return failed;
+    };
 
     if (input.action === "download") {
       if (!doc.signed_pdf_path) return json({ error: "This document has no signed PDF yet" }, 409);
@@ -109,7 +170,7 @@ serve(async (req) => {
     if (!ACTING_ROLES.includes(role)) return json({ error: "Only owners, administrators and managers can do this" }, 403);
 
     if (input.action === "revise") {
-      if (!["sent", "viewed"].includes(doc.status) || doc.client_signed_at || doc.lv_signed_at) {
+      if (!["sent", "viewed"].includes(doc.status) || doc.client_signed_at || doc.lv_signed_at || signers.some((signer) => signer.signed_at)) {
         return json({ error: "A document can only be edited before anyone signs it" }, 409);
       }
       const title = text(input.title, 200);
@@ -117,57 +178,57 @@ serve(async (req) => {
       if (!title || !content || content.blocks.some((block) => !block.text.trim())) {
         return json({ error: "Add a title and text for every document section" }, 400);
       }
+      if (signerRolesOf(content).length !== signers.length) return json({ error: "Each signer needs their role in the document" }, 400);
       const nextHash = await contentHash(content);
       if (title === doc.title && nextHash === doc.content_hash) return json({ error: "Make a change before sending a revision" }, 400);
 
-      // Claim the unsigned version and rotate its link in one conditional update.
-      // Signing also checks the token hash, so whichever write wins excludes the other.
-      const { token, hash } = await newToken();
-      const sentAt = new Date().toISOString();
+      // The text and every signer's link change together, and not at all if
+      // someone signed first (legal_revise_document).
+      const links = new Map<string, string>();
+      const hashes: Record<string, string> = {};
+      for (const signer of signers) {
+        const { token, hash } = await newToken();
+        links.set(signer.id, token);
+        hashes[signer.id] = hash;
+      }
       const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
-      const { data: revised, error: updateError } = await db.from("legal_documents").update({
-        title, content, content_hash: nextHash, token_hash: hash, status: "sent",
-        sent_at: sentAt, viewed_at: null, expires_at: expiresAt,
-      }).eq("id", doc.id).eq("token_hash", doc.token_hash).in("status", ["sent", "viewed"])
-        .is("client_signed_at", null).is("lv_signed_at", null).select("id").maybeSingle();
-      if (updateError) throw updateError;
+      const { data: revised, error: reviseError } = await db.rpc("legal_revise_document", {
+        p_document_id: doc.id, p_title: title, p_content: content, p_content_hash: nextHash, p_expires_at: expiresAt, p_token_hashes: hashes,
+      });
+      if (reviseError && !reviseError.message.includes("legal_revise_conflict")) throw reviseError;
       if (!revised) return json({ error: "This document changed or was signed. Reload it before editing." }, 409);
       await log(doc, "revised", {
         previous_title: doc.title, previous_content: doc.content, previous_content_hash: doc.content_hash,
-        title, content_hash: nextHash, to: doc.recipient_email,
+        title, content_hash: nextHash, to: signers.map((signer) => signer.email),
       });
-      try {
-        const email = signatureRequestEmail({ ...doc, title, content, expires_at: expiresAt }, `${APP_URL}/sign/${token}`);
-        await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...email });
-        await log(doc, "revision_sent", { to: doc.recipient_email });
-        return json({ ok: true, emailed: true });
-      } catch (emailError) {
-        console.error("Revised document email failed", emailError);
-        await log(doc, "delivery_failed", { to: doc.recipient_email });
-        return json({ ok: true, emailed: false });
-      }
+      const failed = await emailLinks(signers, links, { ...doc, title, content, expires_at: expiresAt }, "revision_sent");
+      return json({ ok: true, emailed: failed.length === 0, ...(failed.length ? { failed } : {}) });
     }
 
     if (input.action === "resend") {
-      if (!["sent", "viewed"].includes(doc.status)) return json({ error: "Only a document waiting for its signature can be sent again" }, 409);
-      // A fresh link: the earlier one stops working, in case it went astray.
-      const { token, hash } = await newToken();
-      const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
-      const { data: rotated, error: rotateError } = await db.from("legal_documents").update({ token_hash: hash, expires_at: expiresAt, sent_at: new Date().toISOString(), status: "sent", viewed_at: null })
-        .eq("id", doc.id).eq("token_hash", doc.token_hash).in("status", ["sent", "viewed"])
-        .is("client_signed_at", null).select("id").maybeSingle();
-      if (rotateError) throw rotateError;
-      if (!rotated) return json({ error: "This document changed or was signed. Reload it before sending again." }, 409);
-      const email = signatureRequestEmail({ ...doc, expires_at: expiresAt }, `${APP_URL}/sign/${token}`);
-      try {
-        await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...email });
-        await log(doc, "resent", { to: doc.recipient_email });
-        return json({ ok: true, emailed: true });
-      } catch (emailError) {
-        console.error("Resend email failed", emailError);
-        await log(doc, "delivery_failed", { to: doc.recipient_email });
-        return json({ ok: true, emailed: false });
+      if (!["sent", "viewed"].includes(doc.status)) return json({ error: "Only a document waiting for signatures can be sent again" }, 409);
+      // Everyone who hasn't signed, or the one signer asked for.
+      const targets = UUID.test(text(input.signer_id, 40)) ? unsigned.filter((signer) => signer.id === input.signer_id) : unsigned;
+      if (targets.length === 0) return json({ error: "Everyone it can go to has already signed" }, 409);
+      // Fresh links: the earlier ones stop working, in case they went astray.
+      const links = new Map<string, string>();
+      const sent: Signer[] = [];
+      for (const signer of targets) {
+        const { token, hash } = await newToken();
+        const { data: rotated, error: rotateError } = await db.from("legal_document_signers")
+          .update({ token_hash: hash, sent_at: new Date().toISOString(), viewed_at: null })
+          .eq("id", signer.id).eq("token_hash", signer.token_hash).is("signed_at", null).select("id").maybeSingle();
+        if (rotateError) throw rotateError;
+        if (rotated) {
+          links.set(signer.id, token);
+          sent.push(signer);
+        }
       }
+      if (sent.length === 0) return json({ error: "This document changed or was signed. Reload it before sending again." }, 409);
+      const expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000).toISOString();
+      await db.from("legal_documents").update({ expires_at: expiresAt, sent_at: new Date().toISOString() }).eq("id", doc.id).in("status", ["sent", "viewed"]);
+      const failed = await emailLinks(sent, links, { ...doc, expires_at: expiresAt }, "resent");
+      return json({ ok: true, emailed: failed.length === 0, sent_to: sent.map((signer) => signer.email), ...(failed.length ? { failed } : {}) });
     }
 
     if (input.action === "void") {
@@ -179,7 +240,7 @@ serve(async (req) => {
     }
 
     if (input.action === "countersign") {
-      if (doc.status !== "client_signed") return json({ error: "The recipient has to sign first" }, 409);
+      if (doc.status !== "client_signed" || signers.length === 0 || unsigned.length) return json({ error: "Every party has to sign first" }, 409);
       const signature = validSignature(input.signature);
       const signerName = text(input.signer_name, 120);
       if (!signature || signerName.length < 2) return json({ error: "Add your name and signature" }, 400);
@@ -190,6 +251,10 @@ serve(async (req) => {
       const signed = {
         ...doc, lv_signed_at: signedAt, lv_signer_user_id: user.id, lv_signer_name: signerName,
         lv_signer_title: text(input.signer_title, 120) || null, lv_signature: signature,
+        signers: signers.map((signer) => ({
+          name: signer.name, email: signer.email, signer_name: signer.signer_name ?? signer.name,
+          signer_title: signer.signer_title, signature: signer.signature!, signed_at: signer.signed_at!,
+        })),
       };
       const { data: claimed, error: claimError } = await db.from("legal_documents").update({
         lv_signed_at: signed.lv_signed_at, lv_signer_user_id: user.id, lv_signer_name: signed.lv_signer_name,
@@ -214,10 +279,14 @@ serve(async (req) => {
 
       const attachment = { content: base64(pdf), filename: `${doc.title} - ${doc.recipient_name}.pdf`.replace(/[\\/:*?"<>|]+/g, "-"), type: "application/pdf" };
       const failures: string[] = [];
-      await sendEmail({ to: { email: doc.recipient_email, name: doc.recipient_name }, ...completedEmail(doc, doc.language, false), attachments: [attachment] })
-        .catch((error) => failures.push(`recipient: ${error.message}`));
+      const parties = signers.length + 1;
+      for (const signer of signers) {
+        await sendEmail({ to: { email: signer.email, name: signer.name }, ...completedEmail({ ...doc, recipient_name: signer.name }, doc.language, false, parties), attachments: [attachment] })
+          .catch((error) => failures.push(`${signer.email}: ${error.message}`));
+      }
       const team = doc.created_by ? (await db.auth.admin.getUserById(doc.created_by)).data.user?.email : null;
-      await sendEmail({ to: { email: team || "admin@lvbranding.com" }, ...completedEmail(doc, "en", true), attachments: [attachment] })
+      const withWhom = signers.map((signer) => signer.name).join(", ");
+      await sendEmail({ to: { email: team || "admin@lvbranding.com" }, ...completedEmail({ ...doc, recipient_name: withWhom }, "en", true, parties), attachments: [attachment] })
         .catch((error) => failures.push(`team: ${error.message}`));
       return json({ ok: true, emailed: failures.length === 0, ...(failures.length ? { email_problems: failures } : {}) });
     }

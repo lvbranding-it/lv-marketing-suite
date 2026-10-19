@@ -51,6 +51,12 @@ export interface LegalTemplate {
   /** The Spanish text is LV Branding's approved wording, not a LegalSigns translation. */
   spanishApproved?: boolean;
   fields: LegalField[];
+  /** How many parties besides the main recipient can sign it (the NDAs); none when absent. */
+  maxAdditionalParties?: number;
+  /** What the form asks about each additional party. */
+  partyFields?: LegalField[];
+  /** Who an additional party signs as ("Party 3 · Acme LLC"). */
+  additionalSignerRole?: (input: LegalRenderInput, index: number) => string;
   render: (input: LegalRenderInput) => LegalBlock[];
 }
 
@@ -61,6 +67,17 @@ export interface LegalRenderInput {
   signerName: string;
   /** Where the signing link goes; the NDA's Party 2 notice email unless another is given. */
   recipientEmail?: string;
+  values: Record<string, string>;
+  /** Parties who sign besides the main recipient, in order. */
+  additionalParties?: LegalPartyInput[];
+}
+
+/** A party who signs besides the main recipient, and the person who signs for it. */
+export interface LegalPartyInput {
+  signerName: string;
+  signerEmail: string;
+  companyName: string;
+  /** Its lines in the parties block: name, entity, address, email. */
   values: Record<string, string>;
 }
 
@@ -380,6 +397,10 @@ const todayInHouston = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Ameri
 const otherParty = (input: LegalRenderInput) =>
   optional(input, "party2Name") || input.companyName.trim() || input.signerName.trim() || BLANK;
 
+/** An additional party, named the same way. */
+const additionalParty = (party: LegalPartyInput) =>
+  party.values.name?.trim() || party.companyName.trim() || party.signerName.trim() || BLANK;
+
 /**
  * An NDA: the approved text with its parties block filled in. Both NDAs share
  * their form; they differ in their text and in what they call the parties
@@ -388,6 +409,10 @@ const otherParty = (input: LegalRenderInput) =>
 function ndaTemplate(kind: "mutual" | "oneWay", key: string, description: Text): LegalTemplate {
   const text = NDA_TEXT[kind];
   const party = t(text.en.labels.party2, text.es.labels.party2);
+  // More parties keep the approved wording: on the Mutual NDA they are Party 3
+  // to 5, on the One-way NDA each is another Receiving Party.
+  const extraLabel = (language: LegalLanguage, index: number) =>
+    kind === "mutual" ? `${language === "es" ? "Parte" : "Party"} ${index + 3}` : party[language];
   return {
     key,
     version: "1.0",
@@ -399,6 +424,25 @@ function ndaTemplate(kind: "mutual" | "oneWay", key: string, description: Text):
     signerRole: party,
     signerRoleFrom: (input) => `${party[input.language]} · ${otherParty(input)}`,
     countersignerRole: t(text.en.labels.party1, text.es.labels.party1),
+    maxAdditionalParties: 3,
+    partyFields: [
+      {
+        key: "name", label: t("Full legal name", "Nombre legal completo"), type: "text",
+        hint: t("Leave empty to use the Company, or the signer's own name when there is no company.", "Déjelo vacío para usar la Empresa, o el nombre del firmante si no hay empresa."),
+      },
+      {
+        key: "entity", label: t("Entity type and jurisdiction", "Tipo de entidad y jurisdicción"), type: "text",
+        placeholder: t("Texas limited liability company", "Sociedad de responsabilidad limitada de Texas"),
+        hint: t("Leave empty for an individual.", "Déjelo vacío para una persona física."),
+      },
+      { key: "address", label: t("Address", "Domicilio"), type: "text", required: true },
+      {
+        key: "email", label: t("Notice email", "Correo para notificaciones"), type: "email",
+        hint: t("Leave empty to use the signer's email.", "Déjelo vacío para usar el correo del firmante."),
+      },
+    ],
+    additionalSignerRole: (input, index) =>
+      `${extraLabel(input.language, index)} · ${additionalParty(input.additionalParties![index])}`,
     fields: [
       { key: "effectiveDate", label: t("Effective date", "Fecha de entrada en vigor"), type: "date", required: true, defaultValue: todayInHouston },
       {
@@ -436,6 +480,12 @@ function ndaTemplate(kind: "mutual" | "oneWay", key: string, description: Text):
         meta(words.labels.entity, optional(input, "party2Entity") || words.notApplicable),
         meta(words.labels.address, value(input, "party2Address")),
         meta(words.labels.noticeEmail, optional(input, "party2Email") || input.recipientEmail?.trim() || BLANK),
+        ...(input.additionalParties ?? []).flatMap((extra, index) => [
+          meta(extraLabel(input.language, index), additionalParty(extra)),
+          meta(words.labels.entity, extra.values.entity?.trim() || words.notApplicable),
+          meta(words.labels.address, extra.values.address?.trim() || BLANK),
+          meta(words.labels.noticeEmail, extra.values.email?.trim() || extra.signerEmail.trim() || BLANK),
+        ]),
         meta(words.labels.purpose, value(input, "businessPurpose")),
         ...words.sections.flatMap(([heading, body]) => [{ kind: "heading", text: heading }, { kind: "paragraph", text: body }] as LegalBlock[]),
         { kind: "paragraph", text: words.signingNote },
@@ -466,11 +516,23 @@ export function signerRoleFor(template: LegalTemplate, input: LegalRenderInput) 
   return template.signerRole[input.language];
 }
 
+/** Everyone who signs besides LV Branding, as printed with their signatures, in signing order. */
+export function signerRolesFor(template: LegalTemplate, input: LegalRenderInput) {
+  const extra = (input.additionalParties ?? []).map((_party, index) =>
+    template.additionalSignerRole ? template.additionalSignerRole(input, index) : template.signerRole[input.language]);
+  return [signerRoleFor(template, input), ...extra];
+}
+
 /** The values a new document of this template starts with. */
 export function fieldDefaults(template: LegalTemplate) {
   return Object.fromEntries(
     template.fields.filter((field) => field.defaultValue).map((field) => [field.key, field.defaultValue!()]),
   ) as Record<string, string>;
+}
+
+/** The required lines left empty for an additional party. */
+export function missingPartyFields(template: LegalTemplate, values: Record<string, string>, language: LegalLanguage) {
+  return (template.partyFields ?? []).filter((field) => field.required && !values[field.key]?.trim()).map((field) => field.label[language]);
 }
 
 /** The labels of required fields left empty, in the document's language. */

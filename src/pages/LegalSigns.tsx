@@ -147,7 +147,10 @@ export default function LegalSigns() {
                     className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] sm:px-5"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{doc.recipient_name}{doc.company_name && <span className="font-normal text-muted-foreground"> · {doc.company_name}</span>}</p>
+                      <p className="truncate font-medium">
+                        {doc.recipient_name}{doc.company_name && <span className="font-normal text-muted-foreground"> · {doc.company_name}</span>}
+                        {doc.signers.length > 1 && <span className="ml-1.5 rounded-full bg-muted px-1.5 py-px text-[11px] font-medium text-muted-foreground">+{doc.signers.length - 1}</span>}
+                      </p>
                       <p className="truncate text-sm text-muted-foreground">
                         {doc.title}
                         <span className="ml-1.5 rounded border px-1 py-px text-[10px] font-medium uppercase tracking-wide">{doc.language}</span>

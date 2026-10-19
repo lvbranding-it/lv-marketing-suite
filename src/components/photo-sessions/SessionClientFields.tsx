@@ -22,13 +22,15 @@ interface SessionClientFieldsProps {
   value: SessionClient;
   onChange: (client: SessionClient) => void;
   errors?: { name?: string; email?: string } | null;
+  /** What the fields are called; "Client", "Client Email" and "Client name" unless given. */
+  labels?: { name: string; email: string; newName?: string };
 }
 
 /**
  * The client of a photo session: chosen from the contacts, or added to them.
  * Clients (contacts marked won) are listed before everyone else.
  */
-export default function SessionClientFields({ idPrefix, value, onChange, errors }: SessionClientFieldsProps) {
+export default function SessionClientFields({ idPrefix, value, onChange, errors, labels = { name: "Client", email: "Client Email" } }: SessionClientFieldsProps) {
   const { data: contacts = [], isLoading } = useImportedContacts();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -88,14 +90,14 @@ export default function SessionClientFields({ idPrefix, value, onChange, errors 
     <>
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-client`}>
-          Client <span className="text-destructive">*</span>
+          {labels.name} <span className="text-destructive">*</span>
         </Label>
 
         {value.adding ? (
           <div className="space-y-2 rounded-md border border-dashed p-3">
             <Input
               id={`${idPrefix}-client`}
-              placeholder="Client name"
+              placeholder={labels.newName ?? "Client name"}
               value={value.name}
               onChange={(e) => onChange({ ...value, name: e.target.value })}
               autoFocus={!value.name}
@@ -195,7 +197,7 @@ export default function SessionClientFields({ idPrefix, value, onChange, errors 
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-client-email`}>Client Email</Label>
+        <Label htmlFor={`${idPrefix}-client-email`}>{labels.email}</Label>
         <Input
           id={`${idPrefix}-client-email`}
           type="email"
