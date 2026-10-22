@@ -5,7 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import Header from "@/components/layout/Header";
 import {
   Mail, Plus, Send, BarChart2, Users, MousePointerClick,
-  AlertTriangle, Trash2, Loader2, TrendingUp, Pencil, Upload,
+  AlertTriangle, Trash2, Loader2, TrendingUp, Pencil, Upload, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { campaignRate as rate } from "@/lib/campaigns/stats";
 import { cn } from "@/lib/utils";
 import { parseContactsCSV } from "@/lib/csvImport";
 import { useCampaigns, useDeleteCampaign, useSendCampaign, type EmailCampaign } from "@/hooks/useCampaigns";
@@ -33,12 +34,6 @@ const STATUS_META: Record<string, { label: string; class: string }> = {
   sent:             { label: "Sent",             class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
   failed:           { label: "Failed",           class: "bg-red-100 text-red-600 border-red-200" },
 };
-
-function rate(num: number, denom: number) {
-  if (!denom) return "—";
-  return `${Math.min(Math.round((num / denom) * 100), 100)}%`;
-}
-
 
 function CampaignCard({
   campaign,
@@ -138,7 +133,7 @@ function Stat({
 export default function Campaigns() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { data: allCampaigns = [], isLoading } = useCampaigns();
+  const { data: allCampaigns = [], isLoading, error, refetch, isFetching } = useCampaigns();
   const [branchFilter, setBranchFilter] = useState<BranchFilterValue>("all");
   const campaigns = allCampaigns.filter((campaign) =>
     branchMatchesFilter(campaign.branch_id, branchFilter)
@@ -155,8 +150,8 @@ export default function Campaigns() {
   const totalSent     = sentCampaigns.reduce((s, c) => s + c.sent_count, 0);
   const totalOpens    = sentCampaigns.reduce((s, c) => s + c.open_count, 0);
   const totalClicks   = sentCampaigns.reduce((s, c) => s + c.click_count, 0);
-  const avgOpenRate   = totalSent ? Math.round((totalOpens / totalSent) * 100) : 0;
-  const avgClickRate  = totalSent ? Math.round((totalClicks / totalSent) * 100) : 0;
+  const avgOpenRate   = rate(totalOpens, totalSent);
+  const avgClickRate  = rate(totalClicks, totalSent);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -248,6 +243,9 @@ export default function Campaigns() {
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
       {/* Header actions */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <Button variant="ghost" className="gap-1.5" onClick={() => void refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""}/>Refresh stats
+        </Button>
         <BranchSelect value={branchFilter} onValueChange={setBranchFilter} />
         {/* CSV import */}
         <label className={cn(
@@ -298,14 +296,15 @@ export default function Campaigns() {
         </div>
       )}
 
+      {error && <p role="alert" className="text-sm text-destructive">Unable to refresh campaign stats. Please try again.</p>}
       {/* Summary stats */}
       {sentCampaigns.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {[
             { label: "Total Sent",   value: totalSent,           icon: <Send size={14} /> },
             { label: "Campaigns",    value: sentCampaigns.length, icon: <Mail size={14} /> },
-            { label: "Avg Open Rate",value: `${avgOpenRate}%`,    icon: <BarChart2 size={14} />, color: "text-blue-600" },
-            { label: "Avg CTR",      value: `${avgClickRate}%`,   icon: <TrendingUp size={14} />, color: "text-emerald-600" },
+            { label: "Avg Open Rate",value: avgOpenRate,    icon: <BarChart2 size={14} />, color: "text-blue-600" },
+            { label: "Avg CTR",      value: avgClickRate,   icon: <TrendingUp size={14} />, color: "text-emerald-600" },
           ].map((s) => (
             <div key={s.label} className="bg-card border border-border rounded-xl p-3 sm:p-4">
               <div className="flex items-center gap-1.5 text-muted-foreground mb-1">

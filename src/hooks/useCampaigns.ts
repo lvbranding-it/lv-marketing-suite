@@ -36,6 +36,7 @@ export function useCampaigns() {
       return (data ?? []) as EmailCampaign[];
     },
     enabled: !!org,
+    refetchInterval: 30_000,
   });
 }
 
@@ -57,7 +58,7 @@ export function useCampaign(id: string | null) {
     refetchInterval: (query) => {
       // Poll while sending
       const data = query.state.data as EmailCampaign | null;
-      return data?.status === "sending" ? 3000 : false;
+      return data?.status === "sending" ? 3000 : data?.status === "sent" ? 30_000 : false;
     },
   });
 }
@@ -68,15 +69,19 @@ export function useCampaignRecipients(campaignId: string | null) {
     queryKey: ["campaign-recipients", campaignId],
     queryFn: async () => {
       if (!campaignId) return [];
-      const { data, error } = await supabase
-        .from("email_campaign_recipients")
-        .select("*")
-        .eq("campaign_id", campaignId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as EmailCampaignRecipient[];
+      const recipients: EmailCampaignRecipient[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase.from("email_campaign_recipients")
+          .select("*").eq("campaign_id", campaignId)
+          .order("created_at", { ascending: true }).order("id", { ascending: true })
+          .range(offset, offset + 999);
+        if (error) throw error;
+        recipients.push(...(data ?? []) as EmailCampaignRecipient[]);
+        if (!data || data.length < 1000) return recipients;
+      }
     },
     enabled: !!campaignId,
+    refetchInterval: 30_000,
   });
 }
 
@@ -243,5 +248,20 @@ export function useDeleteCampaign() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
+  });
+}
+
+// Public links are explicitly enabled per sent campaign and can be revoked.
+export function useCampaignSharing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({id, enabled}: {id: string; enabled: boolean}) => {
+      const {data, error} = await supabase.from("email_campaigns")
+        .update({share_token: enabled ? crypto.randomUUID() : null})
+        .eq("id", id).eq("status", "sent").select().single();
+      if (error) throw error;
+      return data as EmailCampaign;
+    },
+    onSuccess: () => qc.invalidateQueries({queryKey:["campaigns"]}),
   });
 }

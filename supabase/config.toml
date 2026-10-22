@@ -459,6 +459,17 @@ verify_jwt = false
 # in. The function checks the link's token and the recipient's email itself.
 verify_jwt = false
 
+# SendGrid sends provider events, not Supabase user JWTs.
+[functions.email-webhook]
+verify_jwt = false
+
+# Public, opt-in email web versions. The function checks the sharing token.
+[functions.campaign-share]
+verify_jwt = false
+
+[functions.email-unsubscribe]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

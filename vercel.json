@@ -9,6 +9,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/campaign/:token", "destination": "/api/campaign?token=:token" },
     { "source": "/en/tools/website-opportunity-audit/results/(.*)", "destination": "/website-audit-private-en.html" },
     { "source": "/en/tools/website-opportunity-audit/context", "destination": "/website-audit-private-en.html" },
     { "source": "/en/tools/website-opportunity-audit/analyzing", "destination": "/website-audit-private-en.html" },

@@ -571,6 +571,7 @@ export type Database = {
           subject: string;
           preview_text: string | null;
           body_html: string;
+          share_token: string | null;
           from_name: string;
           from_email: string;
           status: "draft" | "sending" | "sent" | "failed";
@@ -593,6 +594,7 @@ export type Database = {
           subject?: string;
           preview_text?: string | null;
           body_html?: string;
+          share_token?: string | null;
           from_name?: string;
           from_email?: string;
           status?: "draft" | "sending" | "sent" | "failed";
@@ -615,6 +617,7 @@ export type Database = {
           subject?: string;
           preview_text?: string | null;
           body_html?: string;
+          share_token?: string | null;
           from_name?: string;
           from_email?: string;
           status?: "draft" | "sending" | "sent" | "failed";

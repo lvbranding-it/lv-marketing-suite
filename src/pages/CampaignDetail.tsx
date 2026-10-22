@@ -9,6 +9,8 @@ import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import CampaignShare from "@/components/campaigns/CampaignShare";
+import { campaignRate as pct } from "@/lib/campaigns/stats";
 import { cn } from "@/lib/utils";
 import { useCampaign, useCampaignRecipients, useSendCampaign } from "@/hooks/useCampaigns";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -27,14 +29,13 @@ const RECIPIENT_STATUS: Record<string, { label: string; class: string; icon: Rea
   failed:      { label: "Failed",      class: "bg-red-100 text-red-600",         icon: <XCircle size={10} /> },
 };
 
-function pct(n: number, d: number) { return d ? `${Math.min(Math.round((n / d) * 100), 100)}%` : "0%"; }
 
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { data: campaign, isLoading: cLoading } = useCampaign(id ?? null);
-  const { data: recipients = [], isLoading: rLoading } = useCampaignRecipients(id ?? null);
+  const { data: campaign, isLoading: cLoading, error: cError, refetch: refreshCampaign, isFetching: cFetching } = useCampaign(id ?? null);
+  const { data: recipients = [], isLoading: rLoading, error: rError, refetch: refreshRecipients } = useCampaignRecipients(id ?? null);
   const sendCampaign = useSendCampaign();
   const { canApproveCampaigns } = usePermissions();
   const qc = useQueryClient();
@@ -82,7 +83,7 @@ export default function CampaignDetail() {
       <AppShell>
         <Header title="Campaign" />
         <div className="p-6 text-center">
-          <p className="text-muted-foreground">Campaign not found.</p>
+          <p className="text-muted-foreground">{cError ? "Unable to load campaign. Please try again." : "Campaign not found."}</p>
           <Button variant="ghost" onClick={() => navigate("/campaigns")} className="mt-4 gap-2">
             <ArrowLeft size={14} /> Back to campaigns
           </Button>
@@ -191,6 +192,15 @@ export default function CampaignDetail() {
         </div>
       )}
 
+      {isSent && <CampaignShare campaign={campaign} />}
+
+      {isSent && <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">Unique opens and clicks / sent emails · Updates every 30 seconds</p>
+        <Button variant="ghost" size="sm" className="gap-1.5" disabled={cFetching} onClick={() => {void refreshCampaign(); void refreshRecipients();}}>
+          <RefreshCw size={13} className={cFetching ? "animate-spin" : ""}/>Refresh stats
+        </Button>
+      </div>}
+      {cError && <p role="alert" className="text-sm text-destructive">Stats could not refresh. Showing the last available counts.</p>}
       {/* Stats */}
       {isSent && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
@@ -236,7 +246,7 @@ export default function CampaignDetail() {
         <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
           Recipients ({recipients.length})
         </p>
-        {rLoading ? (
+        {rError ? <p role="alert" className="text-sm text-destructive">Unable to load recipients. Please refresh.</p> : rLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 rounded-lg" />)}
           </div>
